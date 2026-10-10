@@ -1,0 +1,65 @@
+﻿BAMC<start>= Command;
+
+Command= Keyword { Argument } EOL;
+
+Keyword= "visit" | 
+"click" | 
+"click-at-position" | 
+"click-exp" | 
+"fill-text" | 
+"fill-text-exp" | 
+"get-text" | 
+"open-new-tab" | 
+"save-as-html" | 
+"save-as-html-exp" | 
+"select-option" | 
+"select-element" | 
+"set-custom-useragent" | 
+"add-header" | 
+"add-headers" | 
+"add-cookie" | 
+"close-current-tab" | 
+"take-screenshot" | 
+"wait-for-seconds" | 
+"browser" | 
+"feature" | 
+"start-javascript" | 
+"end-javascript";
+
+
+Argument= string | Array | object | number;
+
+object= "{" [ Field { "," Field } ] "}";
+Field= string ":" Value;
+Array= "[" [ Value { "," Value } ] "]";
+Value<collapsed>= string |
+    number    |
+    object    |
+    Array;
+
+number= '\-?(0|[1-9][0-9]*)(\.[0-9]+)?([Ee][\+\-]?[0-9]+)?';
+string= '"([^\n"\\]|\\([btrnf"\\/]|(u[0-9A-Fa-f]{4})))*"';
+lbracket<collapsed>= "[";
+rbracket<collapsed>= "]";
+lbrace<collapsed>= "{";
+rbrace<collapsed>= "}";
+colon<collapsed>= ":";
+comma<collapsed>= ",";
+whitespace<hidden>= '[\r\t ]+';
+block_comment<hidden> = '\/\*(\n|.)*?\*\/';
+line_comment<hidden> = '//.*$';
+
+
+EOL= '\n';
+
+browser = "browser" BROWSER_ARG;
+BROWSER_ARG = "brave" | "chrome" | "chromium" | "edge" | "firefox" | "safari";
+
+feature = "feature" FEATURE_ARG { string }; 
+FEATURE_ARG = "bypass-cloudflare" | 
+"disable-ssl" | 
+"disable-pycache" | 
+"use-http-proxy" | 
+"use-https-proxy" |
+"use-socks4-proxy" |
+"use-socks5-proxy";

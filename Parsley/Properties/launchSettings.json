@@ -7,6 +7,10 @@
     "Usage": {
       "commandName": "Project",
       "commandLineArgs": "--help"
+    },
+    "BAMC": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\bamc.xbnf -l ..\\..\\..\\bamc.lex"
     }
   }
 }
