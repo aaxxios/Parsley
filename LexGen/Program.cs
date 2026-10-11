@@ -34,9 +34,6 @@ namespace LexGen
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string? line;
             while(null!=(line=reader.ReadLine())) {
-                var i = line.IndexOf("//");
-                if(i >= 0)
-                    line = line.Substring(0, i);
                 line = line.Trim();
                 if(line.Length == 0)
                     continue;
@@ -46,7 +43,7 @@ namespace LexGen
                     hidden = true;
                     line = line.Substring(1);
                 }
-                i = line.IndexOf(' ');
+                var i = line.IndexOf(' ');
 
                 if (i < 0) 
                 { 

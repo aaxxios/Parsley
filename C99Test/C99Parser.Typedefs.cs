@@ -40,7 +40,10 @@ public partial class C99Parser
 		// right after the specifiers, once a type specifier has been seen, the name is the one being declared
 		if (0 < _typeSeen.Count && _typeSeen[^1] && _EndsSpecifiers(previous.SymbolId)) return false;
 		for (var i = _scopes.Count - 1; i >= 0; --i)
-			if (_scopes[i].TryGetValue(token.Value, out var isType)) return isType;
+			if (_scopes[i].TryGetValue(token.Value, out var isType))
+			{
+				return isType;
+			}
 		return false;
 	}
 

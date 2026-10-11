@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "C99Test": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\Example.c"
+    }
+  }
+}
