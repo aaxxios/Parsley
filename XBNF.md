@@ -44,7 +44,7 @@ The syntax of XBNF itself, written in XBNF:
 
 ```xbnf
 File<start>= { Directive | Rule };
-Directive= "@" name literal ";";
+Directive= "@" name ( literal | number ) ";";
 Rule= name [ Attributes ] "=" Expression [ "=>" Action ] ";";
 Action= "{" … "}";                           // C#, read up to its matching brace
 Expression= Sequence { "|" Sequence };
@@ -180,6 +180,7 @@ Block= "{" { Stmt }<sync="semi"> "}";
 | `@import "file.xbnf";` | Reads another file's rules in at this point, with the path relative to the importing file. A file is imported only once, so import cycles are harmless. Imported rules keep their own file name in messages. An imported file's directives don't override the importer's. |
 | `@namespace "My.Parsers";` | The namespace of the synthesized parser. Without it, the parser has no namespace. |
 | `@class "MyParser";` | The class name of the synthesized parser. By default it's the file name in PascalCase plus `Parser`, so `json.xbnf` gives `JsonParser`. |
+| `@maxk 2;` | The most tokens a decision with fixed lookahead looks at; 4 if not given. A decision that needs more is predicted by ALL(\*) at parse time, or settled by its `policy`. A lower limit gives smaller predictors at the cost of more ALL(\*); a higher one, the reverse. It's part of the grammar so the same grammar always synthesizes the same parser. |
 | `@evaluator "MyEvaluator";` | The class name of the synthesized evaluator, used as written, with `@` added in front of a C# keyword. By default it's the file name in PascalCase plus `Evaluator`, so `json.xbnf` gives `JsonEvaluator`. Only matters when the grammar has [semantic actions](#semantic-actions). |
 
 Other directives are kept, with a warning that they're unknown.
@@ -254,7 +255,7 @@ Each decision point (each `|`, `[ ]` and `{ }`) uses the fewest tokens of lookah
 
 ### Ambiguity
 
-A decision whose branches still overlap after 4 tokens either needs more lookahead or is really ambiguous. With the engine chosen automatically (the default), Parsley leaves it to ALL(\*), which looks as far ahead as it takes at parse time, with a message saying so. If the input really is ambiguous there, ALL(\*) settles it the way the defaults below do: the first alternative wins, and a loop or optional keeps matching.
+A decision whose branches still overlap after 4 tokens (or the `@maxk` limit) either needs more lookahead or is really ambiguous. With the engine chosen automatically (the default), Parsley leaves it to ALL(\*), which looks as far ahead as it takes at parse time, with a message saying so. If the input really is ambiguous there, ALL(\*) settles it the way the defaults below do: the first alternative wins, and a loop or optional keeps matching.
 
 A `policy` settles the decision when the grammar is analyzed instead, on every engine, which keeps a grammar like the dangling `else` LL(1):
 
