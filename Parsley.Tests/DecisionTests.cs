@@ -50,6 +50,15 @@ namespace Parsley.Tests
 			T.Check(h.Parse("a b d x").Tree.Contains("d \"d\""), "picked the second alternative");
 		}
 
+		public static void PredictorChecksTokensItDidntLookAt()
+		{
+			// the predictor settles on e f g after seeing e alone, so f and g must still be checked
+			var h = _Build("unchecked", "S= a b c | a b d | e f g; a=\"a\"; b=\"b\"; c=\"c\"; d=\"d\"; e=\"e\"; f=\"f\"; g=\"g\";" + Ws, ParserEngine.LLk);
+			T.Check(h.Accepts("e f g") && h.Accepts("a b d"), "accepts");
+			T.Check(!h.Accepts("e x g") && !h.Accepts("e f x"), "rejects tokens the predictor never looked at");
+			T.Check(h.Source.Contains("Expect(F, node);"), "f is expected, not consumed blindly");
+		}
+
 		public static void LoopNeedingTwoTokens()
 		{
 			var h = _Build("loop2", "S= { a b } a c; a=\"a\"; b=\"b\"; c=\"c\";" + Ws);

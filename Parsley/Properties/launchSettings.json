@@ -23,6 +23,14 @@
     "Expr Report": {
       "commandName": "Project",
       "commandLineArgs": "..\\..\\..\\Expr.xbnf -r"
+    },
+    "C99": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\c99.xbnf -l ..\\..\\..\\c99.lex"
+    },
+    "C99 Report": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\c99.xbnf -r"
     }
   }
 }

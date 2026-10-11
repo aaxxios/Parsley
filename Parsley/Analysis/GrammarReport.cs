@@ -111,7 +111,8 @@ namespace Parsley
 			string _Conflicts(Decision d, int max = 3)
 			{
 				var c = d.Ambiguities;
-				return string.Join(", ", c.Take(max).Select(x => $"[{x.ToString(_s)}]")) + (max < c.Count ? $" +{c.Count - max} more" : "");
+				var n = Math.Max(d.AmbiguityCount, c.Count);
+				return string.Join(", ", c.Take(max).Select(x => $"[{x.ToString(_s)}]")) + (max < n ? $" +{n - max} more" : "");
 			}
 			static string _Kind(Decision d) => d.Kind switch
 			{
@@ -163,6 +164,8 @@ namespace Parsley
 						break;
 				}
 				_Field("Fixed lookahead", $"up to {_Tokens(Math.Max(1, _a.Depth))}");
+				var limit = ParserEngine.LL1 == _a.RequestedEngine ? "1 (LL(1) forced)" : null != _g.MaxK ? $"{_a.MaxK} (@maxk)" : $"{_a.MaxK} (the default; @maxk changes it)";
+				_Field("Lookahead limit", limit);
 				// what stands between this grammar and a lighter engine
 				if (ParserEngine.AllStar == _a.Engine && 0 < unbounded.Count)
 				{
@@ -190,7 +193,7 @@ namespace Parsley
 				var rows = new List<string[]>();
 				foreach (var e in new[] { ParserEngine.LL1, ParserEngine.LLk, ParserEngine.AllStar })
 				{
-					var x = e == _a.Engine && _a.RequestedEngine == e ? _a : GrammarAnalysis.Analyze(_g, e, _a.MaxK);
+					var x = e == _a.Engine && _a.RequestedEngine == e ? _a : GrammarAnalysis.Analyze(_g, e, ParserEngine.LL1 == _a.RequestedEngine ? null : _a.MaxK);
 					string verdict, detail;
 					var errors = x.Messages.Count(m => m.Level == ErrorLevel.Error);
 					// an alternation with no policy is an error, counted above, even though it was given one to carry on

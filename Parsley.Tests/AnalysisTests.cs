@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -59,6 +60,144 @@ namespace Parsley.Tests
 			var loop = a.Decisions.First(x => x.Kind == DecisionKind.Loop);
 			T.Equal(0, loop.DefaultBranch, "4 to continue vs } and EOS to exit: test the exit");
 		}
+		// the lookahead strings of each branch, the way the analysis used to compute them: FIRST_k of the
+		// branch followed by FOLLOW_k of the decision, over the whole grammar
+		static List<HashSet<LookaheadString>> _SetBranches(GrammarAnalysis a, Decision d, int k)
+		{
+			var eos = a.Symbols.EndOfInput;
+			HashSet<LookaheadString> concat(IEnumerable<LookaheadString> lhs, IEnumerable<LookaheadString> rhs)
+			{
+				var result = new HashSet<LookaheadString>();
+				foreach (var x in lhs)
+				{
+					if (x.IsComplete(k, eos)) { result.Add(x.Truncate(k)); continue; }
+					foreach (var y in rhs) result.Add(x.Concat(y, k, eos));
+				}
+				return result;
+			}
+			var follow = a.GetFollow(d.Node, k);
+			switch (d.Node)
+			{
+				case Alternation alt:
+					return alt.Options.Select(o => concat(a.GetFirst(o, k), follow)).ToList();
+				case OptionalExpression o:
+					return new List<HashSet<LookaheadString>> { concat(a.GetFirst(o.Body, k), follow), new HashSet<LookaheadString>(follow) };
+				default:
+					var r = (Repeat)d.Node;
+					return new List<HashSet<LookaheadString>> { concat(a.GetFirst(r.Body, k), a.GetFollow(r.Body, k)), new HashSet<LookaheadString>(follow) };
+			}
+		}
+
+		/// <summary>
+		/// The lookahead analysis simulates the network instead of building whole-grammar FIRST_k and FOLLOW_k
+		/// sets. On random grammars, each decision must come out exactly as the sets say: the same depth, every
+		/// set string chosen the same way by the new strings, and adaptive exactly where the sets conflict at k.
+		/// </summary>
+		public static void LookaheadMatchesFirstAndFollowSets()
+		{
+			var r = new Random(77);
+			int checkedDecisions = 0, deep = 0, unresolved = 0;
+			var failures = new List<string>();
+			for (var n = 0; n < 800; ++n)
+			{
+				var xbnf = EngineTests.RandomGrammar(r);
+				GrammarAnalysis a;
+				try
+				{
+					// a rule nobody calls still adds to FOLLOW sets, though nothing can follow there in a parse,
+					// so the sets and the simulation disagree about it; leave such rules out
+					var g = Grammar.Parse(xbnf, "la.xbnf");
+					var reachable = new HashSet<string> { g.StartSymbol! };
+					for (var grew = true; grew;)
+					{
+						grew = false;
+						foreach (var p in g.Productions.Where(p => reachable.Contains(p.Name)).ToList())
+							foreach (var sr in p.Expression.Descendants().OfType<SymbolRef>())
+								if (null != sr.Name && null != g.GetProduction(sr.Name) && reachable.Add(sr.Name)) grew = true;
+					}
+					g.Productions.RemoveAll(p => !reachable.Contains(p.Name));
+					a = GrammarAnalysis.Analyze(g, 3);
+				}
+				catch (GrammarException) { continue; }
+				// nor does a rule that can never finish have meaningful lookahead
+				if (a.HasErrors || a.Messages.Any(m => m.Message.Contains("can't match any finite input"))) continue;
+				// rewriting left recursion can inline a rule into its only caller, leaving it unreachable
+				var live = new HashSet<string> { a.Grammar.StartSymbol! };
+				for (var grew = true; grew;)
+				{
+					grew = false;
+					foreach (var p in a.Grammar.Productions.Where(p => live.Contains(p.Name)).ToList())
+						foreach (var sr in p.Expression.Descendants().OfType<SymbolRef>())
+							if (null != sr.Name && null != a.Grammar.GetProduction(sr.Name) && live.Add(sr.Name)) grew = true;
+				}
+				if (a.Grammar.Productions.Any(p => !live.Contains(p.Name))) continue;
+				foreach (var d in a.Decisions)
+				{
+					++checkedDecisions;
+					if (d.IsAdaptive && 0 == d.Depth)
+					{
+						++unresolved;
+						var sets = _SetBranches(a, d, 3);
+						var seen = new Dictionary<LookaheadString, int>();
+						var conflict = false;
+						for (var i = 0; i < sets.Count && !conflict; ++i)
+							foreach (var x in sets[i])
+								if (seen.TryGetValue(x, out var j) && j != i) { conflict = true; break; }
+								else seen[x] = i;
+						if (!conflict) failures.Add($"{d} is adaptive but the sets don't conflict at 3 in\n{xbnf}");
+						continue;
+					}
+					if (1 < d.Depth) ++deep;
+					// the shallowest k at which the sets are disjoint
+					var k = 1;
+					List<HashSet<LookaheadString>> b;
+					while (true)
+					{
+						b = _SetBranches(a, d, k);
+						var owner = new Dictionary<LookaheadString, int>();
+						var ok = true;
+						for (var i = 0; i < b.Count && ok; ++i)
+							foreach (var x in b[i])
+								if (owner.TryGetValue(x, out var j) && j != i) { ok = false; break; }
+								else owner[x] = i;
+						if (ok || 3 == k) break;
+						++k;
+					}
+					if (k != d.Depth) { failures.Add($"{d}: sets say depth {k} in\n{xbnf}"); continue; }
+					for (var i = 0; i < b.Count; ++i)
+						foreach (var x in b[i])
+						{
+							var picks = Enumerable.Range(0, d.Branches.Count).Where(j => d.Branches[j].Any(p => x.StartsWith(p))).ToList();
+							if (1 != picks.Count || picks[0] != i)
+								failures.Add($"{d}: [{x.ToString(a.Symbols)}] is branch {i} but the new strings pick {string.Join(",", picks)} in\n{xbnf}");
+						}
+				}
+			}
+			T.Check(1000 < checkedDecisions && 50 < deep && 20 < unresolved, $"enough decisions ({checkedDecisions}, {deep} deeper than one token, {unresolved} unresolved)");
+			T.Equal("", string.Join("\n----\n", failures.Take(3)), $"{failures.Count} decisions differ");
+		}
+
+		public static void MaxKDirective()
+		{
+			const string body = "S= a b c | a b d; a=\"a\"; b=\"b\"; c=\"c\"; d=\"d\";";
+			var dflt = GrammarAnalysis.Analyze(Grammar.Parse(body));
+			T.Equal(GrammarAnalysis.DefaultMaxK, dflt.MaxK, "defaults to 4");
+			T.Equal(ParserEngine.LLk, dflt.Engine, "three tokens is LL(k)");
+			var two = GrammarAnalysis.Analyze(Grammar.Parse("@maxk 2;" + body));
+			T.Equal(2, two.MaxK, "@maxk 2 is read bare");
+			T.Equal(ParserEngine.AllStar, two.Engine, "past the limit, ALL(*) decides");
+			T.Equal(3, GrammarAnalysis.Analyze(Grammar.Parse("@maxk \"3\";" + body)).MaxK, "or quoted, as the writer writes it");
+			T.Equal(4, GrammarAnalysis.Analyze(Grammar.Parse("@maxk 2;" + body), 4).MaxK, "an explicit maxK wins over the directive");
+			T.Equal(1, GrammarAnalysis.Analyze(Grammar.Parse("@maxk 3;" + body), ParserEngine.LL1).MaxK, "LL(1) is one token, whatever @maxk says");
+			var g = Grammar.Parse("@maxk 2;" + body);
+			T.Equal(2, Grammar.Parse(g.ToString()).MaxK, "survives writing and reading back");
+			foreach (var bad in new[] { "@maxk 0;", "@maxk \"x\";", "@maxk \"-1\";" })
+			{
+				var msgs = XbnfReader.TryParse(bad + body, null, out _);
+				T.Check(msgs.Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("@maxk expects")), bad + " is an error");
+			}
+		}
+
 		public static void AlternationConflictIsAnErrorOnLLk()
 		{
 			var a = LLk("S= A | B; A= { a } x; B= { a } y; a=\"a\"; x=\"x\"; y=\"y\";", 3);

@@ -250,6 +250,11 @@ namespace Parsley
 			return sb.Append(suffix).ToString();
 		}
 		public string? Namespace => Directives.TryGetValue("namespace", out var n) ? n : null;
+		/// <summary>
+		/// The @maxk directive: the most tokens a decision with fixed lookahead looks at. Null if not given
+		/// or not a whole number of at least 1 (which the reader reports).
+		/// </summary>
+		public int? MaxK => Directives.TryGetValue("maxk", out var k) && int.TryParse(k, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && 0 < n ? n : null;
 
 		public Grammar Clone()
 		{

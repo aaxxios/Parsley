@@ -9,7 +9,7 @@ namespace Parsley
 {
 	/// <summary>
 	/// Reads XBNF. A rule that references no symbols (only "literals" and 'patterns') declares a terminal,
-	/// as does one marked &lt;terminal&gt;; anything else declares a non-terminal. Supports @import, @namespace, @class and @evaluator directives,
+	/// as does one marked &lt;terminal&gt;; anything else declares a non-terminal. Supports @import, @namespace, @class, @evaluator and @maxk directives,
 	/// attributed groups: <c>( … )&lt;attrs&gt;</c>, <c>[ … ]&lt;attrs&gt;</c>, <c>{ … }&lt;attrs&gt;</c>, and semantic actions:
 	/// <c>Name= expression =&gt; { C# };</c>
 	/// </summary>
@@ -507,7 +507,21 @@ namespace Parsley
 				_Advance();
 				var name = _ReadIdentifier();
 				_SkipWs();
-				var arg = _ReadString();
+				// a number can be written bare, as in @maxk 2;
+				string arg;
+				if (-1 != Cur && char.IsDigit((char)Cur))
+				{
+					var sb = new System.Text.StringBuilder();
+					while (-1 != Cur && char.IsDigit((char)Cur))
+					{
+						sb.Append((char)Cur);
+						_Advance();
+					}
+					arg = sb.ToString();
+				}
+				else
+					arg = _ReadString();
+				_SkipWs();
 				_Expect(';');
 				var at = new GrammarAttribute(name);
 				at.SetLocation(line, col, pos, _filename);
@@ -520,6 +534,12 @@ namespace Parsley
 					case "class":
 					case "evaluator":
 						_grammar.Directives[name] = arg;
+						break;
+					case "maxk":
+						if (!int.TryParse(arg, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var k) || 1 > k)
+							_messages.Add(new GrammarMessage(ErrorLevel.Error, $"@maxk expects a whole number of at least 1, not \"{arg}\"", at));
+						else
+							_grammar.Directives[name] = arg;
 						break;
 					default:
 						_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"Unknown directive @{name}", at));

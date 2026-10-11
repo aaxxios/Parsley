@@ -116,6 +116,16 @@ namespace Parsley
 		/// </summary>
 		public Runtime.Atn ToRuntime(IEnumerable<Decision> adaptive)
 			=> new Runtime.Atn(StartRule, EndOfInput, _rules.ToArray(), SerializeStates(), adaptive.Select(d => GetDecisionState(d.Node)).ToArray());
+		internal Runtime.Atn ToRuntime(int[] decisionStates) => new Runtime.Atn(StartRule, EndOfInput, _rules.ToArray(), SerializeStates(), decisionStates);
+		/// <summary>
+		/// The terminals a state's transitions match
+		/// </summary>
+		internal IEnumerable<int> MatchSymbols(int state)
+		{
+			var t = _states[state];
+			for (var i = 0; i < t.Count; i += 3)
+				if (Runtime.Atn.Match == t[i]) yield return t[i + 1];
+		}
 
 		int _New()
 		{

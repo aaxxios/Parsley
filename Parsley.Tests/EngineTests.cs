@@ -290,7 +290,7 @@ namespace Parsley.Tests
 
 		#region Random grammars
 		// a small random grammar over a, b, c, d. Most come out LL(1) or LL(k); plenty need ALL(*).
-		static string _RandomGrammar(Random r)
+		internal static string RandomGrammar(Random r)
 		{
 			string[] nts = { "S", "N1", "N2", "N3" };
 			var sb = new StringBuilder();
@@ -328,7 +328,7 @@ namespace Parsley.Tests
 			var compiled = 0;
 			for (var attempt = 0; attempt < 1500 && grammars < 250; ++attempt)
 			{
-				var xbnf = _RandomGrammar(r);
+				var xbnf = RandomGrammar(r);
 				GrammarAnalysis auto;
 				try
 				{

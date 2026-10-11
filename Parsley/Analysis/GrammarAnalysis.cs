@@ -54,8 +54,9 @@ namespace Parsley
 		/// </summary>
 		public int AdaptiveIndex { get; internal set; } = -1;
 		/// <summary>
-		/// For each branch, the lookahead strings (at most Depth long) that choose it. The sets don't overlap,
-		/// except for a decision with a Depth of 0, where they're the single tokens each branch can start with.
+		/// For each branch, the lookahead strings that choose it: each is the shortest prefix, at most Depth
+		/// long, after which only that branch is possible. The sets don't overlap, except for a decision with a
+		/// Depth of 0, where they're the single tokens each branch can start with.
 		/// </summary>
 		public IReadOnlyList<IReadOnlyCollection<LookaheadString>> Branches { get; internal set; } = Array.Empty<IReadOnlyCollection<LookaheadString>>();
 		/// <summary>
@@ -68,9 +69,14 @@ namespace Parsley
 		/// </summary>
 		public string? AppliedPolicy { get; internal set; }
 		/// <summary>
-		/// Lookahead strings that matched more than one branch before the policy settled them
+		/// Some of the lookahead strings, MaxK tokens long or ending at end of input, that matched more than
+		/// one branch (up to 16 examples; <see cref="AmbiguityCount"/> says how many there are)
 		/// </summary>
 		public IReadOnlyList<LookaheadString> Ambiguities { get; internal set; } = Array.Empty<LookaheadString>();
+		/// <summary>
+		/// How many lookahead strings matched more than one branch
+		/// </summary>
+		public long AmbiguityCount { get; internal set; }
 		/// <summary>
 		/// The single tokens that start each branch, when Depth is 1
 		/// </summary>
@@ -152,21 +158,28 @@ namespace Parsley
 		/// <summary>
 		/// Analyzes the grammar, choosing the lightest engine it allows. Problems are reported in Messages rather than thrown.
 		/// </summary>
-		public static GrammarAnalysis Analyze(Grammar grammar, int maxK = 4) => Analyze(grammar, ParserEngine.Auto, maxK);
+		public static GrammarAnalysis Analyze(Grammar grammar, int? maxK = null) => Analyze(grammar, ParserEngine.Auto, maxK);
+
+		/// <summary>
+		/// The most tokens a fixed decision looks at when neither the caller nor the grammar's @maxk says
+		/// </summary>
+		public const int DefaultMaxK = 4;
 
 		/// <summary>
 		/// Analyzes the grammar for the given engine. Problems are reported in Messages rather than thrown.
 		/// </summary>
 		/// <param name="engine">The engine, or Auto to choose. LL1 limits lookahead to one token; LL1 and LLk
 		/// settle decisions they can't decide with a policy (an error for an alternation without one)</param>
-		/// <param name="maxK">The most tokens a fixed decision looks at</param>
-		public static GrammarAnalysis Analyze(Grammar grammar, ParserEngine engine, int maxK = 4)
+		/// <param name="maxK">The most tokens a fixed decision looks at. Null uses the grammar's @maxk, or
+		/// <see cref="DefaultMaxK"/>. Decisions that need more are left to ALL(*), or to a policy.</param>
+		public static GrammarAnalysis Analyze(Grammar grammar, ParserEngine engine, int? maxK = null)
 		{
-			if (1 > maxK) throw new ArgumentOutOfRangeException(nameof(maxK));
-			if (ParserEngine.LL1 == engine) maxK = 1;
+			var k = maxK ?? grammar.MaxK ?? DefaultMaxK;
+			if (1 > k) throw new ArgumentOutOfRangeException(nameof(maxK));
+			if (ParserEngine.LL1 == engine) k = 1;
 			var g = grammar.Clone();
 			g.ResolveLiterals();
-			var a = new GrammarAnalysis(g, maxK, engine);
+			var a = new GrammarAnalysis(g, k, engine);
 			a._Run();
 			return a;
 		}
@@ -445,110 +458,62 @@ namespace Parsley
 			return result;
 		}
 
-		static List<LookaheadString> _Conflicts(List<HashSet<LookaheadString>> branches)
-		{
-			var owner = new Dictionary<LookaheadString, int>();
-			var result = new List<LookaheadString>();
-			for (var i = 0; i < branches.Count; ++i)
-				foreach (var x in branches[i])
-				{
-					if (owner.TryGetValue(x, out var j) && j != i)
-					{
-						if (!result.Contains(x)) result.Add(x);
-					}
-					else
-						owner[x] = i;
-				}
-			return result;
-		}
-
 		string? _Policy(Decision d)
 		{
 			// the decision's own attribute wins, then its production's
 			return d.Node.Attributes.GetString("policy") ?? d.Production.Attributes.GetString("policy");
 		}
 
+		LookaheadExplorer? _explorer;
+
 		void _Resolve(Decision d)
 		{
-			List<HashSet<LookaheadString>> branches = null!;
-			for (var k = 1; k <= MaxK; ++k)
-			{
-				branches = _BranchSets(d, k);
-				if (0 == _Conflicts(branches).Count)
-				{
-					d.Depth = k;
-					d.Branches = branches;
-					_ChooseDefault(d);
-					return;
-				}
-			}
-			// still conflicting at MaxK
-			var conflicts = _Conflicts(branches);
+			_explorer ??= new LookaheadExplorer(this, Decisions);
+			var branchCount = d.Node is Alternation alt ? alt.Options.Count : 2;
 			var policy = _Policy(d);
 			var explicitPolicy = null != policy;
-			var conflictText = string.Join(", ", conflicts.Take(4).Select(c => $"[{c.ToString(Symbols)}]")) + (4 < conflicts.Count ? $" and {conflicts.Count - 4} more" : "");
-			if (!explicitPolicy && _AllowsAdaptive)
+			// with no policy, ALL(*) settles at parse time what lookahead up to MaxK can't
+			var adaptive = !explicitPolicy && _AllowsAdaptive;
+			var applied = policy ?? (d.Kind == DecisionKind.Alternation ? "first" : "greedy");
+			Func<IReadOnlyList<int>, int>? winner = null;
+			if (!adaptive)
+				winner = alts =>
+				{
+					if (d.Kind == DecisionKind.Alternation) return alts.Min();
+					var w = "lazy" == applied ? 1 : 0;
+					return alts.Contains(w) ? w : alts.Min();
+				};
+			var r = _explorer.Explore(d, branchCount, MaxK, winner);
+			if (r.Resolved)
+			{
+				d.Depth = r.Depth;
+				d.Branches = r.Branches;
+				_ChooseDefault(d);
+				return;
+			}
+			var conflictText = string.Join(", ", r.Conflicts.Take(4).Select(c => $"[{c.ToString(Symbols)}]")) + (4 < r.ConflictCount ? $" and {r.ConflictCount - 4} more" : "");
+			d.Ambiguities = r.Conflicts;
+			d.AmbiguityCount = r.ConflictCount;
+			if (adaptive)
 			{
 				// leave it to ALL(*), which looks as far as it has to and, if the input really is ambiguous,
 				// takes the earliest alternative, keeps a loop going, and takes an optional
 				d.IsAdaptive = true;
 				d.Depth = 0;
 				d.Branches = _BranchSets(d, 1);
-				d.Ambiguities = conflicts;
 				_ChooseDefault(d);
 				_messages.Add(new GrammarMessage(ErrorLevel.Message, $"In \"{d.Production.Name}\", {d.Node} can't be decided within {MaxK} tokens on {conflictText}, so it's predicted adaptively (ALL(*)) at parse time. If that input really is ambiguous, a <policy> settles it at synthesis time instead.", d.Node));
 				return;
 			}
-			// settle with a policy
-			if (null == policy)
-				policy = d.Kind == DecisionKind.Alternation ? "first" : "greedy";
 			if (d.Kind == DecisionKind.Alternation && !explicitPolicy)
 				_messages.Add(new GrammarMessage(ErrorLevel.Error, $"In \"{d.Production.Name}\", the alternatives of {d.Node} can't be told apart within {MaxK} tokens on {conflictText}. Add <policy=\"first\"> if the earliest alternative should win, or use the ALL(*) engine to look further.", d.Node));
 			else if (!explicitPolicy)
 				_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"In \"{d.Production.Name}\", {d.Node} is ambiguous on {conflictText}; resolved greedily (it keeps matching). Add <policy=\"greedy\"> or <policy=\"lazy\"> to choose explicitly.", d.Node));
 			else if (d.Kind == DecisionKind.Alternation && "first" != policy)
 				_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"policy=\"{policy}\" on an alternation acts like \"first\"", d.Node));
-
-			// assign each conflicting string to one branch
-			var assigned = new List<HashSet<LookaheadString>>();
-			for (var i = 0; i < branches.Count; ++i) assigned.Add(new HashSet<LookaheadString>());
-			var conflictSet = new HashSet<LookaheadString>(conflicts);
-			for (var i = 0; i < branches.Count; ++i)
-				foreach (var x in branches[i])
-				{
-					if (!conflictSet.Contains(x))
-						assigned[i].Add(x);
-				}
-			foreach (var x in conflicts)
-			{
-				var candidates = Enumerable.Range(0, branches.Count).Where(i => branches[i].Contains(x)).ToList();
-				int winner;
-				if (d.Kind == DecisionKind.Alternation) winner = candidates.Min();
-				else winner = "lazy" == policy ? 1 : 0;
-				if (!candidates.Contains(winner)) winner = candidates.Min();
-				assigned[winner].Add(x);
-			}
-			// the shallowest depth at which every prefix still picks one branch
-			for (var depth = 1; depth <= MaxK; ++depth)
-			{
-				var owner = new Dictionary<LookaheadString, int>();
-				var ok = true;
-				for (var i = 0; i < assigned.Count && ok; ++i)
-					foreach (var x in assigned[i])
-					{
-						var t = x.Truncate(depth);
-						if (owner.TryGetValue(t, out var j) && j != i) { ok = false; break; }
-						owner[t] = i;
-					}
-				if (ok)
-				{
-					d.Depth = depth;
-					d.Branches = assigned.Select(set => (IReadOnlyCollection<LookaheadString>)new HashSet<LookaheadString>(set.Select(x => x.Truncate(depth)))).ToList();
-					break;
-				}
-			}
-			d.AppliedPolicy = policy;
-			d.Ambiguities = conflicts;
+			d.Depth = r.Depth;
+			d.Branches = r.Branches;
+			d.AppliedPolicy = applied;
 			_ChooseDefault(d);
 		}
 
