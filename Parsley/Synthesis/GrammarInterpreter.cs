@@ -6,6 +6,31 @@ using Parsley.Runtime;
 namespace Parsley
 {
 	/// <summary>
+	/// What the interpreter does where a synthesized parser would call the methods a grammar's hooks name.
+	/// Each delegate gets the method name first. Any left null does nothing (and a contextual terminal is
+	/// never chosen).
+	/// </summary>
+	public sealed class ParseHooks
+	{
+		/// <summary>
+		/// For a contextual terminal: (when method, token, previous token) => is the token that terminal
+		/// </summary>
+		public Func<string, Token, Token, bool>? When { get; set; }
+		/// <summary>
+		/// (matched method, token)
+		/// </summary>
+		public Action<string, Token>? Matched { get; set; }
+		/// <summary>
+		/// (entering method)
+		/// </summary>
+		public Action<string>? Entering { get; set; }
+		/// <summary>
+		/// (parsed method, the finished node, or for a collapsed production the node its children went into)
+		/// </summary>
+		public Action<string, ParseNode>? Parsed { get; set; }
+	}
+
+	/// <summary>
 	/// Parses directly from an analyzed grammar, making exactly the choices synthesized code makes,
 	/// whichever engine the analysis chose. Useful for prototyping without compiling, and as an oracle
 	/// for testing synthesized parsers.
@@ -19,11 +44,35 @@ namespace Parsley
 	{
 		readonly GrammarAnalysis _a;
 		readonly SymbolTable _s;
+		readonly ParseHooks? _hooks;
+		// for each base terminal, its contextual terminals in declaration order
+		readonly Dictionary<int, List<(int Id, string When)>> _contextual = new();
 
-		public GrammarInterpreter(GrammarAnalysis analysis, IEnumerable<Token> tokens) : base(tokens, CreateTables(_Checked(analysis)), analysis.RuntimeAtn)
+		public GrammarInterpreter(GrammarAnalysis analysis, IEnumerable<Token> tokens, ParseHooks? hooks = null) : base(tokens, CreateTables(_Checked(analysis)), analysis.RuntimeAtn)
 		{
 			_a = analysis;
 			_s = analysis.Symbols;
+			_hooks = hooks;
+			foreach (var t in analysis.Grammar.Terminals.Where(t => t.IsContextual))
+			{
+				var b = _s.GetId(t.ContextualBase!);
+				if (!_contextual.TryGetValue(b, out var list)) _contextual.Add(b, list = new List<(int, string)>());
+				list.Add((_s.GetId(t.Name), t.When!));
+			}
+		}
+
+		protected override int Classify(Token token, Token previous)
+		{
+			if (null != _hooks?.When && _contextual.TryGetValue(token.SymbolId, out var list))
+				foreach (var (id, when) in list)
+					if (_hooks.When(when, token, previous)) return id;
+			return token.SymbolId;
+		}
+
+		protected override void OnMatched(Token token)
+		{
+			var m = _s.GetTerminal(token.SymbolId)?.Matched;
+			if (null != m) _hooks?.Matched?.Invoke(m, token);
 		}
 		static GrammarAnalysis _Checked(GrammarAnalysis analysis)
 		{
@@ -69,7 +118,8 @@ namespace Parsley
 				recovery,
 				Enumerable.Range(0, s.Count).Where(i => s.GetTerminal(i)?.IsSync ?? false).ToArray(),
 				s.EndOfInput,
-				s.Error);
+				s.Error,
+				Enumerable.Range(0, s.Count).Where(i => s.GetTerminal(i)?.IsContextual ?? false).ToArray());
 		}
 
 		public ParseNode Parse()
@@ -85,12 +135,16 @@ namespace Parsley
 			if (p.IsCollapsed)
 			{
 				result = parent!;
+				if (null != p.Entering) _hooks?.Entering?.Invoke(p.Entering);
 				_Expr(p.Expression, ref result, p, true);
+				if (null != p.Parsed) _hooks?.Parsed?.Invoke(p.Parsed, result);
 				Leave();
 				return null;
 			}
 			result = NewNode(id);
+			if (null != p.Entering) _hooks?.Entering?.Invoke(p.Entering);
 			_Expr(p.Expression, ref result, p, true);
+			if (null != p.Parsed) _hooks?.Parsed?.Invoke(p.Parsed, result);
 			Leave();
 			return result;
 		}

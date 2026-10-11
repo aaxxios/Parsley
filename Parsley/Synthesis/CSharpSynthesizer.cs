@@ -148,8 +148,11 @@ namespace Parsley
 				{
 					_className, "Parse", "Current", "Errors", "Peek", "Advance", "Consume", "Expect", "Error", "NewNode", "Fold",
 					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "GetHashCode", "ToString", "Equals", "GetType",
-					"Start", "ReadToken", "FromLexer", "EndToken", "AdaptivePredict", "Atn"
+					"Start", "ReadToken", "FromLexer", "EndToken", "AdaptivePredict", "Atn",
+					"Classify", "Classified", "OnMatched", "CurrentUnclassified", "Previous"
 				};
+				// the methods hooks call are members too
+				foreach (var (name, _) in _Hooks()) reserved.Add(name);
 				foreach (var p in _a.Grammar.Productions) reserved.Add("Parse" + _Ident(p.Name));
 				// the evaluator uses the same constant names, so they mustn't clash with its members either
 				if (null != _evaluatorName)
@@ -170,6 +173,28 @@ namespace Parsley
 				return result;
 			}
 			string _MethodName(string production) => "Parse" + _Ident(production);
+
+			// every hook method the grammar names, with the declaration it gets: the parse-time interface the
+			// other half of the partial class implements
+			List<(string Name, string Declaration)> _Hooks()
+			{
+				var result = new List<(string, string)>();
+				void add(string name, string decl)
+				{
+					if (!result.Contains((name, decl))) result.Add((name, decl));
+				}
+				foreach (var t in _a.Grammar.Terminals)
+				{
+					if (null != t.When) add(t.When, $"private partial bool {t.When}(Token token, Token previous);");
+					if (null != t.Matched) add(t.Matched, $"partial void {t.Matched}(Token token);");
+				}
+				foreach (var p in _a.Grammar.Productions)
+				{
+					if (null != p.Entering) add(p.Entering, $"partial void {p.Entering}();");
+					if (null != p.Parsed) add(p.Parsed, $"partial void {p.Parsed}(ParseNode node);");
+				}
+				return result;
+			}
 			static string _EvaluateName(string production) => "Evaluate" + _Ident(production);
 			string _PredictName(Decision d) => "Predict" + _Ident(d.Production.Name) + d.Index.ToString();
 			#endregion
@@ -308,6 +333,7 @@ namespace Parsley
 					_Line();
 					_Predictor(d);
 				}
+				_ParseHooks();
 				_Line();
 				_Tables();
 				_Close();
@@ -470,7 +496,9 @@ namespace Parsley
 				{
 					_Open($"void {_MethodName(p.Name)}(ParseNode parent{(_allStar ? ", " : "")}{retParam})");
 					_Line(enter);
+					if (null != p.Entering) _Line($"{p.Entering}();");
 					_Expr(p.Expression, "parent", null, p, true);
+					if (null != p.Parsed) _Line($"{p.Parsed}(parent);");
 					_Line("Leave();");
 					_Close();
 				}
@@ -479,7 +507,9 @@ namespace Parsley
 					_Open($"ParseNode {_MethodName(p.Name)}({retParam})");
 					_Line(enter);
 					_Line($"var node = NewNode({_const[id]});");
+					if (null != p.Entering) _Line($"{p.Entering}();");
 					_Expr(p.Expression, "node", null, p, true);
+					if (null != p.Parsed) _Line($"{p.Parsed}(node);");
 					_Line("Leave();");
 					_Line("return node;");
 					_Close();
@@ -755,6 +785,53 @@ namespace Parsley
 				return 0 == n ? null : first.Take(n).ToList();
 			}
 
+			// the overrides that connect contextual terminals and matched hooks, and the partial methods they call
+			void _ParseHooks()
+			{
+				var hooks = _Hooks();
+				if (0 == hooks.Count) return;
+				var contextual = _a.Grammar.Terminals.Where(t => t.IsContextual).ToList();
+				if (0 < contextual.Count)
+				{
+					_Line();
+					_Line("// contextual terminals: what a token is depends on what has been parsed, so it's decided as the parser looks at it");
+					_Open("protected override int Classify(Token token, Token previous)");
+					_Open("switch (token.SymbolId)");
+					foreach (var g in contextual.GroupBy(t => t.ContextualBase!))
+					{
+						_Line($"case {_const[_s.GetId(g.Key)]}:");
+						++_indent;
+						foreach (var t in g)
+							_Line($"if ({t.When}(token, previous)) return {_const[_s.GetId(t.Name)]};");
+						_Line("break;");
+						--_indent;
+					}
+					_Close();
+					_Line("return token.SymbolId;");
+					_Close();
+				}
+				var matched = _a.Grammar.Terminals.Where(t => null != t.Matched).ToList();
+				if (0 < matched.Count)
+				{
+					_Line();
+					_Open("protected override void OnMatched(Token token)");
+					_Open("switch (token.SymbolId)");
+					foreach (var t in matched)
+					{
+						_Line($"case {_const[_s.GetId(t.Name)]}:");
+						++_indent;
+						_Line($"{t.Matched}(token);");
+						_Line("break;");
+						--_indent;
+					}
+					_Close();
+					_Close();
+				}
+				_Line();
+				_Line("// implemented in another part of this partial class: the parse-time hooks the grammar names");
+				foreach (var (_, decl) in hooks) _Line(decl);
+			}
+
 			void _Predictor(Decision d)
 			{
 				var what = d.Kind switch
@@ -831,7 +908,14 @@ namespace Parsley
 				var sync = Enumerable.Range(0, _s.Count).Where(i => _s.GetTerminal(i)?.IsSync ?? false).Select(i => _const[i]);
 				_Line($"syncTerminals: [{string.Join(", ", sync)}],");
 				_Line("endOfInput: EndOfInput,");
-				_Line("error: ErrorSymbol);");
+				var contextualIds = Enumerable.Range(0, _s.Count).Where(i => _s.GetTerminal(i)?.IsContextual ?? false).Select(i => _const[i]).ToList();
+				if (0 < contextualIds.Count)
+				{
+					_Line("error: ErrorSymbol,");
+					_Line($"contextualTerminals: [{string.Join(", ", contextualIds)}]);");
+				}
+				else
+					_Line("error: ErrorSymbol);");
 				--_indent;
 				if (_allStar) _Atn();
 				_Line("#endregion");

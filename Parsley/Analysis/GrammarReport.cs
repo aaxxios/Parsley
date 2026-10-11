@@ -245,13 +245,20 @@ namespace Parsley
 				var terms = _g.Terminals;
 				flags.Clear();
 				add(terms.Count(t => null != t.Literal), "literal");
-				add(terms.Count(t => null == t.Literal), "pattern");
+				add(terms.Count(t => null == t.Literal && !t.IsContextual), "pattern");
+				add(terms.Count(t => t.IsContextual), "contextual");
 				add(terms.Count(t => t.IsHidden), "hidden");
 				add(terms.Count(t => t.IsCollapsed), "collapsed");
 				add(terms.Count(t => t.IsImplicit), "implicit");
 				add(terms.Count(t => t.IsSync), "sync");
 				_Field("Terminals", terms.Count.ToString() + (0 < flags.Count ? $" ({string.Join(", ", flags)})" : ""));
 				_Field("Symbol ids", $"{_s.Count} (with #EOS and #ERROR)");
+				var contextual = terms.Where(t => t.IsContextual).ToList();
+				if (0 < contextual.Count)
+					_Field("Contextual", string.Join(", ", contextual.Select(t => $"{t.Name}, read from {t.ContextualBase} when {t.When} says so")));
+				var hooks = prods.Count(p => null != p.Entering) + prods.Count(p => null != p.Parsed) + terms.Count(t => null != t.Matched);
+				if (0 < hooks)
+					_Field("Parse-time hooks", $"{_Plural(hooks, "call")} into your code: {prods.Count(p => null != p.Entering)} entering, {prods.Count(p => null != p.Parsed)} parsed, {terms.Count(t => null != t.Matched)} matched");
 				var inlined = _a.Messages.Count(m => m.Message.StartsWith("Inlined "));
 				if (0 < inlined) _Field("Inlined", $"{_Plural(inlined, "rule")} to remove indirect left recursion");
 			}

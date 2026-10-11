@@ -16,6 +16,7 @@
     <BinDir Condition="'$(BinDir)' == ''">$(MSBuildProjectDirectory)\..\bin\</BinDir>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="C99Parser.Typedefs.cs" />
     <Compile Remove="ParsleyRuntime.cs" />
   </ItemGroup>
 

@@ -8,11 +8,11 @@
 //
 // What the parser expects:
 // - Preprocessed input. Leftover # lines (such as line markers) are skipped as whitespace.
-// - typedef names arrive as typedef_name tokens, not identifier. C can't be parsed without knowing
-//   which identifiers name types ("T * x;" is a declaration if T is a typedef, a multiplication
-//   otherwise), so whatever sits between the lexer and the parser must turn an identifier that names
-//   a typedef in scope into a typedef_name token, as C compilers do. The lexer itself never produces
-//   one: typedef_name has the same pattern as identifier and comes after it, so identifier always wins.
+// - C can't be parsed without knowing which identifiers name types ("T * x;" is a declaration if T is
+//   a typedef, a multiplication otherwise). typedef_name is a contextual terminal: the lexer reports
+//   identifier, and the parser asks IsTypedefName whether each one it looks at is a typedef name in
+//   scope. The hooks below (entering, parsed, matched) keep track of declarations and scopes for it.
+//   C99Parser.Typedefs.cs, the other half of the partial class, implements them.
 // - Adjacent string literals ("a" "b") are accepted as one primary expression, since translation
 //   phase 6 joins them before parsing.
 //
@@ -28,31 +28,31 @@
 
 translation_unit<start>= { external_declaration }+;
 external_declaration<collapsed>= function_definition | declaration;
-function_definition= declaration_specifiers declarator [ declaration_list ] compound_statement;
+function_definition<entering="BeginFunction", parsed="EndFunction">= declaration_specifiers declarator [ declaration_list ] compound_statement;
 declaration_list<collapsed>= { declaration }+;
 
 // A.2.2 Declarations
 
-declaration= declaration_specifiers [ init_declarator_list ] ";";
+declaration<entering="BeginDeclaration", parsed="EndDeclaration">= declaration_specifiers [ init_declarator_list ] ";";
 declaration_specifiers<collapsed>= { storage_class_specifier | type_specifier | type_qualifier | function_specifier }+;
 init_declarator_list<collapsed>= init_declarator { "," init_declarator };
-init_declarator= declarator [ "=" initializer ];
+init_declarator<parsed="OnInitDeclarator">= declarator [ "=" initializer ];
 storage_class_specifier<collapsed, terminal=false>= "typedef" | "extern" | "static" | "auto" | "register";
-type_specifier<collapsed>= "void" | "char" | "short" | "int" | "long" | "float" | "double"
+type_specifier<collapsed, parsed="OnTypeSpecifier">= "void" | "char" | "short" | "int" | "long" | "float" | "double"
 	| "signed" | "unsigned" | "_Bool" | "_Complex"
 	| struct_or_union_specifier | enum_specifier | typedef_name;
 struct_or_union_specifier= struct_or_union
 	( identifier [ lbrace struct_declaration_list rbrace ] | lbrace struct_declaration_list rbrace );
 struct_or_union<collapsed, terminal=false>= "struct" | "union";
 struct_declaration_list<collapsed>= { struct_declaration }+;
-struct_declaration= specifier_qualifier_list struct_declarator_list ";";
+struct_declaration<entering="BeginSpecifiers", parsed="EndSpecifiers">= specifier_qualifier_list struct_declarator_list ";";
 specifier_qualifier_list<collapsed>= { type_specifier | type_qualifier }+;
 struct_declarator_list<collapsed>= struct_declarator { "," struct_declarator };
 struct_declarator= declarator [ ":" constant_expression ] | ":" constant_expression;
 enum_specifier= "enum"
 	( identifier [ lbrace enumerator_list [ "," ] rbrace ] | lbrace enumerator_list [ "," ] rbrace );
 enumerator_list<collapsed>= enumerator { "," enumerator };
-enumerator= enumeration_constant [ "=" constant_expression ];
+enumerator<parsed="OnEnumerator">= enumeration_constant [ "=" constant_expression ];
 enumeration_constant<collapsed>= identifier;
 type_qualifier<collapsed, terminal=false>= "const" | "restrict" | "volatile";
 function_specifier<collapsed, terminal=false>= "inline";
@@ -68,11 +68,11 @@ direct_declarator= ( identifier | "(" declarator ")" ) {
 	| "(" [ identifier_list ] ")" };
 pointer<collapsed>= { "*" [ type_qualifier_list ] }+;
 type_qualifier_list<collapsed>= { type_qualifier }+;
-parameter_type_list= parameter_list [ "," "..." ];
+parameter_type_list<entering="PushScope", parsed="EndParameters">= parameter_list [ "," "..." ];
 parameter_list<collapsed>= parameter_declaration { "," parameter_declaration };
-parameter_declaration= declaration_specifiers ( declarator | [ abstract_declarator ] );
+parameter_declaration<entering="BeginSpecifiers", parsed="OnParameter">= declaration_specifiers ( declarator | [ abstract_declarator ] );
 identifier_list= identifier { "," identifier };
-type_name= specifier_qualifier_list [ abstract_declarator ];
+type_name<entering="BeginSpecifiers", parsed="EndSpecifiers">= specifier_qualifier_list [ abstract_declarator ];
 abstract_declarator= pointer [ direct_abstract_declarator ] | direct_abstract_declarator;
 // the standard's "direct-abstract-declarator? suffix" alternatives: a parenthesized abstract
 // declarator or a first suffix, then any number of suffixes
@@ -84,7 +84,7 @@ direct_abstract_declarator_suffix<collapsed>=
 	| lbracket type_qualifier_list "static" assignment_expression rbracket
 	| lbracket "*" rbracket
 	| "(" [ parameter_type_list ] ")";
-initializer= assignment_expression | lbrace initializer_list [ "," ] rbrace;
+initializer<entering="BeginExpression", parsed="EndExpression">= assignment_expression | lbrace initializer_list [ "," ] rbrace;
 initializer_list<collapsed>= [ designation ] initializer { "," [ designation ] initializer };
 designation= designator_list "=";
 designator_list<collapsed>= { designator }+;
@@ -97,14 +97,15 @@ statement<collapsed>= labeled_statement | compound_statement | expression_statem
 labeled_statement= identifier ":" statement
 	| "case" constant_expression ":" statement
 	| "default" ":" statement;
-compound_statement= lbrace [ block_item_list ] rbrace;
+compound_statement<entering="BeginBlock", parsed="EndBlock">= lbrace [ block_item_list ] rbrace;
 block_item_list<collapsed>= { block_item }+;
 block_item<collapsed>= declaration | statement;
 expression_statement= [ expression ] ";";
 // 6.8.4.1: an else goes with the nearest if that can take it, which is what greedy means
-selection_statement= "if" "(" expression ")" statement [ "else" statement ]<policy=greedy>
+// 6.8.4 and 6.8.5: selection and iteration statements are blocks, so they get a scope
+selection_statement<entering="PushScope", parsed="PopScope">= "if" "(" expression ")" statement [ "else" statement ]<policy=greedy>
 	| "switch" "(" expression ")" statement;
-iteration_statement= "while" "(" expression ")" statement
+iteration_statement<entering="PushScope", parsed="PopScope">= "while" "(" expression ")" statement
 	| "do" statement "while" "(" expression ")" ";"
 	| "for" "(" [ expression ] ";" [ expression ] ";" [ expression ] ")" statement
 	| "for" "(" declaration [ expression ] ";" [ expression ] ")" statement;
@@ -183,7 +184,7 @@ sizeof= "sizeof";
 static= "static";
 struct= "struct";
 switch= "switch";
-typedef= "typedef";
+typedef<matched="OnTypedefKeyword">= "typedef";
 union= "union";
 unsigned= "unsigned";
 void= "void";
@@ -196,8 +197,8 @@ _Imaginary= "_Imaginary";
 
 // A.1.3 Identifiers: letters, digits, _ and universal character names (\uXXXX, \UXXXXXXXX)
 identifier= '([A-Za-z_]|\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8})([A-Za-z0-9_]|\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8})*';
-// never produced by the lexer; see the note at the top
-typedef_name= '([A-Za-z_]|\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8})([A-Za-z0-9_]|\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8})*';
+// an identifier that names a typedef in scope; see the note at the top
+typedef_name<when="IsTypedefName">= identifier;
 
 // A.1.5 Constants. An enumeration constant is an identifier to the lexer; enumerator declares one and
 // primary_expression uses one as an identifier.

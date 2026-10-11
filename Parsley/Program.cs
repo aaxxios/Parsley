@@ -27,7 +27,7 @@ namespace Parsley
                     return;
                 }
                 toDispose = options;
-                if(options.Report)
+                if (options.Report)
                 {
                     if (options.Base)
                     {
@@ -49,47 +49,47 @@ namespace Parsley
                 var grammar = Grammar.ReadFrom(options.Input, CliUtility.GetFilename(options.Input));
                 var analysis = GrammarAnalysis.Analyze(grammar, options.Engine);
                 foreach (var m in analysis.Messages) Console.Error.WriteLine(m);
-                if (!options.Report)
+                if (options.Report)
                 {
-                    options.Output.Write(CSharpSynthesizer.Synthesize(analysis));
-                } else
-                {
-                    if(analysis.Messages.Count>0)
+                    if (analysis.Messages.Count > 0)
                     {
                         Console.Error.WriteLine();
                     }
                     GrammarReport.Write(analysis, Console.Out);
                     return;
                 }
+                options.Output.Write(CSharpSynthesizer.Synthesize(analysis));
                 // -s writes everything shared; -b only the base class, for a project that already has the rest
-                if(options.Shared || options.Base)
+                if (options.Shared || options.Base)
                 {
                     var dir = "";
                     var fn = CliUtility.GetFilename(options.Input);
-                    if(fn!=null)
+                    if (fn != null)
                     {
                         dir = Path.GetDirectoryName(fn) ?? dir;
                     }
-                    string inDir(string name) => dir.Length>0?Path.Combine(dir, name):name;
+                    string inDir(string name) => dir.Length > 0 ? Path.Combine(dir, name) : name;
                     if (options.Shared)
                         File.WriteAllText(inDir(CSharpSynthesizer.RuntimeFileName), CSharpSynthesizer.RuntimeSource);
                     File.WriteAllText(inDir(CSharpSynthesizer.BaseFileName(analysis.Engine)), CSharpSynthesizer.BaseSource(analysis.Engine));
                 }
-                
+
                 if (options.Lexer != null)
                 {
-                    for (var i = 0; i < grammar.Terminals.Count; i++)
+                    // from the analyzed grammar: its terminals are in the order the parser numbers them, and each
+                    // has its regex, including those built from alternatives or other terminals
+                    foreach (var term in analysis.Grammar.Terminals)
                     {
-                        var term = grammar.Terminals[i];
-                        var isHidden = (bool)(term.Attributes.FirstOrDefault(p => p.Name.Equals("hidden", StringComparison.Ordinal) && p.Value is bool b && b)?.Value ?? false);
-                        if (isHidden) options.Lexer.Write('.');
+                        // the lexer never produces a contextual terminal; the parser reads it from another one
+                        if (term.IsContextual) continue;
+                        if (term.IsHidden) options.Lexer.Write('.');
                         options.Lexer.Write(term.Name);
                         options.Lexer.Write(' ');
-                        options.Lexer.WriteLine(Grammar.EscapeLiteralOrPattern(term.Literal, term.Pattern));
+                        options.Lexer.WriteLine(term.Regex);
                     }
                 }
             }
-            catch(ArgumentException argex)
+            catch (ArgumentException argex)
             {
                 Console.Error.WriteLine("Error: " + argex.Message);
                 Console.Error.WriteLine();

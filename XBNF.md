@@ -146,6 +146,8 @@ Values can be:
 | `sync` | string | Extra terminals where error recovery may stop while this rule is being parsed. The value is terminal names or literal texts separated by spaces or commas: `sync="semi rbrace"`. |
 | `type` | string | The C# type the rule's `EvaluateXxx` method returns, written verbatim: `type="double"`. Without it, the method returns `object`. Quote it, since a type like `List<int>` can't be a bare word. See [Semantic actions](#semantic-actions). |
 | `state` | string | On the start rule only: the C# type of the evaluator's `State` and of the `state` argument to `Evaluate`, written verbatim: `state="MyContext"`. Without it, both are `object?`. On any other rule it's ignored, with a warning. |
+| `entering` | method name | A method the parser calls, with no arguments, as it starts this rule. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
+| `parsed` | method name | A method the parser calls with the finished parse node as this rule ends. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
 
 ### On terminal rules
 
@@ -155,6 +157,8 @@ Values can be:
 | `collapsed` | flag | The parser checks it as usual but leaves it out of the parse tree (punctuation). |
 | `sync` | flag | A strong restart point for error recovery anywhere in the grammar, typically `;` or `}`. |
 | `terminal` | `true` / `false` | Forces terminal or non-terminal (see above). |
+| `when` | method name | Makes a contextual terminal, read by the parser from another terminal's tokens. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
+| `matched` | method name | A method the parser calls with each token of this terminal it matches. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
 | `expected`, `blockEnd` | string | Accepted for compatibility with older grammars. They currently have no effect. |
 
 ### On groups and expressions
@@ -244,6 +248,43 @@ When the start rule has an action, Parsley synthesizes an evaluator class in the
 ### Rules without an action
 
 A rule with no action still gets an `EvaluateXxx` method. Its node evaluates to its one non-terminal child, ignoring terminals, so chains like `Item= Wrapped | Word;` need no code. A node with no non-terminal children, or with more than one, throws `InvalidOperationException` when it's evaluated. Watch for rules like `Unary= sub Unary | Power;`: without an action, the `-` would be ignored and the node would evaluate to its `Unary` child.
+
+## Parse-time hooks and contextual terminals
+
+Some languages can't be parsed from their tokens alone. In C, `T * x;` declares `x` if `T` names a type and multiplies otherwise, so the parser has to know which names are types, and that depends on the declarations it has already parsed. Two features handle this: hooks, which call your code as parsing goes, and contextual terminals, which let your code decide what a token is.
+
+### Hooks
+
+A hook names a method in the parser's partial class. Parsley declares it as a partial method, and you implement it in another part of the class:
+
+| Attribute | On | Declared as | Called |
+| --- | --- | --- | --- |
+| `entering="M"` | non-terminal | `partial void M();` | as the rule starts, before any of it is read |
+| `parsed="M"` | non-terminal | `partial void M(ParseNode node);` | as the rule ends, with its finished node. For a collapsed rule, the node its children went into. |
+| `matched="M"` | terminal | `partial void M(Token token);` | each time the parser matches one of its tokens, after adding it to the tree |
+
+A hook you don't implement does nothing, as C# partial methods do. Several rules can name the same method. Hooks run during parsing, so unlike [semantic actions](#semantic-actions), which evaluate a finished tree, they can affect the rest of the parse. If error recovery gives up partway through, some `parsed` hooks may not run for rules that were started.
+
+### Contextual terminals
+
+```xbnf
+identifier= '[A-Za-z_][A-Za-z0-9_]*';
+typedef_name<when="IsTypedefName">= identifier;
+```
+
+A rule with `when` whose whole definition is one terminal is a **contextual terminal**. The lexer never produces it: it isn't written to the lexer file, and it comes after every other terminal so lexer ids don't count it. Instead, each time the parser looks at an `identifier` token, it asks your method:
+
+```csharp
+private partial bool IsTypedefName(Token token, Token previous);
+```
+
+`previous` is the token before, as the lexer produced it (its SymbolId is -1 at the start of the input). When the method returns true, the parser treats the token as `typedef_name`. It asks every time it looks at the token, including when it looks ahead to choose between alternatives, so the answer reflects everything parsed up to that point. Unlike the other hooks, this method must be implemented, or the parser won't compile.
+
+The parser may look several tokens ahead before it gets to them, and the hooks that change your state haven't run for those tokens yet. Basing the answer on the token and the one before it, rather than on where the parse has got to, keeps it the same at both times.
+
+`c99.xbnf` and `C99Parser.Typedefs.cs` in `Parsley.Tests/c99` are a full example: they track C's scopes and typedef declarations to tell typedef names from identifiers.
+
+The interpreter, `GrammarInterpreter`, takes a `ParseHooks` object with delegates in place of the methods.
 
 ## How rules become a parser
 

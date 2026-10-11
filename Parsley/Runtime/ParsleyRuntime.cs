@@ -180,8 +180,14 @@ namespace Parsley.Runtime
     /// </summary>
     public sealed class ParserTables
     {
-        public ParserTables(int terminalStart, string[] symbolNames, string[] displayNames, int[] collapsedTerminals, int[][] recoverySets, int[] syncTerminals, int endOfInput, int error)
+        public ParserTables(int terminalStart, string[] symbolNames, string[] displayNames, int[] collapsedTerminals, int[][] recoverySets, int[] syncTerminals, int endOfInput, int error, int[]? contextualTerminals = null)
         {
+            // contextual terminals come after every terminal the lexer produces
+            LexedEnd = endOfInput;
+            HasContextual = null != contextualTerminals && 0 < contextualTerminals.Length;
+            if (HasContextual)
+                foreach (var c in contextualTerminals!)
+                    LexedEnd = Math.Min(LexedEnd, c);
             TerminalStart = terminalStart;
             SymbolNames = symbolNames;
             DisplayNames = displayNames;
@@ -205,6 +211,14 @@ namespace Parsley.Runtime
         public int[][] RecoverySets { get; }
         public int EndOfInput { get; }
         public int Error { get; }
+        /// <summary>
+        /// One past the last terminal a lexer can produce; contextual terminals, which only the parser assigns, follow it
+        /// </summary>
+        public int LexedEnd { get; }
+        /// <summary>
+        /// The grammar has contextual terminals, so tokens are classified as the parser looks at them
+        /// </summary>
+        public bool HasContextual { get; }
         internal bool[] Collapsed { get; }
         internal bool[] Sync { get; }
         internal bool[][] Recovery { get; }
@@ -240,6 +254,7 @@ namespace Parsley.Runtime
         readonly List<int> _active = new();
         readonly List<ParseError> _errors = new();
         Token _current;
+        Token _previous = new Token(-1, "", 0, 0, -1);
         long _index;
         long _lastErrorIndex = -1;
         int _errorsAtIndex;
@@ -278,7 +293,7 @@ namespace Parsley.Runtime
             foreach (var t in tokens)
             {
                 var id = t.SymbolId + _tables.TerminalStart;
-                if (0 > t.SymbolId || id >= _tables.EndOfInput)
+                if (0 > t.SymbolId || id >= _tables.LexedEnd)
                     id = _tables.Error;
                 yield return t with { SymbolId = id };
             }
@@ -290,13 +305,40 @@ namespace Parsley.Runtime
         protected Token EndToken(Token last) => new Token(_tables.EndOfInput, "", last.Line, last.Column + (last.Value?.Length ?? 0), last.Position + (last.Value?.Length ?? 0));
 
         /// <summary>
-        /// The token being looked at
+        /// The token being looked at, classified (see <see cref="Classify"/>)
         /// </summary>
-        protected Token Current => _current;
+        protected Token Current => Classified(_current, _previous);
+        /// <summary>
+        /// The token being looked at, as the lexer produced it
+        /// </summary>
+        protected Token CurrentUnclassified => _current;
+        /// <summary>
+        /// The last token matched, as the lexer produced it. Its SymbolId is -1 before the first.
+        /// </summary>
+        protected Token Previous => _previous;
+        /// <summary>
+        /// For a grammar with contextual terminals: the symbol a token is, given the token before it. The
+        /// parser asks each time it looks at a token, so the answer can depend on what has been parsed so far.
+        /// </summary>
+        protected virtual int Classify(Token token, Token previous) => token.SymbolId;
+        /// <summary>
+        /// The token with the symbol <see cref="Classify"/> gives it
+        /// </summary>
+        protected Token Classified(Token token, Token previous)
+        {
+            if (!_tables.HasContextual || token.SymbolId == _tables.EndOfInput || token.SymbolId == _tables.Error) return token;
+            var id = Classify(token, previous);
+            return id == token.SymbolId ? token : token with { SymbolId = id };
+        }
+        /// <summary>
+        /// Called with each token the parser matches, after it is added to the tree
+        /// </summary>
+        protected virtual void OnMatched(Token token) { }
         protected void Advance()
         {
             if (_current.SymbolId == _tables.EndOfInput) return;
             var last = _current;
+            _previous = last;
             _current = ReadToken(out var t) ? t : EndToken(last);
             ++_index;
         }
@@ -306,24 +348,26 @@ namespace Parsley.Runtime
         /// </summary>
         protected void Consume(ParseNode parent)
         {
-            if (!_tables.Collapsed[_current.SymbolId])
-                parent.Add(_Leaf(_current));
+            var token = Current;
+            if (!_tables.Collapsed[token.SymbolId])
+                parent.Add(_Leaf(token));
             Advance();
             _quiet = false; // a matched token ends the quiet period after an error
+            OnMatched(token);
         }
         /// <summary>
         /// Consumes the given terminal, or reports it missing and recovers
         /// </summary>
         protected void Expect(int symbolId, ParseNode parent)
         {
-            if (_current.SymbolId == symbolId)
+            if (Current.SymbolId == symbolId)
             {
                 Consume(parent);
                 return;
             }
             _Report(parent, $"Expected {_tables.DisplayNames[symbolId]}");
             _Recover(parent, symbolId);
-            if (_current.SymbolId == symbolId)
+            if (Current.SymbolId == symbolId)
                 Consume(parent);
         }
         /// <summary>
@@ -372,10 +416,10 @@ namespace Parsley.Runtime
                 if (3 <= ++_errorsAtIndex)
                 {
                     // at end of input there's nothing to skip, so a recursive rule could descend forever: give up
-                    if (_current.SymbolId == _tables.EndOfInput)
+                    if (Current.SymbolId == _tables.EndOfInput)
                         throw new _Abandon();
                     var skipped = new ParseNode(_tables.Error, _tables.SymbolNames[_tables.Error], null, false, _current.Line, _current.Column, _current.Position) { IsError = true };
-                    skipped.Add(_Leaf(_current));
+                    skipped.Add(_Leaf(Current));
                     parent.Add(skipped);
                     Advance();
                 }
@@ -387,11 +431,11 @@ namespace Parsley.Runtime
             if (_quiet) return;
             _quiet = true;
             // a literal terminal's display name is already its text in quotes; others show the text after the name
-            var display = _tables.DisplayNames[_current.SymbolId];
-            var found = _current.SymbolId == _tables.EndOfInput ? "end of input"
-                : _current.SymbolId == _tables.Error ? $"unrecognized input \"{_current.Value}\""
+            var display = _tables.DisplayNames[Current.SymbolId];
+            var found = Current.SymbolId == _tables.EndOfInput ? "end of input"
+                : Current.SymbolId == _tables.Error ? $"unrecognized input \"{Current.Value}\""
                 : display.StartsWith('"') ? display
-                : $"{display} {_current.Value}";
+                : $"{display} {Current.Value}";
             _errors.Add(new ParseError($"{message} but found {found}", _current.Line, _current.Column, _current.Position));
         }
         bool _IsRecoveryPoint(int id)
@@ -405,10 +449,10 @@ namespace Parsley.Runtime
         void _Recover(ParseNode parent, int stopAt)
         {
             ParseNode? err = null;
-            while (_current.SymbolId != stopAt && !_IsRecoveryPoint(_current.SymbolId))
+            while (Current.SymbolId != stopAt && !_IsRecoveryPoint(Current.SymbolId))
             {
                 err ??= new ParseNode(_tables.Error, _tables.SymbolNames[_tables.Error], null, false, _current.Line, _current.Column, _current.Position) { IsError = true };
-                err.Add(_Leaf(_current));
+                err.Add(_Leaf(Current));
                 Advance();
             }
             if (null != err)
@@ -453,7 +497,7 @@ namespace Parsley.Runtime
             while (_current.SymbolId != _tables.EndOfInput)
             {
                 err ??= new ParseNode(_tables.Error, _tables.SymbolNames[_tables.Error], null, false, _current.Line, _current.Column, _current.Position) { IsError = true };
-                err.Add(_Leaf(_current));
+                err.Add(_Leaf(Current));
                 Advance();
             }
             if (null != err) root.Add(err);

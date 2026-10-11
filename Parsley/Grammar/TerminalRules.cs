@@ -27,6 +27,16 @@ namespace Parsley
 				foreach (var p in rules)
 				{
 					if (terminalNames.Contains(p.Name)) continue;
+					// a contextual terminal is one terminal reference, read differently by the parser
+					if (null != p.Attributes.Get("when"))
+					{
+						if (p.Expression is SymbolRef only && null != only.Name && only.Name != p.Name && terminalNames.Contains(only.Name))
+						{
+							terminalNames.Add(p.Name);
+							changed = true;
+						}
+						continue;
+					}
 					var f = forced(p);
 					if (false == f || (p.Name == start && true != f)) continue;
 					var refs = p.Expression.Descendants().OfType<SymbolRef>().Where(r => null != r.Name).Select(r => r.Name!).ToList();
@@ -82,6 +92,12 @@ namespace Parsley
 			var done = new Dictionary<string, (string Text, int Prec)?>();
 			foreach (var t in Terminals)
 			{
+				// the lexer never produces a contextual terminal, so it has no regex
+				if (t.IsContextual)
+				{
+					t.Regex = null;
+					continue;
+				}
 				var rx = _TerminalRegex(t, done, new HashSet<string>(), messages);
 				t.Regex = rx?.Text;
 			}
@@ -129,6 +145,11 @@ namespace Parsley
 							messages.Add(new GrammarMessage(ErrorLevel.Error, null != GetProduction(sr.Name!)
 								? $"Terminal \"{owner.Name}\" references \"{sr.Name}\", which is not a terminal"
 								: $"Terminal \"{owner.Name}\" references \"{sr.Name}\", which is not defined", sr));
+							return null;
+						}
+						if (target.IsContextual)
+						{
+							messages.Add(new GrammarMessage(ErrorLevel.Error, $"Terminal \"{owner.Name}\" references \"{sr.Name}\", which is contextual and has no regex", sr));
 							return null;
 						}
 						return _TerminalRegex(target, done, visiting, messages);

@@ -18,6 +18,9 @@
 
   <ItemGroup>
     <None Include="*.xbnf" CopyToOutputDirectory="PreserveNewest" />
+    <!-- the C99 grammar, its hooks and test sources: data for C99Tests, compiled in memory, not into this project -->
+    <Compile Remove="c99\**" />
+    <None Include="c99\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

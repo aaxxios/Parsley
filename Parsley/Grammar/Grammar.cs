@@ -32,6 +32,15 @@ namespace Parsley
 		/// The <c>state</c> attribute, which only the start production takes: the type of the evaluator's state, written verbatim. Null means object?.
 		/// </summary>
 		public string? StateType => Attributes.Get("state") as string;
+		/// <summary>
+		/// The <c>entering</c> attribute: a method the parser calls, with no arguments, as it starts this production
+		/// </summary>
+		public string? Entering => Attributes.Get("entering") as string;
+		/// <summary>
+		/// The <c>parsed</c> attribute: a method the parser calls with the finished node as this production ends
+		/// (for a collapsed production, the node its children went into)
+		/// </summary>
+		public string? Parsed => Attributes.Get("parsed") as string;
 		public Production Clone()
 		{
 			var result = new Production(Name, Expression.Clone()) { Action = Action?.Clone() };
@@ -121,6 +130,23 @@ namespace Parsley
 		/// Created for a literal used inline in a production without a declaration of its own
 		/// </summary>
 		public bool IsImplicit { get; internal set; }
+		/// <summary>
+		/// The <c>when</c> attribute of a contextual terminal: the method the parser asks, each time it looks at a
+		/// token of <see cref="ContextualBase"/>, whether the token is this terminal instead
+		/// </summary>
+		public string? When => Attributes.Get("when") as string;
+		/// <summary>
+		/// A contextual terminal: never produced by the lexer, but read from another terminal's tokens by the parser
+		/// </summary>
+		public bool IsContextual => null != When;
+		/// <summary>
+		/// The terminal a contextual terminal's tokens arrive as: the one its definition names
+		/// </summary>
+		public string? ContextualBase => IsContextual && Definition is SymbolRef sr && null != sr.Name ? sr.Name : null;
+		/// <summary>
+		/// The <c>matched</c> attribute: a method the parser calls with each token of this terminal it matches
+		/// </summary>
+		public string? Matched => Attributes.Get("matched") as string;
 		public TerminalDeclaration Clone()
 		{
 			var result = new TerminalDeclaration(Name, Definition.Clone()) { IsImplicit = IsImplicit, Regex = Regex };
@@ -385,10 +411,26 @@ namespace Parsley
 			}
 			foreach (var t in Terminals)
 			{
+				if (t.IsContextual)
+				{
+					var b = null == t.ContextualBase ? null : GetTerminal(t.ContextualBase);
+					if (null == b)
+						result.Add(new GrammarMessage(ErrorLevel.Error, $"\"{t.Name}\" has when, so it must be exactly one terminal, as in {t.Name}<when=\"IsSomething\">= identifier;", t));
+					else if (b.IsHidden)
+						result.Add(new GrammarMessage(ErrorLevel.Error, $"\"{t.Name}\" is read from \"{b.Name}\", which is hidden, so the parser never sees it", t));
+					else if (b.IsContextual)
+						result.Add(new GrammarMessage(ErrorLevel.Error, $"\"{t.Name}\" is read from \"{b.Name}\", which is contextual itself; read it from \"{b.ContextualBase}\" instead", t));
+					if (t.IsHidden)
+						result.Add(new GrammarMessage(ErrorLevel.Error, $"\"{t.Name}\" is contextual, so it can't be hidden: only the parser ever sees it", t));
+				}
 				foreach (var a in t.Attributes)
 				{
 					switch (a.Name)
 					{
+						case "when": case "matched":
+							if (!(a.Value is string m) || !_IsMethodName(m))
+								result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": {a.Name} expects the name of a C# method, such as {a.Name}=\"{("when" == a.Name ? "IsTypeName" : "OnIdentifier")}\"", a));
+							break;
 						case "hidden": case "collapsed": case "sync": case "terminal":
 							if (!(a.Value is bool))
 								result.Add(new GrammarMessage(ErrorLevel.Warning, $"On \"{t.Name}\": {a.Name} expects true or false", a));
@@ -422,7 +464,8 @@ namespace Parsley
 					result.Add(new GrammarMessage(ErrorLevel.Warning, $"Production \"{p.Name}\" is unreachable from the start symbol", p));
 			return result;
 		}
-		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state" };
+		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state", "entering", "parsed", "when", "matched" };
+		static bool _IsMethodName(string s) => 0 < s.Length && (char.IsLetter(s[0]) || '_' == s[0]) && s.All(ch => char.IsLetterOrDigit(ch) || '_' == ch);
 		static readonly HashSet<string> _expressionAttributes = new HashSet<string> { "policy", "sync", "expected" };
 		static void _ValidateAttributes(AttributeList attrs, GrammarNode owner, bool isProduction, IList<GrammarMessage> result)
 		{
@@ -455,6 +498,17 @@ namespace Parsley
 					case "sync":
 						if (!(a.Value is string) && !(a.Value is bool))
 							result.Add(new GrammarMessage(ErrorLevel.Warning, "sync on an expression expects a string of terminal names or literals", a));
+						break;
+					case "entering":
+					case "parsed":
+						if (!(a.Value is string m) || !_IsMethodName(m))
+							result.Add(new GrammarMessage(ErrorLevel.Error, $"{a.Name} expects the name of a C# method, such as {a.Name}=\"{("entering" == a.Name ? "PushScope" : "OnDeclaration")}\"", a));
+						break;
+					case "when":
+						result.Add(new GrammarMessage(ErrorLevel.Error, "when makes a contextual terminal, so the rule must be exactly one terminal, as in typedef_name<when=\"IsTypedefName\">= identifier;", a));
+						break;
+					case "matched":
+						result.Add(new GrammarMessage(ErrorLevel.Error, "matched goes on a terminal; this rule is a non-terminal", a));
 						break;
 					default:
 						if (!(a.Value is bool))

@@ -459,7 +459,14 @@ namespace Parsley.Runtime
         /// <summary>
         /// The token n places after Current, or end of input
         /// </summary>
-        protected Token Peek(int n) => _tokens.TryPeek(n, out var t) ? t : EndToken(Current);
+        protected Token Peek(int n)
+        {
+            var t = _tokens.TryPeek(n, out var x) ? x : EndToken(CurrentUnclassified);
+            if (!Tables.HasContextual) return t;
+            // classified in the context of the token before it, as the lexer produced it
+            var previous = 1 == n ? CurrentUnclassified : _tokens.TryPeek(n - 1, out var p) ? p : t;
+            return Classified(t, previous);
+        }
 
         /// <summary>
         /// Marks the start of a non-terminal, for error recovery and prediction. returnState is the ATN

@@ -37,10 +37,11 @@ namespace Parsley.Tests
 			return _refs;
 		}
 
-		public static CompiledParser Compile(string source, string className)
+		/// <param name="extra">More sources compiled with it, such as the other half of the partial class</param>
+		public static CompiledParser Compile(string source, string className, params string[] extra)
 		{
 			var opts = new CSharpParseOptions(LanguageVersion.CSharp12);
-			var trees = new[]
+			var trees = new List<SyntaxTree>
 			{
 				CSharpSyntaxTree.ParseText(source, opts, "Parser.cs"),
 				CSharpSyntaxTree.ParseText(CSharpSynthesizer.RuntimeSource, opts, CSharpSynthesizer.RuntimeFileName),
@@ -49,6 +50,8 @@ namespace Parsley.Tests
 				CSharpSyntaxTree.ParseText(CSharpSynthesizer.BaseSource(ParserEngine.LLk), opts, CSharpSynthesizer.BaseFileName(ParserEngine.LLk)),
 				CSharpSyntaxTree.ParseText(CSharpSynthesizer.BaseSource(ParserEngine.AllStar), opts, CSharpSynthesizer.BaseFileName(ParserEngine.AllStar))
 			};
+			for (var i = 0; i < extra.Length; ++i)
+				trees.Add(CSharpSyntaxTree.ParseText(extra[i], opts, $"Extra{i}.cs"));
 			var comp = CSharpCompilation.Create("Synth" + Guid.NewGuid().ToString("N"), trees, _References(),
 				new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable, warningLevel: 4));
 			using var ms = new MemoryStream();

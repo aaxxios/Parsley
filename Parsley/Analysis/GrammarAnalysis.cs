@@ -179,6 +179,10 @@ namespace Parsley
 			if (ParserEngine.LL1 == engine) k = 1;
 			var g = grammar.Clone();
 			g.ResolveLiterals();
+			// contextual terminals go after every terminal the lexer produces, so lexer ids don't count them
+			var contextual = g.Terminals.Where(t => t.IsContextual).ToList();
+			g.Terminals.RemoveAll(t => t.IsContextual);
+			g.Terminals.AddRange(contextual);
 			var a = new GrammarAnalysis(g, k, engine);
 			a._Run();
 			return a;
