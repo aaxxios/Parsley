@@ -31,7 +31,7 @@
 
   <ItemGroup>
     <Reference Include="luthor">
-      <HintPath>Luthor\luthor.dll</HintPath>
+      <HintPath>..\Tools\luthor.dll</HintPath>
     </Reference>
   </ItemGroup>
 
