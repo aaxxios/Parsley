@@ -25,8 +25,7 @@ XBNF is a loose superset of EBNF. The documentation is [here](XBNF.md).
 The synthesized class plus `ParsleyRuntime.cs` compile on their own (C# 12, .NET 8), with no reference to Parsley:
 
 ```csharp
-var parser = new JsonParser(tokens);   // IEnumerable<Token> straight from the lexer
-ParseNode tree = parser.Parse();
+ParseNode tree = JsonParser.Parse(tokens);   // IEnumerable<Token> straight from the lexer
 foreach (var e in parser.Errors) Console.WriteLine(e);
 ```
 
