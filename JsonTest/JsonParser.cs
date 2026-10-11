@@ -7,9 +7,9 @@ using System.Collections.Generic;
 using Parsley.Runtime;
 
 /// <summary>
-/// Parses Json. Synthesized from json.xbnf.
+/// Parses Json with one token of lookahead (LL(1)). Synthesized from json.xbnf.
 /// </summary>
-public partial class JsonParser : ParserBase
+public partial class JsonParser : LL1ParserBase
 {
 	#region Symbols
 	public const int Json = 0;

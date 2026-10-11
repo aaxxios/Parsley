@@ -61,7 +61,7 @@ namespace Parsley.Tests
 			T.Equal(expected, tree, "tree: Value collapsed, punctuation collapsed");
 		}
 
-		static readonly string[] _samples =
+		internal static readonly string[] _samples =
 		{
 			"{}", "[]", "[1]", "[1,2,3]", "{\"a\":1}", "{\"a\":1,\"b\":[true,false,null]}", "[[[]]]", "[{},{}]",
 			"{\"k\":\"v\\\"x\\u00e9\"}", "[-0.5e10, 0, 12.25]",
@@ -151,7 +151,7 @@ namespace Parsley.Tests
 		}
 
 		// random JSON plus random single-character damage
-		static IEnumerable<string> _RandomDocuments(int count, int seed)
+		internal static IEnumerable<string> _RandomDocuments(int count, int seed)
 		{
 			var r = new Random(seed);
 			const string damage = "{}[],:\"0123456789-+.eEtrufalsn \\ab";

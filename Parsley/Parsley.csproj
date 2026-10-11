@@ -20,8 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- compiled into the library and also embedded, so CSharpSynthesizer.RuntimeSource can hand it out -->
-    <EmbeddedResource Include="Runtime\ParsleyRuntime.cs" LogicalName="Parsley.Runtime.ParsleyRuntime.cs" />
+    <!-- compiled into the library and also embedded, so CSharpSynthesizer.RuntimeSource and BaseSource can hand them out -->
+    <EmbeddedResource Include="Runtime\*.cs" LogicalName="Parsley.Runtime.%(Filename)%(Extension)" />
   </ItemGroup>
   <!-- Copy only what's needed to run the tool into the bin folder. -->
   <Target Name="CopyToolTobinDir" AfterTargets="Build">

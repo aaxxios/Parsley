@@ -28,10 +28,11 @@ namespace Parsley
                 }
                 toDispose = options;
                 var grammar = Grammar.ReadFrom(options.Input, CliUtility.GetFilename(options.Input));
-                var analysis = GrammarAnalysis.Analyze(grammar);
+                var analysis = GrammarAnalysis.Analyze(grammar, options.Engine);
                 foreach (var m in analysis.Messages) Console.Error.WriteLine(m);
                 options.Output.Write(CSharpSynthesizer.Synthesize(analysis));
-                if(options.Shared)
+                // -s writes everything shared; -b only the base class, for a project that already has the rest
+                if(options.Shared || options.Base)
                 {
                     var dir = "";
                     var fn = CliUtility.GetFilename(options.Input);
@@ -39,8 +40,10 @@ namespace Parsley
                     {
                         dir = Path.GetDirectoryName(fn) ?? dir;
                     }
-                    var sharedPath = dir.Length>0?Path.Combine(dir, "ParsleyRuntime.cs"):"ParsleyRuntime.cs";
-                    File.WriteAllText(sharedPath, CSharpSynthesizer.RuntimeSource);
+                    string inDir(string name) => dir.Length>0?Path.Combine(dir, name):name;
+                    if (options.Shared)
+                        File.WriteAllText(inDir(CSharpSynthesizer.RuntimeFileName), CSharpSynthesizer.RuntimeSource);
+                    File.WriteAllText(inDir(CSharpSynthesizer.BaseFileName(analysis.Engine)), CSharpSynthesizer.BaseSource(analysis.Engine));
                 }
                 
                 if (options.Lexer != null)

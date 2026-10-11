@@ -41,11 +41,21 @@ namespace Parsley
 		/// </summary>
 		public int Index { get; }
 		/// <summary>
-		/// How many tokens it needs to look at
+		/// How many tokens it needs to look at, or 0 when no fixed number of tokens settles it
 		/// </summary>
 		public int Depth { get; internal set; }
 		/// <summary>
-		/// For each branch, the lookahead strings (at most Depth long) that choose it. The sets don't overlap.
+		/// True when the decision is made at parse time by ALL(*) adaptive prediction rather than by a
+		/// test synthesized from <see cref="Branches"/>
+		/// </summary>
+		public bool IsAdaptive { get; internal set; }
+		/// <summary>
+		/// The decision's number among the grammar's adaptive decisions, or -1
+		/// </summary>
+		public int AdaptiveIndex { get; internal set; } = -1;
+		/// <summary>
+		/// For each branch, the lookahead strings (at most Depth long) that choose it. The sets don't overlap,
+		/// except for a decision with a Depth of 0, where they're the single tokens each branch can start with.
 		/// </summary>
 		public IReadOnlyList<IReadOnlyCollection<LookaheadString>> Branches { get; internal set; } = Array.Empty<IReadOnlyCollection<LookaheadString>>();
 		/// <summary>
@@ -65,7 +75,7 @@ namespace Parsley
 		/// The single tokens that start each branch, when Depth is 1
 		/// </summary>
 		public IReadOnlyList<int> TokensOf(int branch) => Branches[branch].Select(s => s[0]).Distinct().OrderBy(x => x).ToList();
-		public override string ToString() => $"{Production.Name} #{Index} {Kind} depth {Depth}: {Node}";
+		public override string ToString() => $"{Production.Name} #{Index} {Kind} {(IsAdaptive ? "adaptive" : "depth " + Depth.ToString())}: {Node}";
 	}
 
 	/// <summary>
@@ -90,11 +100,15 @@ namespace Parsley
 		readonly Dictionary<Expression, Production> _owners = new(ReferenceEqualityComparer.Instance);
 		readonly List<GrammarMessage> _messages = new();
 		HashSet<string> _nullable = new();
+		GrammarAtn? _atn;
+		Runtime.Atn? _runtimeAtn;
 
-		GrammarAnalysis(Grammar g, int maxK)
+		GrammarAnalysis(Grammar g, int maxK, ParserEngine engine)
 		{
 			Grammar = g;
 			MaxK = maxK;
+			RequestedEngine = engine;
+			Engine = ParserEngine.Auto == engine ? ParserEngine.LLk : engine;
 		}
 
 		/// <summary>
@@ -102,6 +116,26 @@ namespace Parsley
 		/// </summary>
 		public Grammar Grammar { get; }
 		public int MaxK { get; }
+		/// <summary>
+		/// The engine asked for, which may be <see cref="ParserEngine.Auto"/>
+		/// </summary>
+		public ParserEngine RequestedEngine { get; }
+		/// <summary>
+		/// The engine the parser uses: the one asked for, or for Auto, the lightest the grammar allows
+		/// </summary>
+		public ParserEngine Engine { get; private set; }
+		/// <summary>
+		/// The decisions made by adaptive prediction, in the order of their <see cref="Decision.AdaptiveIndex"/>
+		/// </summary>
+		public IReadOnlyList<Decision> AdaptiveDecisions => Decisions.Where(d => d.IsAdaptive).OrderBy(d => d.AdaptiveIndex).ToList();
+		/// <summary>
+		/// The grammar as a transition network, for ALL(*) prediction
+		/// </summary>
+		public GrammarAtn Atn => _atn ??= new GrammarAtn(this);
+		/// <summary>
+		/// The runtime network a parser of this grammar predicts with, its predictions cached across parses
+		/// </summary>
+		public Runtime.Atn RuntimeAtn => _runtimeAtn ??= Atn.ToRuntime(AdaptiveDecisions);
 		public SymbolTable Symbols { get; private set; } = null!;
 		public IReadOnlyList<GrammarMessage> Messages => _messages;
 		public bool HasErrors => _messages.Any(m => m.Level == ErrorLevel.Error);
@@ -116,14 +150,23 @@ namespace Parsley
 		public int Depth => 0 == _decisions.Count ? 1 : _decisions.Values.Max(d => d.Depth);
 
 		/// <summary>
-		/// Analyzes the grammar. Problems are reported in Messages rather than thrown.
+		/// Analyzes the grammar, choosing the lightest engine it allows. Problems are reported in Messages rather than thrown.
 		/// </summary>
-		public static GrammarAnalysis Analyze(Grammar grammar, int maxK = 4)
+		public static GrammarAnalysis Analyze(Grammar grammar, int maxK = 4) => Analyze(grammar, ParserEngine.Auto, maxK);
+
+		/// <summary>
+		/// Analyzes the grammar for the given engine. Problems are reported in Messages rather than thrown.
+		/// </summary>
+		/// <param name="engine">The engine, or Auto to choose. LL1 limits lookahead to one token; LL1 and LLk
+		/// settle decisions they can't decide with a policy (an error for an alternation without one)</param>
+		/// <param name="maxK">The most tokens a fixed decision looks at</param>
+		public static GrammarAnalysis Analyze(Grammar grammar, ParserEngine engine, int maxK = 4)
 		{
 			if (1 > maxK) throw new ArgumentOutOfRangeException(nameof(maxK));
+			if (ParserEngine.LL1 == engine) maxK = 1;
 			var g = grammar.Clone();
 			g.ResolveLiterals();
-			var a = new GrammarAnalysis(g, maxK);
+			var a = new GrammarAnalysis(g, maxK, engine);
 			a._Run();
 			return a;
 		}
@@ -143,8 +186,59 @@ namespace Parsley
 				var index = 0;
 				_CollectDecisions(p, p.Expression, ref index);
 			}
+			// a rule with no finite derivation (every path leads back into itself) can never finish parsing
+			var productive = _Productive();
+			foreach (var p in Grammar.Productions)
+				if (!productive.Contains(p.Name))
+					_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"\"{p.Name}\" can't match any finite input, so parsing it always fails", p));
 			foreach (var d in _decisions.Values.OrderBy(d => Grammar.Productions.IndexOf(d.Production)).ThenBy(d => d.Index))
 				_Resolve(d);
+			_ChooseEngine();
+		}
+
+		bool _AllowsAdaptive => ParserEngine.Auto == RequestedEngine || ParserEngine.AllStar == RequestedEngine;
+
+		void _ChooseEngine()
+		{
+			var decisions = Decisions;
+			if (ParserEngine.Auto == RequestedEngine)
+				Engine = decisions.Any(d => d.IsAdaptive) ? ParserEngine.AllStar
+					: decisions.All(d => 1 >= d.Depth) ? ParserEngine.LL1
+					: ParserEngine.LLk;
+			if (ParserEngine.AllStar != Engine) return;
+			// an ALL(*) parser predicts adaptively wherever one token isn't enough, except where a policy
+			// was asked for: that settles the decision the same way in every engine
+			var index = 0;
+			foreach (var d in decisions)
+			{
+				if (!d.IsAdaptive && 1 < d.Depth && null == d.AppliedPolicy)
+					d.IsAdaptive = true;
+				if (d.IsAdaptive) d.AdaptiveIndex = index++;
+			}
+		}
+
+		// the productions that derive at least one finite string of terminals
+		HashSet<string> _Productive()
+		{
+			var result = new HashSet<string>();
+			bool derives(Expression e) => e switch
+			{
+				EmptyExpression => true,
+				SymbolRef sr => Symbols.IsTerminal(Symbols.GetId(sr.Name!)) || result.Contains(sr.Name!),
+				Sequence seq => seq.Items.All(derives),
+				Alternation alt => alt.Options.Any(derives),
+				OptionalExpression => true,
+				Repeat r => 0 == r.Min || derives(r.Body),
+				_ => true
+			};
+			for (var changed = true; changed;)
+			{
+				changed = false;
+				foreach (var p in Grammar.Productions)
+					if (!result.Contains(p.Name) && derives(p.Expression))
+						changed = result.Add(p.Name);
+			}
+			return result;
 		}
 
 		void _Index(Production p, Expression e, Expression? parent)
@@ -388,15 +482,28 @@ namespace Parsley
 					return;
 				}
 			}
-			// still conflicting at MaxK: settle with a policy
+			// still conflicting at MaxK
 			var conflicts = _Conflicts(branches);
 			var policy = _Policy(d);
 			var explicitPolicy = null != policy;
+			var conflictText = string.Join(", ", conflicts.Take(4).Select(c => $"[{c.ToString(Symbols)}]")) + (4 < conflicts.Count ? $" and {conflicts.Count - 4} more" : "");
+			if (!explicitPolicy && _AllowsAdaptive)
+			{
+				// leave it to ALL(*), which looks as far as it has to and, if the input really is ambiguous,
+				// takes the earliest alternative, keeps a loop going, and takes an optional
+				d.IsAdaptive = true;
+				d.Depth = 0;
+				d.Branches = _BranchSets(d, 1);
+				d.Ambiguities = conflicts;
+				_ChooseDefault(d);
+				_messages.Add(new GrammarMessage(ErrorLevel.Message, $"In \"{d.Production.Name}\", {d.Node} can't be decided within {MaxK} tokens on {conflictText}, so it's predicted adaptively (ALL(*)) at parse time. If that input really is ambiguous, a <policy> settles it at synthesis time instead.", d.Node));
+				return;
+			}
+			// settle with a policy
 			if (null == policy)
 				policy = d.Kind == DecisionKind.Alternation ? "first" : "greedy";
-			var conflictText = string.Join(", ", conflicts.Take(4).Select(c => $"[{c.ToString(Symbols)}]")) + (4 < conflicts.Count ? $" and {conflicts.Count - 4} more" : "");
 			if (d.Kind == DecisionKind.Alternation && !explicitPolicy)
-				_messages.Add(new GrammarMessage(ErrorLevel.Error, $"In \"{d.Production.Name}\", the alternatives of {d.Node} can't be told apart within {MaxK} tokens on {conflictText}. Add <policy=\"first\"> if the earliest alternative should win.", d.Node));
+				_messages.Add(new GrammarMessage(ErrorLevel.Error, $"In \"{d.Production.Name}\", the alternatives of {d.Node} can't be told apart within {MaxK} tokens on {conflictText}. Add <policy=\"first\"> if the earliest alternative should win, or use the ALL(*) engine to look further.", d.Node));
 			else if (!explicitPolicy)
 				_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"In \"{d.Production.Name}\", {d.Node} is ambiguous on {conflictText}; resolved greedily (it keeps matching). Add <policy=\"greedy\"> or <policy=\"lazy\"> to choose explicitly.", d.Node));
 			else if (d.Kind == DecisionKind.Alternation && "first" != policy)

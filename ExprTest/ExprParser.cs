@@ -8,9 +8,9 @@ using System.Collections.Generic;
 using Parsley.Runtime;
 
 /// <summary>
-/// Parses Expr. Synthesized from Expr.xbnf.
+/// Parses Expr with one token of lookahead (LL(1)). Synthesized from Expr.xbnf.
 /// </summary>
-public partial class ExprParser : ParserBase
+public partial class ExprParser : LL1ParserBase
 {
 	#region Symbols
 	public const int Expr = 0;

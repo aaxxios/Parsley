@@ -27,10 +27,10 @@ namespace Parsley.Tests
 			}
 			public bool Accepts(string text) => 0 == Parse(text).Errors.Count;
 		}
-		static Harness _Build(string name, string xbnf)
+		static Harness _Build(string name, string xbnf, ParserEngine engine = ParserEngine.Auto)
 		{
 			var g = Grammar.Parse(xbnf, name + ".xbnf");
-			var a = GrammarAnalysis.Analyze(g);
+			var a = GrammarAnalysis.Analyze(g, engine);
 			GrammarException.ThrowIfErrors(a.Messages);
 			var src = CSharpSynthesizer.Synthesize(a);
 			File.WriteAllText(Path.Combine(SynthesisTests.OutDir, g.ClassName + ".cs"), src);
@@ -60,13 +60,20 @@ namespace Parsley.Tests
 
 		public static void DanglingElseBindsToTheNearestIf()
 		{
-			var h = _Build("ifelse", "S= \"if\" e \"then\" S [ \"else\" S ] | s; e=\"e\"; s=\"s\";" + Ws);
-			T.Check(h.Source.Contains("resolved greedily"), "the policy is explained in a comment");
-			var tree = h.Parse("if e then if e then s else s").Tree;
-			// the else belongs to the inner if: the outer S has 4 children, the inner one 6
-			var lines = tree.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
-			var elseLine = lines.First(l => l.Trim().StartsWith("elseKeyword"));
-			T.Equal(4, elseLine.Length - elseLine.TrimStart().Length, "else is a child of the inner S (indent 4)");
+			// settled greedily by LL(k), or left to ALL(*), the else goes to the nearest if
+			foreach (var engine in new[] { ParserEngine.LLk, ParserEngine.Auto })
+			{
+				var h = _Build("ifelse", "S= \"if\" e \"then\" S [ \"else\" S ] | s; e=\"e\"; s=\"s\";" + Ws, engine);
+				if (ParserEngine.LLk == engine)
+					T.Check(h.Source.Contains("resolved greedily"), "the policy is explained in a comment");
+				else
+					T.Check(h.Source.Contains("AdaptivePredict(0)"), "predicted adaptively");
+				var tree = h.Parse("if e then if e then s else s").Tree;
+				// the else belongs to the inner if: the outer S has 4 children, the inner one 6
+				var lines = tree.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+				var elseLine = lines.First(l => l.Trim().StartsWith("elseKeyword"));
+				T.Equal(4, elseLine.Length - elseLine.TrimStart().Length, $"{engine}: else is a child of the inner S (indent 4)");
+			}
 		}
 
 		public static void LeftRecursionFoldsLeft()

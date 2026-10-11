@@ -36,18 +36,29 @@ namespace Parsley
 	public static class CSharpSynthesizer
 	{
 		/// <summary>
-		/// The runtime support file (Token, LookAheadEnumerator, ParseNode, ParserBase) that every
-		/// synthesized parser needs alongside it
+		/// The file name of the shared runtime source
 		/// </summary>
-		public static string RuntimeSource
+		public const string RuntimeFileName = "ParsleyRuntime.cs";
+		/// <summary>
+		/// The shared runtime support (Token, LookAheadEnumerator, ParseNode, ParseError, ParserTables and the
+		/// abstract ParserBase) that every synthesized parser needs alongside it, whatever its engine
+		/// </summary>
+		public static string RuntimeSource => _Resource(RuntimeFileName);
+		/// <summary>
+		/// The file name of an engine's base class source, such as LL1ParserBase.cs
+		/// </summary>
+		public static string BaseFileName(ParserEngine engine) => engine.BaseClassName() + ".cs";
+		/// <summary>
+		/// The source of an engine's base class (LL1ParserBase, LLkParserBase or AllStarParserBase), which
+		/// a parser synthesized for that engine derives from. It needs <see cref="RuntimeSource"/>.
+		/// </summary>
+		public static string BaseSource(ParserEngine engine) => _Resource(BaseFileName(engine));
+		static string _Resource(string name)
 		{
-			get
-			{
-				using var s = typeof(CSharpSynthesizer).Assembly.GetManifestResourceStream("Parsley.Runtime.ParsleyRuntime.cs")
-					?? throw new InvalidOperationException("The runtime source is missing from the assembly");
-				using var r = new StreamReader(s);
-				return r.ReadToEnd();
-			}
+			using var s = typeof(CSharpSynthesizer).Assembly.GetManifestResourceStream("Parsley.Runtime." + name)
+				?? throw new InvalidOperationException($"The runtime source {name} is missing from the assembly");
+			using var r = new StreamReader(s);
+			return r.ReadToEnd();
 		}
 
 		/// <summary>
@@ -80,6 +91,8 @@ namespace Parsley
 			readonly Dictionary<string, string> _sets = new(); // key: sorted ids
 			readonly List<(string Name, int[] Ids, string Comment)> _setList = new();
 			readonly List<Decision> _predictors = new();
+			readonly ParserEngine _engine;
+			readonly bool _allStar; // productions carry the ATN state they return to, for adaptive prediction
 			bool _nameConsumes; // inside a multi-token decision, where no case label shows the token
 
 			public _Emitter(GrammarAnalysis a, SynthesisOptions o)
@@ -87,6 +100,8 @@ namespace Parsley
 				_a = a;
 				_s = a.Symbols;
 				_o = o;
+				_engine = a.Engine;
+				_allStar = ParserEngine.AllStar == _engine;
 				_className = _Ident(o.ClassName ?? a.Grammar.ClassName ?? (a.Grammar.StartSymbol + "Parser"));
 				// only an action on the start production makes an evaluator; validation has already
 				// rejected actions elsewhere without one there
@@ -132,7 +147,8 @@ namespace Parsley
 				var reserved = new HashSet<string>
 				{
 					_className, "Parse", "Current", "Errors", "Peek", "Advance", "Consume", "Expect", "Error", "NewNode", "Fold",
-					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "GetHashCode", "ToString", "Equals", "GetType"
+					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "GetHashCode", "ToString", "Equals", "GetType",
+					"Start", "ReadToken", "FromLexer", "EndToken", "AdaptivePredict", "Atn"
 				};
 				foreach (var p in _a.Grammar.Productions) reserved.Add("Parse" + _Ident(p.Name));
 				// the evaluator uses the same constant names, so they mustn't clash with its members either
@@ -248,9 +264,9 @@ namespace Parsley
 					_Line();
 				}
 				_Line("/// <summary>");
-				_Line($"/// Parses {g.StartSymbol}. Synthesized from {source}.");
+				_Line($"/// Parses {g.StartSymbol} with {_EngineDescription()}. Synthesized from {source}.");
 				_Line("/// </summary>");
-				_Open($"{(_o.Public ? "public" : "internal")} partial class {_className} : ParserBase");
+				_Open($"{(_o.Public ? "public" : "internal")} partial class {_className} : {_engine.BaseClassName()}");
 
 				_Line("#region Symbols");
 				for (var i = 0; i < _s.Count; ++i)
@@ -261,14 +277,16 @@ namespace Parsley
 				_Line($"public const int SymbolCount = {_s.Count};");
 				_Line("#endregion");
 				_Line();
-				_Line($"public {_className}(IEnumerable<Token> tokens) : base(tokens, s_tables) {{ }}");
+				_Line($"public {_className}(IEnumerable<Token> tokens) : base(tokens, s_tables{(_allStar ? ", s_atn" : "")}) {{ }}");
 				_Line();
 				_Line("/// <summary>");
 				_Line($"/// Parses a complete {g.StartSymbol} and returns its tree. Problems are reported in <see cref=\"ParserBase.Errors\"/>.");
 				_Line("/// </summary>");
 				_Open("public static bool TryParse(IEnumerable<Token> tokens,out ParseNode result, out IReadOnlyList<ParseError> errors)");
 				_Line($"var parser = new {_className}(tokens);");
-				_Line($"result = parser.Run(parser.{_MethodName(g.StartSymbol!)});");
+				_Line(_allStar
+					? $"result = parser.Run(() => parser.{_MethodName(g.StartSymbol!)}(-1));"
+					: $"result = parser.Run(parser.{_MethodName(g.StartSymbol!)});");
                 _Line($"errors = parser.Errors;");
 				_Line($"return parser.Errors.Count == 0;");
                 _Close();
@@ -299,6 +317,18 @@ namespace Parsley
 					_Evaluator(source);
 				}
 				return _sb.ToString();
+			}
+
+			string _EngineDescription()
+			{
+				switch (_engine)
+				{
+					case ParserEngine.LL1: return "one token of lookahead (LL(1))";
+					case ParserEngine.LLk: return 1 < _a.Depth ? $"up to {_a.Depth} tokens of lookahead (LL({_a.Depth}))" : "one token of lookahead, on the LL(k) base";
+					default:
+						var n = _a.AdaptiveDecisions.Count;
+						return $"adaptive prediction (ALL(*)) for {n} decision{(1 == n ? "" : "s")}";
+				}
 			}
 
 			#region Evaluator
@@ -434,18 +464,20 @@ namespace Parsley
 				var id = _s.GetId(p.Name);
 				var rewritten = p.Expression.Descendants().OfType<Repeat>().Any(r => r.LeftFold);
 				_Line($"// {_Comment(XbnfWriter.Write(p, false))}" + (rewritten ? " (left recursion rewritten as a loop)" : ""));
+				var enter = _allStar ? $"Enter({_const[id]}, returnState);" : $"Enter({_const[id]});";
+				var retParam = _allStar ? "int returnState" : "";
 				if (p.IsCollapsed)
 				{
-					_Open($"void {_MethodName(p.Name)}(ParseNode parent)");
-					_Line($"Enter({_const[id]});");
+					_Open($"void {_MethodName(p.Name)}(ParseNode parent{(_allStar ? ", " : "")}{retParam})");
+					_Line(enter);
 					_Expr(p.Expression, "parent", null, p, true);
 					_Line("Leave();");
 					_Close();
 				}
 				else
 				{
-					_Open($"ParseNode {_MethodName(p.Name)}()");
-					_Line($"Enter({_const[id]});");
+					_Open($"ParseNode {_MethodName(p.Name)}({retParam})");
+					_Line(enter);
 					_Line($"var node = NewNode({_const[id]});");
 					_Expr(p.Expression, "node", null, p, true);
 					_Line("Leave();");
@@ -471,10 +503,15 @@ namespace Parsley
 								else
 									_Line($"Expect({_const[id]}, {node});");
 							}
-							else if (_s.GetProduction(id)!.IsCollapsed)
-								_Line($"{_MethodName(sr.Name!)}({node});");
 							else
-								_Line($"{node}.Add({_MethodName(sr.Name!)}());");
+							{
+								// an ALL(*) parser tells each production where its caller continues
+								var ret = _allStar ? _a.Atn.GetReturnState(sr).ToString() : "";
+								if (_s.GetProduction(id)!.IsCollapsed)
+									_Line($"{_MethodName(sr.Name!)}({node}{(_allStar ? ", " : "")}{ret});");
+								else
+									_Line($"{node}.Add({_MethodName(sr.Name!)}({ret}));");
+							}
 							break;
 						}
 					case Sequence seq:
@@ -504,9 +541,18 @@ namespace Parsley
 					_Line($"// {_Comment(d.Node.ToString())}");
 				if (null != d.AppliedPolicy)
 					_Line($"// ambiguous within {_a.MaxK} tokens; resolved {(d.Kind == DecisionKind.Alternation ? "by taking the first alternative" : "greedy" == d.AppliedPolicy ? "greedily" : "lazily")}");
+				if (d.IsAdaptive)
+				{
+					if (0 == d.Depth)
+						_Line($"// no fixed lookahead decides this; ALL(*) looks as far as it has to");
+					// a prediction has matched at least the first token, so a branch that can only start one way has it
+					_DeepDecision(d, node, p, isRoot, $"AdaptivePredict({d.AdaptiveIndex})", i => _Single(d.TokensOf(i)));
+					return;
+				}
 				if (1 < d.Depth)
 				{
-					_DeepDecision(d, node, p, isRoot);
+					_predictors.Add(d);
+					_DeepDecision(d, node, p, isRoot, _PredictName(d) + "()", i => _CommonPrefix(d.Branches[i]));
 					return;
 				}
 				switch (d.Node)
@@ -571,7 +617,8 @@ namespace Parsley
 				if (isRoot) expected = p.Attributes.GetString("expected");
 				expected ??= d.Node.Attributes.GetString("expected");
 				var desc = null == expected ? "null" : GrammarAttribute.FormatValue(expected);
-				return $"Error({node}, {desc}, {string.Join(", ", tokens.Select(t => _const[t]))});";
+				// a rule that can't match any finite input has no tokens to name
+				return 0 == tokens.Count ? $"Error({node}, {desc});" : $"Error({node}, {desc}, {string.Join(", ", tokens.Select(t => _const[t]))});";
 			}
 
 			void _Alternation(Decision d, Alternation a, string node, Production p, bool isRoot)
@@ -635,10 +682,10 @@ namespace Parsley
 				_Close();
 			}
 
-			void _DeepDecision(Decision d, string node, Production p, bool isRoot)
+			// a decision made by a method that returns the branch: a synthesized predictor or adaptive prediction.
+			// known: the tokens a branch is certain to start with once chosen
+			void _DeepDecision(Decision d, string node, Production p, bool isRoot, string call, Func<int, IReadOnlyList<int>?> known)
 			{
-				_predictors.Add(d);
-				var call = _PredictName(d) + "()";
 				switch (d.Node)
 				{
 					case Alternation a:
@@ -649,7 +696,7 @@ namespace Parsley
 							_Line($"case {i}:");
 							++_indent;
 							_nameConsumes = true;
-							_Expr(a.Options[i], node, _CommonPrefix(d.Branches[i]), p, false);
+							_Expr(a.Options[i], node, known(i), p, false);
 							_nameConsumes = false;
 							_Line("break;");
 							--_indent;
@@ -667,7 +714,7 @@ namespace Parsley
 					case OptionalExpression o:
 						_Open($"if (0 == {call})");
 						_nameConsumes = true;
-						_Expr(o.Body, node, _CommonPrefix(d.Branches[0]), p, false);
+						_Expr(o.Body, node, known(0), p, false);
 						_nameConsumes = false;
 						_Close();
 						break;
@@ -786,7 +833,45 @@ namespace Parsley
 				_Line("endOfInput: EndOfInput,");
 				_Line("error: ErrorSymbol);");
 				--_indent;
+				if (_allStar) _Atn();
 				_Line("#endregion");
+			}
+
+			void _Atn()
+			{
+				var atn = _a.Atn;
+				_Line("// the grammar as a transition network, for adaptive prediction. rules: each non-terminal's start and");
+				_Line("// stop state. states: each state's transition count, then for each transition a kind (0: no input,");
+				_Line("// to a; 1: match terminal a, to b; 2: call non-terminal a, returning to b) and its a and b.");
+				_Line("// decisions: the state where each adaptive decision chooses its branch.");
+				_Line("static readonly Atn s_atn = new(");
+				++_indent;
+				_Line($"startRule: {_const[atn.StartRule]},");
+				_Line("endOfInput: EndOfInput,");
+				_Numbers("rules", atn.Rules, ",");
+				_Numbers("states", atn.SerializeStates(), ",");
+				_Numbers("decisions", _a.AdaptiveDecisions.Select(d => atn.GetDecisionState(d.Node)).ToList(), ");");
+				--_indent;
+			}
+
+			// a long list of numbers, wrapped
+			void _Numbers(string name, IReadOnlyList<int> values, string end)
+			{
+				if (24 >= values.Count)
+				{
+					_Line($"{name}: [{string.Join(", ", values)}]{end}");
+					return;
+				}
+				_Line($"{name}:");
+				_Line("[");
+				++_indent;
+				for (var i = 0; i < values.Count; i += 24)
+				{
+					var last = i + 24 >= values.Count;
+					_Line(string.Join(", ", values.Skip(i).Take(24)) + (last ? "" : ","));
+				}
+				--_indent;
+				_Line("]" + end);
 			}
 
 			SortedSet<int> _RecoverySet(Production p)

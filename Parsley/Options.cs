@@ -13,7 +13,11 @@ internal partial class Options
     public TextWriter? Lexer = null;
     [CmdArg(ShortName = 'o', Description = "The path to the ouput code file.", ValueName = "code-file", Required = false)]
     public TextWriter Output { get; set; } = Console.Out;
-    [CmdArg(ShortName = 's', Description = "Generate the ParsleyRuntime.cs shared runtime file.", ValueName = "shared", Required = false)]
+    [CmdArg(ShortName = 's', Description = "Generate the shared runtime: ParsleyRuntime.cs and the parser base class for the grammar's engine.", ValueName = "shared", Required = false)]
     public bool Shared = false;
+    [CmdArg(ShortName = 'b', Description = "Generate only the parser base class for the grammar's engine (LL1ParserBase.cs, LLkParserBase.cs or AllStarParserBase.cs), for a project that already has ParsleyRuntime.cs.", ValueName = "base", Required = false)]
+    public bool Base = false;
+    [CmdArg(ShortName = 'e', Description = "The parsing engine: auto (the lightest the grammar allows), ll1, llk or allstar. Defaults to auto.", ValueName = "engine", Required = false)]
+    public ParserEngine Engine = ParserEngine.Auto;
 
 }

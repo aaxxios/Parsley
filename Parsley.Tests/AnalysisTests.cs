@@ -6,7 +6,9 @@ namespace Parsley.Tests
 {
 	public static class AnalysisTests
 	{
-		static GrammarAnalysis A(string xbnf, int maxK = 4) => GrammarAnalysis.Analyze(Grammar.Parse(xbnf));
+		static GrammarAnalysis A(string xbnf, int maxK = 4) => GrammarAnalysis.Analyze(Grammar.Parse(xbnf), maxK);
+		// LL(k) only, as Parsley was before ALL(*): what can't be decided in k tokens is settled by policy
+		static GrammarAnalysis LLk(string xbnf, int maxK = 4) => GrammarAnalysis.Analyze(Grammar.Parse(xbnf), ParserEngine.LLk, maxK);
 		static string Errors(GrammarAnalysis a) => string.Join("; ", a.Messages.Where(m => m.Level == ErrorLevel.Error).Select(m => m.Message));
 
 		public static void JsonIsAllOneToken()
@@ -57,16 +59,22 @@ namespace Parsley.Tests
 			var loop = a.Decisions.First(x => x.Kind == DecisionKind.Loop);
 			T.Equal(0, loop.DefaultBranch, "4 to continue vs } and EOS to exit: test the exit");
 		}
-		public static void AlternationConflictIsAnError()
+		public static void AlternationConflictIsAnErrorOnLLk()
 		{
-			var a = A("S= A | B; A= { a } x; B= { a } y; a=\"a\"; x=\"x\"; y=\"y\";", 3);
+			var a = LLk("S= A | B; A= { a } x; B= { a } y; a=\"a\"; x=\"x\"; y=\"y\";", 3);
 			T.Check(Errors(a).Contains("can't be told apart"), "unresolved alternation reported");
-			var b = A("S= ( A | B )<policy=first>; A= { a } x; B= { a } y; a=\"a\"; x=\"x\"; y=\"y\";", 3);
+			var b = LLk("S= ( A | B )<policy=first>; A= { a } x; B= { a } y; a=\"a\"; x=\"x\"; y=\"y\";", 3);
 			T.Equal("", Errors(b), "explicit policy accepted");
+			var auto = A("S= A | B; A= { a } x; B= { a } y; a=\"a\"; x=\"x\"; y=\"y\";", 3);
+			T.Equal("", Errors(auto), "left to ALL(*) when the engine is chosen automatically");
+			T.Check(auto.Decisions.Single(d => d.Kind == DecisionKind.Alternation).IsAdaptive, "adaptive");
 		}
 		public static void DanglingElseIsGreedy()
 		{
-			var a = A("S= \"if\" e \"then\" S [ \"else\" S ] | s; e=\"e\"; s=\"s\";");
+			var auto = A("S= \"if\" e \"then\" S [ \"else\" S ] | s; e=\"e\"; s=\"s\";");
+			var adaptive = auto.Decisions.First(d => d.Kind == DecisionKind.Optional);
+			T.Check(adaptive.IsAdaptive && null == adaptive.AppliedPolicy, "without a policy, ALL(*) decides it at parse time");
+			var a = LLk("S= \"if\" e \"then\" S [ \"else\" S ] | s; e=\"e\"; s=\"s\";");
 			T.Equal("", Errors(a), "no errors");
 			var opt = a.Decisions.First(d => d.Kind == DecisionKind.Optional);
 			T.Equal("greedy", opt.AppliedPolicy, "greedy");

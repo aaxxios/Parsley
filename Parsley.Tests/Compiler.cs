@@ -43,7 +43,11 @@ namespace Parsley.Tests
 			var trees = new[]
 			{
 				CSharpSyntaxTree.ParseText(source, opts, "Parser.cs"),
-				CSharpSyntaxTree.ParseText(CSharpSynthesizer.RuntimeSource, opts, "ParsleyRuntime.cs")
+				CSharpSyntaxTree.ParseText(CSharpSynthesizer.RuntimeSource, opts, CSharpSynthesizer.RuntimeFileName),
+				// every engine's base, as a project holding parsers for several engines would have
+				CSharpSyntaxTree.ParseText(CSharpSynthesizer.BaseSource(ParserEngine.LL1), opts, CSharpSynthesizer.BaseFileName(ParserEngine.LL1)),
+				CSharpSyntaxTree.ParseText(CSharpSynthesizer.BaseSource(ParserEngine.LLk), opts, CSharpSynthesizer.BaseFileName(ParserEngine.LLk)),
+				CSharpSyntaxTree.ParseText(CSharpSynthesizer.BaseSource(ParserEngine.AllStar), opts, CSharpSynthesizer.BaseFileName(ParserEngine.AllStar))
 			};
 			var comp = CSharpCompilation.Create("Synth" + Guid.NewGuid().ToString("N"), trees, _References(),
 				new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable, warningLevel: 4));

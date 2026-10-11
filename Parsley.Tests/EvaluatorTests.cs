@@ -9,7 +9,7 @@ namespace Parsley.Tests
 		const string Ws = " ws<hidden>= '[ \\t\\r\\n]+';";
 
 		// + and * over integers, with State as a typed table of variables
-		const string Calc = @"
+		internal const string Calc = @"
 			@evaluator ""CalcEvaluator"";
 			Sum<start, type=""int"", state=""System.Collections.Generic.IDictionary<string, int>"">= Sum plus Product | Product => {
 				if (1 == node.Children.Count) return (int)Evaluate(node.Children[0]);
@@ -84,7 +84,7 @@ namespace Parsley.Tests
 			static string evaluatorClass(string xbnf, string? filename)
 			{
 				var src = CSharpSynthesizer.Synthesize(Grammar.Parse(xbnf, filename));
-				var line = src.Split('\n').First(l => l.StartsWith("public partial class") && !l.Contains(": ParserBase"));
+				var line = src.Split('\n').First(l => l.StartsWith("public partial class") && !l.Contains("ParserBase"));
 				return line.Substring(line.IndexOf("partial class ") + 14).Trim();
 			}
 			const string body = "S= a => { return 1; }; a= \"a\";";

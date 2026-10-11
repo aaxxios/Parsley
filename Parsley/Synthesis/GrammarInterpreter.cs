@@ -6,19 +6,29 @@ using Parsley.Runtime;
 namespace Parsley
 {
 	/// <summary>
-	/// Parses directly from an analyzed grammar, making exactly the choices synthesized code makes.
-	/// Useful for prototyping without compiling, and as an oracle for testing synthesized parsers.
+	/// Parses directly from an analyzed grammar, making exactly the choices synthesized code makes,
+	/// whichever engine the analysis chose. Useful for prototyping without compiling, and as an oracle
+	/// for testing synthesized parsers.
 	/// </summary>
-	public sealed class GrammarInterpreter : ParserBase
+	/// <remarks>
+	/// It runs on the ALL(*) base, since that supports every kind of decision: fixed lookahead is just
+	/// Peek, and adaptive decisions predict over the analysis's network exactly as a synthesized ALL(*)
+	/// parser does.
+	/// </remarks>
+	public sealed class GrammarInterpreter : AllStarParserBase
 	{
 		readonly GrammarAnalysis _a;
 		readonly SymbolTable _s;
 
-		public GrammarInterpreter(GrammarAnalysis analysis, IEnumerable<Token> tokens) : base(tokens, CreateTables(analysis))
+		public GrammarInterpreter(GrammarAnalysis analysis, IEnumerable<Token> tokens) : base(tokens, CreateTables(_Checked(analysis)), analysis.RuntimeAtn)
 		{
-			if (analysis.HasErrors) throw new GrammarException(analysis.Messages);
 			_a = analysis;
 			_s = analysis.Symbols;
+		}
+		static GrammarAnalysis _Checked(GrammarAnalysis analysis)
+		{
+			if (analysis.HasErrors) throw new GrammarException(analysis.Messages);
+			return analysis;
 		}
 
 		/// <summary>
@@ -64,13 +74,13 @@ namespace Parsley
 
 		public ParseNode Parse()
 		{
-			return Run(() => _Production(_a.Grammar.GetProduction(_a.Grammar.StartSymbol!)!, null)!);
+			return Run(() => _Production(_a.Grammar.GetProduction(_a.Grammar.StartSymbol!)!, null, -1)!);
 		}
 
-		ParseNode? _Production(Production p, ParseNode? parent)
+		ParseNode? _Production(Production p, ParseNode? parent, int returnState)
 		{
 			var id = _s.GetId(p.Name);
-			Enter(id);
+			Enter(id, returnState);
 			ParseNode result;
 			if (p.IsCollapsed)
 			{
@@ -99,7 +109,9 @@ namespace Parsley
 						else
 						{
 							var callee = _s.GetProduction(id)!;
-							var child = _Production(callee, node);
+							// only adaptive prediction reads the return state, and only an ALL(*) grammar has a network built
+							var ret = ParserEngine.AllStar == _a.Engine ? _a.Atn.GetReturnState(sr) : -1;
+							var child = _Production(callee, node, ret);
 							if (null != child) node.Add(child);
 						}
 						return;
@@ -156,6 +168,11 @@ namespace Parsley
 		// the same choice the synthesized code makes, including what happens on input that matches nothing
 		int _Choose(Decision d)
 		{
+			if (d.IsAdaptive)
+			{
+				var b = AdaptivePredict(d.AdaptiveIndex);
+				return -1 < b ? b : d.DefaultBranch;
+			}
 			if (1 == d.Depth)
 			{
 				var t = Current.SymbolId;

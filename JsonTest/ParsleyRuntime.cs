@@ -1,5 +1,6 @@
-// Runtime support for parsers synthesized by Parsley. Include this file alongside the synthesized
-// parser; it has no other dependencies. Requires C# 12.
+// Runtime support shared by every parser Parsley synthesizes, whatever its algorithm. Include this
+// file alongside the synthesized parser and its algorithm's base class (LL1ParserBase.cs, LLkParserBase.cs
+// or AllStarParserBase.cs); it has no other dependencies. Requires C# 12.
 #nullable enable
 using System;
 using System.Collections;
@@ -224,13 +225,17 @@ namespace Parsley.Runtime
         }
     }
 
+
     /// <summary>
-    /// The base of every synthesized parser: token access, tree building and error recovery.
-    /// Errors are recorded in <see cref="Errors"/> and parsing continues.
+    /// What every synthesized parser shares, whatever its algorithm: token access, tree building and
+    /// error recovery. Errors are recorded in <see cref="Errors"/> and parsing continues.
     /// </summary>
+    /// <remarks>
+    /// A parser derives from one of the algorithm-specific bases (LL1ParserBase, LLkParserBase or
+    /// AllStarParserBase), which supply the tokens and whatever lookahead the algorithm needs.
+    /// </remarks>
     public abstract class ParserBase
     {
-        readonly LookAheadEnumerator<Token> _tokens;
         readonly ParserTables _tables;
         readonly List<int> _active = new();
         readonly List<ParseError> _errors = new();
@@ -239,12 +244,11 @@ namespace Parsley.Runtime
         long _lastErrorIndex = -1;
         int _errorsAtIndex;
         bool _quiet;
+        ParseNode? _root;
 
-        protected ParserBase(IEnumerable<Token> tokens, ParserTables tables)
+        protected ParserBase(ParserTables tables)
         {
             _tables = tables ?? throw new ArgumentNullException(nameof(tables));
-            _tokens = new LookAheadEnumerator<Token>(_FromLexer(tokens ?? throw new ArgumentNullException(nameof(tokens))));
-            _current = _tokens.MoveNext() ? _tokens.Current : _EndToken(default);
         }
 
         /// <summary>
@@ -253,8 +257,22 @@ namespace Parsley.Runtime
         public IReadOnlyList<ParseError> Errors => _errors;
         protected ParserTables Tables => _tables;
 
-        // converts lexer ids (terminals counted from 0) to parser ids, once, as tokens arrive. Anything the
-        // lexer couldn't match, or an id past the last terminal, becomes #ERROR so the parser reports it.
+        /// <summary>
+        /// Reads the next token from the source the derived class set up with <see cref="FromLexer"/>.
+        /// Returns false at the end of the input.
+        /// </summary>
+        protected abstract bool ReadToken(out Token token);
+
+        /// <summary>
+        /// Loads the first token. A derived constructor calls this once its token source is ready.
+        /// </summary>
+        protected void Start() => _current = ReadToken(out var t) ? t : EndToken(default);
+
+        /// <summary>
+        /// Converts lexer ids (terminals counted from 0) to parser ids as tokens arrive. Anything the
+        /// lexer couldn't match, or an id past the last terminal, becomes #ERROR so the parser reports it.
+        /// </summary>
+        protected IEnumerable<Token> FromLexer(IEnumerable<Token> tokens) => _FromLexer(tokens ?? throw new ArgumentNullException(nameof(tokens)));
         IEnumerable<Token> _FromLexer(IEnumerable<Token> tokens)
         {
             foreach (var t in tokens)
@@ -266,21 +284,20 @@ namespace Parsley.Runtime
             }
         }
 
-        Token _EndToken(Token last) => new Token(_tables.EndOfInput, "", last.Line, last.Column + (last.Value?.Length ?? 0), last.Position + (last.Value?.Length ?? 0));
+        /// <summary>
+        /// The end of input token, placed just after the given last token
+        /// </summary>
+        protected Token EndToken(Token last) => new Token(_tables.EndOfInput, "", last.Line, last.Column + (last.Value?.Length ?? 0), last.Position + (last.Value?.Length ?? 0));
 
         /// <summary>
         /// The token being looked at
         /// </summary>
         protected Token Current => _current;
-        /// <summary>
-        /// The token n places after Current, or end of input
-        /// </summary>
-        protected Token Peek(int n) => _tokens.TryPeek(n, out var t) ? t : _EndToken(_current);
         protected void Advance()
         {
             if (_current.SymbolId == _tables.EndOfInput) return;
             var last = _current;
-            _current = _tokens.MoveNext() ? _tokens.Current : _EndToken(last);
+            _current = ReadToken(out var t) ? t : EndToken(last);
             ++_index;
         }
         ParseNode _Leaf(Token t) => new ParseNode(t.SymbolId, _tables.SymbolNames[t.SymbolId], t.Value, true, t.Line, t.Column, t.Position);
@@ -338,7 +355,8 @@ namespace Parsley.Runtime
                 foreach (var s in symbols)
                     if (!names.Contains(_tables.DisplayNames[s]))
                         names.Add(_tables.DisplayNames[s]);
-                expected = 1 == names.Count ? names[0]
+                expected = 0 == names.Count ? "input this rule can match (it can't match any)"
+                    : 1 == names.Count ? names[0]
                     : 2 == names.Count ? $"{names[0]} or {names[1]}"
                     : string.Join(", ", names.GetRange(0, names.Count - 1)) + ", or " + names[names.Count - 1];
             }
@@ -400,9 +418,11 @@ namespace Parsley.Runtime
         /// Marks the start of a non-terminal, for error recovery
         /// </summary>
         protected void Enter(int nonTerminal) => _active.Add(nonTerminal);
-        protected void Leave() => _active.RemoveAt(_active.Count - 1);
+        /// <summary>
+        /// Marks the end of the non-terminal most recently entered
+        /// </summary>
+        protected virtual void Leave() => _active.RemoveAt(_active.Count - 1);
         sealed class _Abandon : Exception { }
-        ParseNode? _root;
 
         /// <summary>
         /// Runs the start production and reports anything left over after it. If the input ends in a way

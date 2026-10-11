@@ -254,13 +254,17 @@ Each decision point (each `|`, `[ ]` and `{ }`) uses the fewest tokens of lookah
 
 ### Ambiguity
 
-A decision whose branches still overlap after 4 tokens is ambiguous. It's settled by `policy`:
+A decision whose branches still overlap after 4 tokens either needs more lookahead or is really ambiguous. With the engine chosen automatically (the default), Parsley leaves it to ALL(\*), which looks as far ahead as it takes at parse time, with a message saying so. If the input really is ambiguous there, ALL(\*) settles it the way the defaults below do: the first alternative wins, and a loop or optional keeps matching.
 
-- **`greedy`:** a loop keeps going and an optional is taken. This is the default for `[ ]` and `{ }`, with a warning, and it's what makes `else` bind to the nearest `if`.
+A `policy` settles the decision when the grammar is analyzed instead, on every engine, which keeps a grammar like the dangling `else` LL(1):
+
+- **`greedy`:** a loop keeps going and an optional is taken. It's what makes `else` bind to the nearest `if`.
 - **`lazy`:** a loop stops and an optional is skipped.
 - **`first`:** the earliest alternative wins. On a loop or optional it acts like `greedy`.
 
-An ambiguous alternation with no `policy` is an error. Add `<policy=first>` if the earliest alternative should win.
+With the LL(1) or LL(k) engine forced (`-e ll1`, `-e llk`), a loop or optional with no `policy` is settled greedily with a warning, and an alternation with no `policy` is an error.
+
+A rule that can't match any finite input (every way through it leads back into itself, as in `A= a A;`) gets a warning, since parsing it can never succeed.
 
 ### Left recursion
 
