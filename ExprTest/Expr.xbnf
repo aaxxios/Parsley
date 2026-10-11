@@ -23,4 +23,3 @@ pow= "^";
 lparen<collapsed>= "(";
 rparen<collapsed>= ")";
 whitespace<hidden>= '[ \t\r\n]+';
-

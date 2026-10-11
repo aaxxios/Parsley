@@ -7,7 +7,7 @@ lbrace \{
 rbrace \}
 colon :
 comma ,
-.whitespace [\n\r\t ]+
+.whitespace [\r\t ]+
 .block_comment \/\*(\n|.)*?\*\/
 .line_comment //.*$
 EOL \n
