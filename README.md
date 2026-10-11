@@ -15,9 +15,9 @@ Usage: parsley [<grammar-file>] [--lexer <lexer-file>] [--output <code-file>] [-
     -s, --shared              Generate the ParsleyRuntime.cs shared runtime file.
 ```
 
-- The grammar file is in XBNF, a superset of EBNF with some extra features for parser synthesis. 
+- The grammar file is in XBNF, a superset of EBNF with some extra convenience operators and attributes and semantic actions (potentially C# code in the grammar to create an evaluator)
 - The lexer file is generated if specified and contains 1 rule per line, `<name>` `<pattern>` (separated by a space) and hidden terminal names are preceded with `.` as in `.whitespace`,
-- The output code file is a C# class that implements `ParserBase` and has a `Parse()` method returning a `ParseNode`. The shared runtime file is `ParsleyRuntime.cs`, which contains the definitions of `Token`, `LookAheadEnumerator`, `ParseNode`, and `ParserBase`. 
+- The output code file is a C# class that implements `ParserBase` and has a `Parse()` method returning a `ParseNode`. It may also generate an evaluator class with an `Evaluate()` method if semantic actions are present. The shared runtime file is `ParsleyRuntime.cs`, which contains the definitions of `Token`, `LookAheadEnumerator`, `ParseNode`, and `ParserBase`. 
 - If shared is indicated, `ParsleyRuntime.cs` is generated in the same directory as the output code file, or the current working directory if no output code file is specified.
 
 XBNF is a loose superset of EBNF. The documentation is [here](XBNF.md).
@@ -43,3 +43,9 @@ and other definitions are built from their constructs.
 ## Build and test
 
 Open `Parsley.sln` in Visual Studio, or run `dotnet build Parsley.sln`.
+
+You need dotnet 8 installed to execute the build steps due to luthor being compiled for that framework.
+
+The luthor binary comes from https://www.nuget.org/packages/Luthor-tool (https://github.com/codewitch-honey-crisis/Luthor) and is used to generate a lexer. Parsley does not generate lexer code by itself, but will generate a specification for a lexer to consume. The LexGen project links against Luthor to create parsley-luthor which can consume the Parsley lexer spec directly and produce a Lexer class that is compatible with Parsley using Luthor's algorithms.
+
+I shipped the Luthor binary with this project in order to avoid requiring you to install the dotnet tool yourself. You're more than welcome to replace it, and even rebuild it from the source at the link if you have trust issues.
