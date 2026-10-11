@@ -37,7 +37,7 @@ All three produce the same tree and the same errors for any grammar they can all
 
 A decision that is really ambiguous, where the same input fits two branches all the way through, comes out the way the default policies say: the first alternative wins, and a loop or optional keeps matching. A `<policy>` on the decision settles it when the grammar is analyzed instead, on every engine, so a construct like the dangling `else` can stay LL(1). See [Ambiguity](XBNF.md#ambiguity).
 
-`-e ll1`, `-e llk` and `-e allstar` force an engine. LL(1) and LL(k) then settle what they can't decide the way Parsley always did: by policy, with an error for an alternation that has none. Forcing ALL(\*) on an LL(k) grammar makes every multi-token decision adaptive.
+`-e ll1`, `-e llk` and `-e allstar` force an engine. LL(1) and LL(k) then settle what they can't decide by policy, with an error for an alternation that has none. Forcing ALL(\*) on an LL(k) grammar makes every multi-token decision adaptive.
 
 In code, `GrammarAnalysis.Analyze(grammar, ParserEngine.Auto)` makes the choice and reports it in `analysis.Engine`. `CSharpSynthesizer.RuntimeSource`, `BaseSource(engine)` and `BaseFileName(engine)` give you the runtime files.
 
