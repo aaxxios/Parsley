@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Es5Test": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\example.js -t"
+    }
+  }
+}

@@ -1,15 +1,29 @@
-Keyword 
-number \-?(0|[1-9][0-9]*)(\.[0-9]+)?([Ee][\+\-]?[0-9]+)?
-string "([^\n"\\]|\\([btrnf"\\/]|(u[0-9A-Fa-f]{4})))*"
-lbracket \[
-rbracket \]
-lbrace \{
-rbrace \}
-colon :
+browserKeyword browser
+featureKeyword feature
+visitKeyword visit
+openNewTabKeyword open-new-tab
+closeCurrentTabKeyword close-current-tab
+clickKeyword click
+clickExpKeyword click-exp
+clickAtPositionKeyword click-at-position
+fillTextKeyword fill-text
+fillTextExpKeyword fill-text-exp
+getTextKeyword get-text
+selectElementKeyword select-element
+selectOptionKeyword select-option
+addHeaderKeyword add-header
+addHeadersKeyword add-headers
+addCookieKeyword add-cookie
+setCustomUserAgentKeyword set-custom-useragent
+waitForSecondsKeyword wait-for-seconds
+takeScreenshotKeyword take-screenshot
+saveAsHtmlKeyword save-as-html
+saveAsHtmlExpKeyword save-as-html-exp
+jsBlock start\-javascript[^\n]*\n(([^e\n][^\n]*|e([^n\n][^\n]*)?|en([^d\n][^\n]*)?|end([^\-\n][^\n]*)?|end\-([^j\n][^\n]*)?|end\-j([^a\n][^\n]*)?|end\-ja([^v\n][^\n]*)?|end\-jav([^a\n][^\n]*)?|end\-java([^s\n][^\n]*)?|end\-javas([^c\n][^\n]*)?|end\-javasc([^r\n][^\n]*)?|end\-javascr([^i\n][^\n]*)?|end\-javascri([^p\n][^\n]*)?|end\-javascrip([^t\n][^\n]*)?)?\n)*end\-javascript
+string "([^"\\\n]|\\.)*"|'([^'\\\n]|\\.)*'
+number [0-9]*\.?[0-9]+
+json \{[^\n]*\}
 comma ,
-.whitespace [\r\t ]+
-.block_comment \/\*(\n|.)*?\*\/
-.line_comment //.*$
-EOL \n
-BROWSER_ARG 
-FEATURE_ARG 
+newline \n
+.comment //[^\n]*
+.whitespace [ \t\r]+

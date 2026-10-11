@@ -1,0 +1,288 @@
+@class "ES5Parser";
+// ECMAScript 5.1 (ECMA-262 5.1 edition, June 2011) for Parsley.
+//
+// The phrase structure follows Annex A.3-A.5 of the standard. Rule names are the standard's. Where a
+// rule here differs in form (a left-recursive list written as a loop, a shared prefix factored out),
+// it matches the same input, with a hook in Es5Parser.Hooks.cs where factoring would let in more.
+// The one deliberate difference: a function can be declared wherever a statement can, as every
+// engine allows. The standard's static semantics (16: return outside a function, break and continue
+// outside a loop or with an unknown label, strict mode's rules) are for a later pass, not the parser.
+//
+// What the parser expects:
+// - Tokens from ES5Tokenizer (ES5Tokenizer.cs), not straight from the lexer. A / can start a regular
+//   expression literal or be division, and which one it is changes how the characters after it are
+//   split into tokens, so the parser can't fix it up afterward. The tokenizer decides from the tokens
+//   before it, re-lexes a regular expression literal with Es5RegexLexer, and hands the parser a
+//   regular_expression_literal token. regular_expression_literal is declared last below, and the build
+//   leaves it out of es5.lex, so the main lexer never produces it.
+// - Automatic semicolon insertion is split between EndOfStatement (with its hook in
+//   Es5Parser.Hooks.cs) and the tokenizer. See EndOfStatement.
+//
+// The tree is kept small, as in c99.xbnf: dispatch rules (Statement, SourceElement, ...) are
+// collapsed, and ; , ( ) { } [ ] are left out. The expression precedence levels keep their nodes.
+
+// A.5 Programs
+
+Program<start>= { SourceElement };
+// A FunctionDeclaration is also allowed where a Statement is (see Statement), as every ES5 engine
+// does, so SourceElement is just Statement.
+SourceElement<collapsed>= Statement;
+FunctionDeclaration= function Identifier lparen [ FormalParameterList ] rparen FunctionBody;
+FunctionExpression= function [ Identifier ] lparen [ FormalParameterList ] rparen FunctionBody;
+FormalParameterList= Identifier { comma Identifier };
+FunctionBody= lbrace { SourceElement } rbrace;
+
+// A.4 Statements
+
+// The standard keeps an expression statement from starting with { or function (12.4). <policy=first>
+// does the same here: where a statement could be a Block or an ExpressionStatement, or a
+// FunctionDeclaration or an ExpressionStatement, the earlier alternative wins.
+// FunctionDeclaration is here, rather than only in SourceElement, because real ES5 code declares
+// functions inside blocks and every engine accepts it, though the standard doesn't.
+Statement<collapsed, policy=first, expected="a statement">= Block | FunctionDeclaration
+	| VariableStatement | EmptyStatement | IfStatement | IterationStatement
+	| ContinueStatement | BreakStatement | ReturnStatement | WithStatement | SwitchStatement
+	| ThrowStatement | TryStatement | DebuggerStatement | LabelledStatement | ExpressionStatement;
+
+Block= lbrace { Statement } rbrace;
+VariableStatement= var VariableDeclarationList EndOfStatement;
+VariableDeclarationList<collapsed>= VariableDeclaration { comma VariableDeclaration };
+VariableDeclarationListNoIn<collapsed>= VariableDeclarationNoIn { comma VariableDeclarationNoIn };
+VariableDeclaration= Identifier [ assign AssignmentExpression ];
+VariableDeclarationNoIn= Identifier [ assign AssignmentExpressionNoIn ];
+EmptyStatement= semi;
+// 12.4: can't start with { or function. Statement's policy sends a { to Block; CheckExpressionStatement
+// rejects function, which Statement can't, since function ( isn't a FunctionDeclaration.
+ExpressionStatement<parsed="CheckExpressionStatement">= Expression EndOfStatement;
+// 12.5: an else goes with the nearest if
+IfStatement= if lparen Expression rparen Statement [ else Statement ]<policy=greedy>;
+
+IterationStatement<collapsed>= DoWhileStatement | WhileStatement | ForStatement;
+DoWhileStatement= do Statement while lparen Expression rparen EndOfStatement;
+WhileStatement= while lparen Expression rparen Statement;
+// The standard's four for forms, factored after "for (": a var list or an expression, then either the
+// two ; clauses or in. Factored, for-in would take any expression or any number of variables before
+// in; CheckForIn (Es5Parser.Hooks.cs) holds it to the standard's one variable or left-hand side
+// expression.
+ForStatement<parsed="CheckForIn">= for lparen ( var VariableDeclarationListNoIn | [ ExpressionNoIn ] )
+	( semi [ Expression ] semi [ Expression ] | in Expression ) rparen Statement;
+
+ContinueStatement= continue [ Identifier ]<policy=greedy> EndOfStatement;
+BreakStatement= break [ Identifier ]<policy=greedy> EndOfStatement;
+ReturnStatement= return [ Expression ]<policy=greedy> EndOfStatement;
+WithStatement= with lparen Expression rparen Statement;
+// One default per switch is a static rule (12.11) and isn't checked here.
+SwitchStatement= switch lparen Expression rparen lbrace { CaseClause | DefaultClause } rbrace;
+CaseClause= case Expression colon { Statement };
+DefaultClause= default colon { Statement };
+LabelledStatement= Identifier colon Statement;
+ThrowStatement= throw Expression EndOfStatement;
+TryStatement= try Block ( Catch [ Finally ] | Finally );
+Catch= catch lparen Identifier rparen Block;
+Finally= finally Block;
+DebuggerStatement= debugger EndOfStatement;
+
+// The ; that ends a statement, which automatic semicolon insertion (7.9) can leave out. Most of it is
+// here: the ; is optional, the parse is greedy, so a statement ends only where the next token can't
+// continue it (a = b \n (c) is the call b(c), as in JavaScript), and CheckSemicolon then makes sure a
+// missing ; was allowed: the next token is }, the end of the input, or on a later line. The other part,
+// the restricted productions (return, break, continue and throw followed by a line break, and a ++ or
+// -- that starts a line), the tokenizer handles by inserting a ; token.
+// A ; is never inserted in a for header or to make an empty statement, which is why those use semi.
+EndOfStatement<collapsed, parsed="CheckSemicolon">= [ semi ]<policy=greedy>;
+
+// A.3 Expressions
+
+PrimaryExpression<expected="an expression">= this | Identifier | Literal | ArrayLiteral | ObjectLiteral | lparen Expression rparen;
+Literal<collapsed>= null | true | false | numeric_literal | string_literal | regular_expression_literal;
+
+// [ a, , b, ] : an element for each comma-separated slot, empty for a hole. As in JavaScript, a last
+// empty element is the trailing comma, not a hole: [] has one empty element, [1,] two, [1,,] three.
+ArrayLiteral= lbracket ArrayElement { comma ArrayElement } rbracket;
+ArrayElement= [ AssignmentExpression ];
+ObjectLiteral= lbrace [ PropertyAssignment { comma PropertyAssignment }<policy=greedy> [ comma ] ] rbrace;
+// A get or set accessor is a property name (get or set, which the lexer reads as identifiers, since
+// they're names everywhere else), then the property's name. CheckAccessor holds the first to get or
+// set, and the parameters to none for get and one for set.
+PropertyAssignment<parsed="CheckAccessor">= PropertyName ( colon AssignmentExpression
+	| PropertyName lparen [ Identifier ] rparen FunctionBody );
+PropertyName<expected="a property name">= IdentifierName | string_literal | numeric_literal;
+
+// 11.2. The standard's MemberExpression, NewExpression and CallExpression, as two rules: what new can
+// apply to (no calls, since the first argument list after the target belongs to the new), and
+// everything else. A new without arguments then gets its own node, as in new Foo.
+// new new A()() is new (new A())(): the inner new takes the first argument list.
+LeftHandSideExpression<policy=greedy>= LeftHandSideExpression ( Arguments | lbracket Expression rbracket | dot IdentifierName )
+	| Operand;
+NewExpression= new MemberExpression [ Arguments ]<policy=greedy>;
+MemberExpression<policy=greedy>= MemberExpression ( lbracket Expression rbracket | dot IdentifierName ) | Operand;
+// what both start with; a rule of its own so a missing operand reads "Expected an expression"
+Operand<collapsed, expected="an expression">= NewExpression | PrimaryExpression | FunctionExpression;
+Arguments= lparen [ AssignmentExpression { comma AssignmentExpression } ] rparen;
+
+// 11.3: a ++ or -- can't be postfix after a line break; the tokenizer ends the statement with a ; there.
+// This and the other greedy loops and optionals that a new statement could also start with (( [ + -
+// after an expression, an expression after return, a label after break) are greedy as JavaScript is:
+// a statement only ends where the next token can't continue it.
+PostfixExpression= LeftHandSideExpression [ inc | dec ]<policy=greedy>;
+UnaryExpression<expected="an expression">= PostfixExpression | ( delete | void | typeof | inc | dec | plus | minus | tilde | bang ) UnaryExpression;
+
+MultiplicativeExpression= UnaryExpression | MultiplicativeExpression ( star | slash | percent ) UnaryExpression;
+AdditiveExpression<policy=greedy>= MultiplicativeExpression | AdditiveExpression ( plus | minus ) MultiplicativeExpression;
+ShiftExpression= AdditiveExpression | ShiftExpression ( shl | shr | ushr ) AdditiveExpression;
+
+// From here up, each level has a NoIn twin without the in operator, for the start of a for statement
+// (11.8, 12.6.3): in for (a in b) the in belongs to the for.
+RelationalExpression= ShiftExpression | RelationalExpression ( lt | gt | le | ge | instanceof | in ) ShiftExpression;
+RelationalExpressionNoIn= ShiftExpression | RelationalExpressionNoIn ( lt | gt | le | ge | instanceof ) ShiftExpression;
+EqualityExpression= RelationalExpression | EqualityExpression ( eq | ne | strict_eq | strict_ne ) RelationalExpression;
+EqualityExpressionNoIn= RelationalExpressionNoIn | EqualityExpressionNoIn ( eq | ne | strict_eq | strict_ne ) RelationalExpressionNoIn;
+BitwiseANDExpression= EqualityExpression | BitwiseANDExpression amp EqualityExpression;
+BitwiseANDExpressionNoIn= EqualityExpressionNoIn | BitwiseANDExpressionNoIn amp EqualityExpressionNoIn;
+BitwiseXORExpression= BitwiseANDExpression | BitwiseXORExpression caret BitwiseANDExpression;
+BitwiseXORExpressionNoIn= BitwiseANDExpressionNoIn | BitwiseXORExpressionNoIn caret BitwiseANDExpressionNoIn;
+BitwiseORExpression= BitwiseXORExpression | BitwiseORExpression pipe BitwiseXORExpression;
+BitwiseORExpressionNoIn= BitwiseXORExpressionNoIn | BitwiseORExpressionNoIn pipe BitwiseXORExpressionNoIn;
+LogicalANDExpression= BitwiseORExpression | LogicalANDExpression and_and BitwiseORExpression;
+LogicalANDExpressionNoIn= BitwiseORExpressionNoIn | LogicalANDExpressionNoIn and_and BitwiseORExpressionNoIn;
+LogicalORExpression= LogicalANDExpression | LogicalORExpression or_or LogicalANDExpression;
+LogicalORExpressionNoIn= LogicalANDExpressionNoIn | LogicalORExpressionNoIn or_or LogicalANDExpressionNoIn;
+ConditionalExpression= LogicalORExpression [ question AssignmentExpression colon AssignmentExpression ];
+ConditionalExpressionNoIn= LogicalORExpressionNoIn [ question AssignmentExpression colon AssignmentExpressionNoIn ];
+// The standard's ConditionalExpression | LeftHandSideExpression AssignmentOperator AssignmentExpression,
+// left factored: telling those apart can take any number of tokens (a.b.c.d = 1 or a.b.c.d + 1), and
+// predicting it adaptively means simulating whole function bodies wrapped in parentheses, which is
+// slow and reports any error inside at the start of the expression. Factored, it's one token. That
+// alone would accept a + b = c, so CheckAssignment (Es5Parser.Hooks.cs) keeps the standard's rule that
+// only a left-hand side expression is assigned to. Greedy, because in a ? b : c = d the = d goes with c
+// (the third operand is itself an AssignmentExpression), as in the standard.
+AssignmentExpression<parsed="CheckAssignment">= ConditionalExpression [ AssignmentOperator AssignmentExpression ]<policy=greedy>;
+AssignmentExpressionNoIn<parsed="CheckAssignment">= ConditionalExpressionNoIn [ AssignmentOperator AssignmentExpressionNoIn ]<policy=greedy>;
+AssignmentOperator<collapsed>= assign | mul_assign | div_assign | mod_assign | add_assign | sub_assign
+	| shl_assign | shr_assign | ushr_assign | and_assign | xor_assign | or_assign;
+Expression= AssignmentExpression { comma AssignmentExpression };
+ExpressionNoIn= AssignmentExpressionNoIn { comma AssignmentExpressionNoIn };
+
+// 7.6: a property name after . or in an object literal can be any IdentifierName, reserved words
+// included (obj.default, { class: 1 })
+Identifier<collapsed>= identifier;
+IdentifierName<collapsed>= identifier | break | case | catch | continue | debugger | default | delete | do
+	| else | finally | for | function | if | in | instanceof | new | return | switch | this | throw
+	| try | typeof | var | void | while | with | class | const | enum | export | extends | import
+	| super | null | true | false;
+
+// A.1 Lexical grammar
+
+// 7.6.1.1 Keywords, then 7.6.1.2 Future Reserved Words (outside strict mode, which this grammar
+// doesn't treat differently: implements, interface, let, package, private, protected, public,
+// static and yield are identifiers), then 7.8.1 and 7.8.2. Declared ahead of identifier so a keyword
+// wins the tie.
+break= "break";
+case= "case";
+catch= "catch";
+continue= "continue";
+debugger= "debugger";
+default= "default";
+delete= "delete";
+do= "do";
+else= "else";
+finally= "finally";
+for= "for";
+function= "function";
+if= "if";
+in= "in";
+instanceof= "instanceof";
+new= "new";
+return= "return";
+switch= "switch";
+this= "this";
+throw= "throw";
+try= "try";
+typeof= "typeof";
+var= "var";
+void= "void";
+while= "while";
+with= "with";
+class= "class";
+const= "const";
+enum= "enum";
+export= "export";
+extends= "extends";
+import= "import";
+super= "super";
+null= "null";
+true= "true";
+false= "false";
+
+// 7.6 Identifier names: $, _, ASCII letters and digits, \uXXXX escapes, and most non-ASCII
+// characters. Luthor has no Unicode categories, so the non-ASCII part is ranges that leave out the
+// spaces and punctuation of U+2000-U+206F, U+3000 and U+FEFF, rather than the standard's exact
+// letter classes.
+identifier= '([A-Za-z$_]|\\u[0-9A-Fa-f]{4}|[\x{AA}-\x{1FFF}\x{2070}-\x{2FFF}\x{3001}-\x{FEFE}])([A-Za-z0-9$_]|\\u[0-9A-Fa-f]{4}|[\x{AA}-\x{1FFF}\x{200C}\x{200D}\x{2070}-\x{2FFF}\x{3001}-\x{FEFE}])*';
+
+// 7.8.3: decimal (with a fraction and exponent), hexadecimal, and the octal form engines accept
+// outside strict mode (B.1.1)
+numeric_literal= '((0|[1-9][0-9]*)(\.[0-9]*)?|\.[0-9]+)([eE][+\-]?[0-9]+)?|0[xX][0-9A-Fa-f]+|0[0-7]+';
+// 7.8.4: escapes, and a backslash before a line break, which continues the string onto the next line
+string_literal= '"([^"\\\n\r\x{2028}\x{2029}]|\\(\r\n|[^\r\n]|[\r\n\x{2028}\x{2029}]))*"|\'([^\'\\\n\r\x{2028}\x{2029}]|\\(\r\n|[^\r\n]|[\r\n\x{2028}\x{2029}]))*\'';
+
+// 7.7 Punctuators. / and /= are division here; the tokenizer turns them into a regular expression
+// literal where one can start.
+lbrace<collapsed>= "{";
+rbrace<collapsed>= "}";
+lparen<collapsed>= "(";
+rparen<collapsed>= ")";
+lbracket<collapsed>= "[";
+rbracket<collapsed>= "]";
+dot= ".";
+semi<collapsed>= ";";
+comma<collapsed>= ",";
+lt= "<";
+gt= ">";
+le= "<=";
+ge= ">=";
+eq= "==";
+ne= "!=";
+strict_eq= "===";
+strict_ne= "!==";
+plus= "+";
+minus= "-";
+star= "*";
+percent= "%";
+inc= "++";
+dec= "--";
+shl= "<<";
+shr= ">>";
+ushr= ">>>";
+amp= "&";
+pipe= "|";
+caret= "^";
+bang= "!";
+tilde= "~";
+and_and= "&&";
+or_or= "||";
+question= "?";
+colon= ":";
+assign= "=";
+add_assign= "+=";
+sub_assign= "-=";
+mul_assign= "*=";
+mod_assign= "%=";
+shl_assign= "<<=";
+shr_assign= ">>=";
+ushr_assign= ">>>=";
+and_assign= "&=";
+or_assign= "|=";
+xor_assign= "^=";
+slash= "/";
+div_assign= "/=";
+
+// 7.2-7.4 White space, line terminators and comments
+whitespace<hidden>= '[ \t\n\r\x{0B}\x{0C}\x{A0}\x{1680}\x{180E}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}\x{FEFF}]+';
+line_comment<hidden>= '//[^\n\r\x{2028}\x{2029}]*';
+block_comment<hidden>= '/\*([^*]|\*+[^*/])*\*+/';
+
+// 7.8.5. Never produced by the main lexer: the build leaves this rule out of es5.lex, and the tokenizer
+// matches it with Es5RegexLexer where a regular expression can start. It must stay the last terminal,
+// so leaving it out doesn't change the ids of the others.
+regular_expression_literal= '/([^*\\/\[\n\r\x{2028}\x{2029}]|\\[^\n\r\x{2028}\x{2029}]|\[([^\]\\\n\r\x{2028}\x{2029}]|\\[^\n\r\x{2028}\x{2029}])*\])([^\\/\[\n\r\x{2028}\x{2029}]|\\[^\n\r\x{2028}\x{2029}]|\[([^\]\\\n\r\x{2028}\x{2029}]|\\[^\n\r\x{2028}\x{2029}])*\])*/[A-Za-z0-9$_]*';

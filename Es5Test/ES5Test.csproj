@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <BinDir Condition="'$(SolutionDir)' != '' and '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)bin\</BinDir>
+    <BinDir Condition="'$(BinDir)' == ''">$(MSBuildProjectDirectory)\..\bin\</BinDir>
+    <SourceDir>$(MSBuildProjectDirectory)\</SourceDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CS8981</NoWarn>
+  </PropertyGroup>
+
+  <!-- Splits Parsley's lexer file in two: every rule but regular_expression_literal for the main lexer,
+       and that rule alone for the regex lexer. Done in C# rather than with ReadLinesFromFile, which would
+       treat the * ? % and ; in the patterns as MSBuild syntax. -->
+  <UsingTask TaskName="SplitES5Lex" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Input ParameterType="System.String" Required="true" />
+      <MainOutput ParameterType="System.String" Required="true" />
+      <RegexOutput ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+        const string rule = "regular_expression_literal ";
+        var lines = File.ReadAllLines(Input);
+        File.WriteAllLines(MainOutput, lines.Where(l => !l.StartsWith(rule)));
+        File.WriteAllLines(RegexOutput, lines.Where(l => l.StartsWith(rule)));
+      ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Step 1: grammar -> ES5Parser.cs + es5.all.lex (all the terminals, regular_expression_literal last) -->
+  <Target Name="GenerateES5Parser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)es5.xbnf" Outputs="$(SourceDir)ES5Parser.cs;$(SourceDir)es5.all.lex">
+    <Exec Command="dotnet &quot;$(BinDir)parsley.dll&quot; &quot;$(SourceDir)es5.xbnf&quot; -s -l &quot;$(SourceDir)es5.all.lex&quot; -o &quot;$(SourceDir)ES5Parser.cs&quot;" />
+  </Target>
+
+  <!-- Step 2: es5.all.lex -> es5.lex (the main lexer's rules) + es5regex.lex (the regex literal alone) -->
+  <Target Name="SplitES5Lexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateES5Parser" Inputs="$(SourceDir)es5.all.lex" Outputs="$(SourceDir)es5.lex;$(SourceDir)es5regex.lex">
+    <SplitES5Lex Input="$(SourceDir)es5.all.lex" MainOutput="$(SourceDir)es5.lex" RegexOutput="$(SourceDir)es5regex.lex" />
+  </Target>
+
+  <!-- Step 3: es5.lex -> ES5Lexer.cs -->
+  <Target Name="GenerateES5Lexer" BeforeTargets="BeforeBuild" DependsOnTargets="SplitES5Lexer" Inputs="$(SourceDir)es5.lex" Outputs="$(SourceDir)ES5Lexer.cs">
+    <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)es5.lex&quot; -c ES5Lexer -o &quot;$(SourceDir)ES5Lexer.cs&quot;" />
+  </Target>
+
+  <!-- Step 4: es5regex.lex -> ES5RegexLexer.cs, in its own namespace so its copy of the Luthor runtime
+       doesn't clash with the main lexer's -->
+  <Target Name="GenerateES5RegexLexer" BeforeTargets="BeforeBuild" DependsOnTargets="SplitES5Lexer" Inputs="$(SourceDir)es5regex.lex" Outputs="$(SourceDir)ES5RegexLexer.cs">
+    <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)es5regex.lex&quot; -c ES5RegexLexer -n ES5RegexLexing -o &quot;$(SourceDir)ES5RegexLexer.cs&quot;" />
+  </Target>
+
+  <!-- Step 5: compile the generated files even on a clean build, when they didn't exist yet as the
+       project was loaded. Remove first, so a build that already found them doesn't list them twice. -->
+  <Target Name="IncludeGeneratedES5Sources" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateES5Lexer;GenerateES5RegexLexer">
+    <ItemGroup>
+      <Compile Remove="$(SourceDir)ES5Parser.cs;$(SourceDir)ES5Lexer.cs;$(SourceDir)ES5RegexLexer.cs;$(SourceDir)ParsleyRuntime.cs;$(SourceDir)LLkParserBase.cs" />
+      <Compile Include="$(SourceDir)ES5Parser.cs;$(SourceDir)ES5Lexer.cs;$(SourceDir)ES5RegexLexer.cs;$(SourceDir)ParsleyRuntime.cs;$(SourceDir)LLkParserBase.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

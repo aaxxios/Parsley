@@ -31,6 +31,10 @@
     "C99 Report": {
       "commandName": "Project",
       "commandLineArgs": "..\\..\\..\\c99.xbnf -r"
+    },
+    "BAMC Report": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\bamc.xbnf -r"
     }
   }
 }
