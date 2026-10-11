@@ -1,0 +1,98 @@
+// Approximate grammar for BrowserAutomationMaster .bamc scripts.
+// Reverse-engineered from the examples, sections/documentation.md and
+// Core/Parsing/Parser.cs; there's no official spec, so treat it as a sketch.
+//
+// Line-based: newlines separate lines (they don't terminate them), and a
+// line's content is optional. So blank lines are fine and the last line
+// doesn't need a trailing newline.
+
+Script<start>= Line { newline Line };
+Line<collapsed>= [ Command ];
+
+Command<collapsed, expected="a command">=
+      Browser | Feature
+    | Visit | OpenNewTab | CloseCurrentTab
+    | Click | ClickExp | ClickAtPosition
+    | FillText | FillTextExp | GetText
+    | SelectElement | SelectOption
+    | AddHeader | AddHeaders | AddCookie | SetCustomUserAgent
+    | WaitForSeconds | TakeScreenshot | SaveAsHtml | SaveAsHtmlExp
+    | JavaScript;
+
+// --- setup -----------------------------------------------------------------
+// The real tool also enforces ordering (browser first, features before
+// actions); that's left to a later pass rather than the grammar.
+Browser= browserKeyword string;                  // browser "chrome"
+Feature= featureKeyword string [ string ];       // feature "use-http-proxy" "USER:PASS@IP:PORT"
+
+// --- navigation ------------------------------------------------------------
+Visit= visitKeyword string;                      // visit "https://..."
+OpenNewTab= openNewTabKeyword string string;     // open-new-tab "https://..." "3"
+CloseCurrentTab= closeCurrentTabKeyword;
+
+// --- element actions -------------------------------------------------------
+Click= clickKeyword string;
+ClickExp= clickExpKeyword string;
+ClickAtPosition= clickAtPositionKeyword string string;   // "x" "y"
+FillText= fillTextKeyword string string;         // selector, value
+FillTextExp= fillTextExpKeyword string string;
+GetText= getTextKeyword string;
+SelectElement= selectElementKeyword string;
+SelectOption= selectOptionKeyword string number; // selector, option index
+
+// --- request setup ---------------------------------------------------------
+AddHeader= addHeaderKeyword string string;       // add-header "DNT" "1"
+AddHeaders= addHeadersKeyword json;              // add-headers {"a": "b", ...}
+AddCookie= addCookieKeyword string [ comma ] string;  // one test uses a comma
+SetCustomUserAgent= setCustomUserAgentKeyword string;
+
+// --- output and timing -----------------------------------------------------
+WaitForSeconds= waitForSecondsKeyword number;    // 1, 1.5, .2
+TakeScreenshot= takeScreenshotKeyword string;
+SaveAsHtml= saveAsHtmlKeyword string;
+SaveAsHtmlExp= saveAsHtmlExpKeyword string;
+
+// --- embedded JavaScript ---------------------------------------------------
+// The whole start-javascript ... end-javascript block is one token, so the
+// JS inside is never tokenized as bamc. The body is any lines that don't
+// start with "end-javascript" (spelled out because DFA lexers usually have
+// no lazy quantifiers or lookahead).
+JavaScript= jsBlock;
+
+// ===========================================================================
+// Terminals. Keywords are declared before anything else so they win ties;
+// longest match keeps "click" from eating the front of "click-exp".
+
+browserKeyword= "browser";
+featureKeyword= "feature";
+visitKeyword= "visit";
+openNewTabKeyword= "open-new-tab";
+closeCurrentTabKeyword= "close-current-tab";
+clickKeyword= "click";
+clickExpKeyword= "click-exp";
+clickAtPositionKeyword= "click-at-position";
+fillTextKeyword= "fill-text";
+fillTextExpKeyword= "fill-text-exp";
+getTextKeyword= "get-text";
+selectElementKeyword= "select-element";
+selectOptionKeyword= "select-option";
+addHeaderKeyword= "add-header";
+addHeadersKeyword= "add-headers";
+addCookieKeyword= "add-cookie";
+setCustomUserAgentKeyword= "set-custom-useragent";
+waitForSecondsKeyword= "wait-for-seconds";
+takeScreenshotKeyword= "take-screenshot";
+saveAsHtmlKeyword= "save-as-html";
+saveAsHtmlExpKeyword= "save-as-html-exp";
+
+jsBlock= 'start\-javascript[^\n]*\n(([^e\n][^\n]*|e([^n\n][^\n]*)?|en([^d\n][^\n]*)?|end([^\-\n][^\n]*)?|end\-([^j\n][^\n]*)?|end\-j([^a\n][^\n]*)?|end\-ja([^v\n][^\n]*)?|end\-jav([^a\n][^\n]*)?|end\-java([^s\n][^\n]*)?|end\-javas([^c\n][^\n]*)?|end\-javasc([^r\n][^\n]*)?|end\-javascr([^i\n][^\n]*)?|end\-javascri([^p\n][^\n]*)?|end\-javascrip([^t\n][^\n]*)?)?\n)*end\-javascript';
+
+// Double- or single-quoted (the docs show click-exp 'selector').
+string= '"([^"\\\n]|\\.)*"|\'([^\'\\\n]|\\.)*\'';
+number= '[0-9]*\.?[0-9]+';
+json= '\{[^\n]*\}';                              // rough: rest of line in braces
+comma<collapsed>= ",";
+
+newline<collapsed>= '\n';
+comment<hidden>= '//[^\n]*';
+whitespace<hidden>= '[ \t\r]+';

@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "BamcTest": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\example.bamc"
+    }
+  }
+}

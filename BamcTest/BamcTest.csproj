@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <BinDir Condition="'$(SolutionDir)' != '' and '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)bin\</BinDir>
+    <BinDir Condition="'$(BinDir)' == ''">$(MSBuildProjectDirectory)\..\bin\</BinDir>
+    <SourceDir>$(MSBuildProjectDirectory)\</SourceDir>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Step 1: grammar -> BamcParser.cs + json.lex -->
+  <Target Name="GenerateBamcParser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)Bamc.xbnf" Outputs="$(SourceDir)BamcParser.cs;$(SourceDir)Bamc.lex">
+    <Exec Command="dotnet &quot;$(BinDir)parsley.dll&quot; &quot;$(SourceDir)Bamc.xbnf&quot; -s -l &quot;$(SourceDir)Bamc.lex&quot; -o &quot;$(SourceDir)BamcParser.cs&quot;" />
+  </Target>
+
+  <!-- Step 2: json.lex -> BamcLexer.cs (runs after the parser has produced json.lex) -->
+  <Target Name="GenerateBamcLexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateBamcParser" Inputs="$(SourceDir)Bamc.lex" Outputs="$(SourceDir)BamcLexer.cs">
+    <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)Bamc.lex&quot; -c BamcLexer -o &quot;$(SourceDir)BamcLexer.cs&quot;" />
+  </Target>
+
+  <!-- Step 3: always add the generated files to compilation 
+  <Target Name="IncludeGeneratedBamcSources" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateBamcLexer">
+    <ItemGroup>
+      <Compile Include="$(SourceDir)BamcLexer.cs;$(SourceDir)BamcParser.cs" />
+    </ItemGroup>
+  </Target>
+  -->
+</Project>
