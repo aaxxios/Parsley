@@ -25,8 +25,14 @@ XBNF is a loose superset of EBNF. The documentation is [here](XBNF.md).
 The synthesized class plus `ParsleyRuntime.cs` compile on their own (C# 12, .NET 8), with no reference to Parsley:
 
 ```csharp
-ParseNode tree = JsonParser.Parse(tokens);   // IEnumerable<Token> straight from the lexer
-foreach (var e in parser.Errors) Console.WriteLine(e);
+try 
+{
+    ParseNode tree = JsonParser.Parse(tokens);   // IEnumerable<Token> straight from the lexer
+    Console.WriteLine(tree);
+}
+catch(Parsley.Runtime.ParseException ex) {
+    foreach (var e in ex.Errors) Console.WriteLine(e);
+}
 ```
 
 Token ids: the lexer numbers terminals from 0 in the grammar's terminal order (hidden and implicit ones
