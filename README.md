@@ -20,7 +20,7 @@ Usage: parsley [<grammar-file>] [--lexer <lexer-file>] [--output <code-file>] [-
 - The output code file is a C# class that implements `ParserBase` and has a `Parse()` method returning a `ParseNode`. It may also generate an evaluator class with an `Evaluate()` method if semantic actions are present. The shared runtime file is `ParsleyRuntime.cs`, which contains the definitions of `Token`, `LookAheadEnumerator`, `ParseNode`, and `ParserBase`. 
 - If shared is indicated, `ParsleyRuntime.cs` is generated in the same directory as the output code file, or the current working directory if no output code file is specified.
 
-XBNF is a loose superset of EBNF. The documentation is [here](XBNF.md).
+The documentation for XBNF is [here](XBNF.md).
 
 The synthesized class plus `ParsleyRuntime.cs` compile on their own (C# 12, .NET 8), with no reference to Parsley:
 
