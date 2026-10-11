@@ -2,7 +2,7 @@
   "profiles": {
     "Json": {
       "commandName": "Project",
-      "commandLineArgs": "..\\..\\..\\json.xbnf -l ..\\..\\..\\json.lex -s"
+      "commandLineArgs": "..\\..\\..\\json.xbnf -l ..\\..\\..\\json.lex"
     },
     "Usage": {
       "commandName": "Project",
@@ -11,6 +11,18 @@
     "BAMC": {
       "commandName": "Project",
       "commandLineArgs": "..\\..\\..\\bamc.xbnf -l ..\\..\\..\\bamc.lex"
+    },
+    "Expr": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\Expr.xbnf -l ..\\..\\..\\Expr.lex"
+    },
+    "Json Report": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\json.xbnf -r"
+    },
+    "Expr Report": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\Expr.xbnf -r"
     }
   }
 }

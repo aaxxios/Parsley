@@ -27,10 +27,40 @@ namespace Parsley
                     return;
                 }
                 toDispose = options;
+                if(options.Report)
+                {
+                    if (options.Base)
+                    {
+                        throw new ArgumentException("The --report option and --base option are mutually exclusive.");
+                    }
+                    if (options.Output != Console.Out)
+                    {
+                        throw new ArgumentException("The --report option and --output option are mutually exclusive.");
+                    }
+                    if (options.Lexer != null)
+                    {
+                        throw new ArgumentException("The --report option and --lexer option are mutually exclusive.");
+                    }
+                    if (options.Shared)
+                    {
+                        throw new ArgumentException("The --report option and --shared option are mutually exclusive.");
+                    }
+                }
                 var grammar = Grammar.ReadFrom(options.Input, CliUtility.GetFilename(options.Input));
                 var analysis = GrammarAnalysis.Analyze(grammar, options.Engine);
                 foreach (var m in analysis.Messages) Console.Error.WriteLine(m);
-                options.Output.Write(CSharpSynthesizer.Synthesize(analysis));
+                if (!options.Report)
+                {
+                    options.Output.Write(CSharpSynthesizer.Synthesize(analysis));
+                } else
+                {
+                    if(analysis.Messages.Count>0)
+                    {
+                        Console.Error.WriteLine();
+                    }
+                    GrammarReport.Write(analysis, Console.Out);
+                    return;
+                }
                 // -s writes everything shared; -b only the base class, for a project that already has the rest
                 if(options.Shared || options.Base)
                 {
@@ -58,6 +88,12 @@ namespace Parsley
                         options.Lexer.WriteLine(Grammar.EscapeLiteralOrPattern(term.Literal, term.Pattern));
                     }
                 }
+            }
+            catch(ArgumentException argex)
+            {
+                Console.Error.WriteLine("Error: " + argex.Message);
+                Console.Error.WriteLine();
+                Options.PrintUsage();
             }
             catch (Exception ex)
             {

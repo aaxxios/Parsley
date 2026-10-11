@@ -15,7 +15,17 @@ Usage: parsley [<grammar-file>] [--lexer <lexer-file>] [--output <code-file>] [-
     -s, --shared              Generate the shared runtime: ParsleyRuntime.cs and the parser base class for the grammar's engine.
     -b, --base                Generate only the parser base class for the grammar's engine.
     -e, --engine <engine>     auto (the default), ll1, llk or allstar.
+    -r, --report              Write a report on the grammar instead of a parser.
 ```
+
+`-r` writes a plain text report to stdout instead of a parser. It covers:
+- the engine the grammar needs and why, and the decisions that need it;
+- whether each engine could parse the grammar;
+- counts of productions, terminals and decisions, broken down by kind and lookahead;
+- one row per production;
+- the size of the synthesized code and what it costs at parse time.
+
+It can't be combined with `-o`, `-l`, `-s` or `-b`. `GrammarReport.Create(analysis)` produces the same report in code.
 
 - The grammar file is in XBNF, a superset of EBNF with some extra convenience operators and attributes and semantic actions (potentially C# code in the grammar to create an evaluator)
 - The lexer file is generated if specified and contains 1 rule per line, `<name>` `<pattern>` (separated by a space) and hidden terminal names are preceded with `.` as in `.whitespace`,
@@ -37,7 +47,7 @@ All three produce the same tree and the same errors for any grammar they can all
 
 A decision that is really ambiguous, where the same input fits two branches all the way through, comes out the way the default policies say: the first alternative wins, and a loop or optional keeps matching. A `<policy>` on the decision settles it when the grammar is analyzed instead, on every engine, so a construct like the dangling `else` can stay LL(1). See [Ambiguity](XBNF.md#ambiguity).
 
-`-e ll1`, `-e llk` and `-e allstar` force an engine. LL(1) and LL(k) then settle what they can't decide by policy, with an error for an alternation that has none. Forcing ALL(\*) on an LL(k) grammar makes every multi-token decision adaptive.
+`-e ll1`, `-e llk` and `-e allstar` force an engine. LL(1) and LL(k) then settle what they can't decide the way Parsley always did: by policy, with an error for an alternation that has none. Forcing ALL(\*) on an LL(k) grammar makes every multi-token decision adaptive.
 
 In code, `GrammarAnalysis.Analyze(grammar, ParserEngine.Auto)` makes the choice and reports it in `analysis.Engine`. `CSharpSynthesizer.RuntimeSource`, `BaseSource(engine)` and `BaseFileName(engine)` give you the runtime files.
 

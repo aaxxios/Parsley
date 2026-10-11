@@ -19,5 +19,7 @@ internal partial class Options
     public bool Base = false;
     [CmdArg(ShortName = 'e', Description = "The parsing engine: auto (the lightest the grammar allows), ll1, llk or allstar. Defaults to auto.", ValueName = "engine", Required = false)]
     public ParserEngine Engine = ParserEngine.Auto;
+    [CmdArg(ShortName = 'r', Description = "Write a report on the grammar to <stdout> instead of a parser: the engine it needs and why, its decisions and lookahead, and the size of the synthesized code.", ValueName = "report", Required = false)]
+    public bool Report = false;
 
 }
