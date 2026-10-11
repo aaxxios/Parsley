@@ -20,15 +20,55 @@ namespace Parsley
 		public Expression Expression { get; set; }
 		public AttributeList Attributes { get; } = new AttributeList();
 		public bool IsCollapsed => Attributes.IsSet("collapsed");
+		/// <summary>
+		/// The C# written after <c>=&gt;</c>, which evaluates this production's parse node, or null
+		/// </summary>
+		public SemanticAction? Action { get; set; }
+		/// <summary>
+		/// The <c>type</c> attribute: the return type of the production's evaluate method, written verbatim. Null means object.
+		/// </summary>
+		public string? Type => Attributes.Get("type") as string;
+		/// <summary>
+		/// The <c>state</c> attribute, which only the start production takes: the type of the evaluator's state, written verbatim. Null means object?.
+		/// </summary>
+		public string? StateType => Attributes.Get("state") as string;
 		public Production Clone()
 		{
-			var result = new Production(Name, Expression.Clone());
+			var result = new Production(Name, Expression.Clone()) { Action = Action?.Clone() };
 			result.CopyLocation(this);
 			foreach (var a in Attributes)
 				result.Attributes.Add(a.Clone());
 			return result;
 		}
 		public override string ToString() => XbnfWriter.Write(this);
+	}
+
+	/// <summary>
+	/// A semantic action: the body of a C# method that evaluates a production's parse node, which it
+	/// receives as <c>node</c>. Written in XBNF as <c>Name= expression =&gt; { code };</c>
+	/// </summary>
+	public sealed class SemanticAction : GrammarNode
+	{
+		public SemanticAction(string code, bool hasMultilineLiteral = false)
+		{
+			Code = code ?? throw new ArgumentNullException(nameof(code));
+			HasMultilineLiteral = hasMultilineLiteral;
+		}
+		/// <summary>
+		/// The code between the braces, as written
+		/// </summary>
+		public string Code { get; }
+		/// <summary>
+		/// The code holds a string literal that spans lines, so it can't be re-indented without changing that string
+		/// </summary>
+		public bool HasMultilineLiteral { get; }
+		public SemanticAction Clone()
+		{
+			var result = new SemanticAction(Code, HasMultilineLiteral);
+			result.CopyLocation(this);
+			return result;
+		}
+		public override string ToString() => "{" + Code + "}";
 	}
 
 	/// <summary>
@@ -186,23 +226,28 @@ namespace Parsley
 		/// <summary>
 		/// The class name to synthesize: the @class directive, else the file name + "Parser"
 		/// </summary>
-		public string? ClassName
+		public string? ClassName => Directives.TryGetValue("class", out var c) ? c : _NameFromFile("Parser");
+		/// <summary>
+		/// The evaluator class name to synthesize: the @evaluator directive, else the file name + "Evaluator"
+		/// </summary>
+		public string? EvaluatorClassName => Directives.TryGetValue("evaluator", out var c) ? c : _NameFromFile("Evaluator");
+		/// <summary>
+		/// True if any production has a semantic action
+		/// </summary>
+		public bool HasActions => Productions.Any(p => null != p.Action);
+		string? _NameFromFile(string suffix)
 		{
-			get
+			if (string.IsNullOrEmpty(Filename)) return null;
+			var sb = new StringBuilder();
+			var upper = true;
+			foreach (var ch in Path.GetFileNameWithoutExtension(Filename))
 			{
-				if (Directives.TryGetValue("class", out var c)) return c;
-				if (string.IsNullOrEmpty(Filename)) return null;
-				var sb = new StringBuilder();
-				var upper = true;
-				foreach (var ch in Path.GetFileNameWithoutExtension(Filename))
-				{
-					if (!char.IsLetterOrDigit(ch)) { upper = true; continue; }
-					if (0 == sb.Length && char.IsDigit(ch)) sb.Append('_');
-					sb.Append(upper ? char.ToUpperInvariant(ch) : ch);
-					upper = false;
-				}
-				return sb.Append("Parser").ToString();
+				if (!char.IsLetterOrDigit(ch)) { upper = true; continue; }
+				if (0 == sb.Length && char.IsDigit(ch)) sb.Append('_');
+				sb.Append(upper ? char.ToUpperInvariant(ch) : ch);
+				upper = false;
 			}
+			return sb.Append(suffix).ToString();
 		}
 		public string? Namespace => Directives.TryGetValue("namespace", out var n) ? n : null;
 
@@ -296,6 +341,22 @@ namespace Parsley
 			var start = GetProduction(StartSymbol!)!;
 			if (start.IsCollapsed)
 				result.Add(new GrammarMessage(ErrorLevel.Error, "The start production cannot be collapsed", start));
+			// semantic actions: the evaluator is entered through the start production, so it needs one
+			if (null == start.Action)
+			{
+				var first = Productions.FirstOrDefault(p => null != p.Action);
+				if (null != first)
+					result.Add(new GrammarMessage(ErrorLevel.Error, $"\"{first.Name}\" has a semantic action, but the start production \"{start.Name}\" does not. Semantic actions require one on the start production", first.Action));
+			}
+			foreach (var p in Productions)
+			{
+				if (null != p.Action && p.IsCollapsed)
+					result.Add(new GrammarMessage(ErrorLevel.Error, $"\"{p.Name}\" is collapsed, so it has no parse node to evaluate and can't have a semantic action", p.Action));
+				else if (null != p.Type && p.IsCollapsed)
+					result.Add(new GrammarMessage(ErrorLevel.Warning, $"\"{p.Name}\" is collapsed, so it has no parse node to evaluate and its type is ignored", p.Attributes.First(a => "type" == a.Name)));
+				if (null != p.Attributes.Get("state") && p != start)
+					result.Add(new GrammarMessage(ErrorLevel.Warning, $"\"{p.Name}\" is not the start production, so its state is ignored. Only the start production's state types the evaluator's state", p.Attributes.First(a => "state" == a.Name)));
+			}
 			foreach (var p in Productions)
 			{
 				_ValidateAttributes(p.Attributes, p, true, result);
@@ -356,7 +417,7 @@ namespace Parsley
 					result.Add(new GrammarMessage(ErrorLevel.Warning, $"Production \"{p.Name}\" is unreachable from the start symbol", p));
 			return result;
 		}
-		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "collapsed", "nowarn", "policy", "expected", "sync", "terminal"};
+		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state" };
 		static readonly HashSet<string> _expressionAttributes = new HashSet<string> { "policy", "sync", "expected" };
 		static void _ValidateAttributes(AttributeList attrs, GrammarNode owner, bool isProduction, IList<GrammarMessage> result)
 		{
@@ -380,6 +441,11 @@ namespace Parsley
 					case "expected":
 						if (!(a.Value is string))
 							result.Add(new GrammarMessage(ErrorLevel.Warning, "expected expects a string", a));
+						break;
+					case "type":
+					case "state":
+						if (!(a.Value is string s2) || 0 == s2.Trim().Length)
+							result.Add(new GrammarMessage(ErrorLevel.Error, $"{a.Name} expects a C# type name as a string, such as {a.Name}=\"double\"", a));
 						break;
 					case "sync":
 						if (!(a.Value is string) && !(a.Value is bool))

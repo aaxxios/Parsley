@@ -9,8 +9,9 @@ namespace Parsley
 {
 	/// <summary>
 	/// Reads XBNF. A rule that references no symbols (only "literals" and 'patterns') declares a terminal,
-	/// as does one marked &lt;terminal&gt;; anything else declares a non-terminal. Supports @import, @namespace and @class directives and
-	/// attributed groups: <c>( … )&lt;attrs&gt;</c>, <c>[ … ]&lt;attrs&gt;</c>, <c>{ … }&lt;attrs&gt;</c>.
+	/// as does one marked &lt;terminal&gt;; anything else declares a non-terminal. Supports @import, @namespace, @class and @evaluator directives,
+	/// attributed groups: <c>( … )&lt;attrs&gt;</c>, <c>[ … ]&lt;attrs&gt;</c>, <c>{ … }&lt;attrs&gt;</c>, and semantic actions:
+	/// <c>Name= expression =&gt; { C# };</c>
 	/// </summary>
 	public sealed class XbnfReader
 	{
@@ -282,6 +283,200 @@ namespace Parsley
 		}
 		#endregion
 
+		#region Semantic actions
+		// a semantic action is C#, read only far enough to find its closing brace: braces inside
+		// strings, character literals, comments and interpolation holes don't count
+		bool _AtArrow() => '=' == Cur && '>' == _pc.Peek(1);
+		bool _multilineLiteral;
+		SemanticAction _ReadAction()
+		{
+			// Cur is the opening {
+			_Advance();
+			_multilineLiteral = false;
+			var sb = new StringBuilder();
+			_ScanCode(sb, 1, false);
+			return new SemanticAction(sb.ToString(), _multilineLiteral);
+		}
+		void _Take(StringBuilder sb)
+		{
+			if (-1 == Cur) throw _Error("Unterminated semantic action");
+			sb.Append((char)Cur);
+			_Advance();
+		}
+		int _CountRun(char ch, int from = 0)
+		{
+			var n = 0;
+			while (ch == _pc.Peek(from + n)) ++n;
+			return n;
+		}
+		// copies code up to the } that closes the current block or interpolation hole. closers is how many
+		// braces close it (more than one only for a hole in a $$"""raw""" string). They're consumed, and
+		// copied for a hole but not for the action's own closing brace
+		void _ScanCode(StringBuilder sb, int closers, bool isHole)
+		{
+			var depth = 0;
+			while (true)
+			{
+				switch (Cur)
+				{
+					case -1:
+						throw _Error("Unterminated semantic action");
+					case '{':
+						++depth;
+						_Take(sb);
+						break;
+					case '}':
+						if (0 < depth)
+						{
+							--depth;
+							_Take(sb);
+							break;
+						}
+						for (var i = 0; i < closers; ++i)
+						{
+							if ('}' != Cur) throw _Error("Unterminated interpolation in a semantic action");
+							if (isHole) sb.Append('}');
+							_Advance();
+						}
+						return;
+					case '/':
+						if ('/' == _pc.Peek(1))
+						{
+							while (-1 != Cur && '\n' != Cur) _Take(sb);
+						}
+						else if ('*' == _pc.Peek(1))
+						{
+							_Take(sb); _Take(sb);
+							while (!('*' == Cur && '/' == _pc.Peek(1))) _Take(sb);
+							_Take(sb); _Take(sb);
+						}
+						else
+							_Take(sb);
+						break;
+					case '\'':
+						_Take(sb);
+						while ('\'' != Cur)
+						{
+							if ('\n' == Cur) throw _Error("Unterminated character literal in a semantic action");
+							if ('\\' == Cur) _Take(sb);
+							_Take(sb);
+						}
+						_Take(sb);
+						break;
+					case '"':
+						_ScanString(sb, false, 0);
+						break;
+					case '@':
+						if ('"' == _pc.Peek(1))
+						{
+							_Take(sb);
+							_ScanString(sb, true, 0);
+						}
+						else if ('$' == _pc.Peek(1) && '"' == _pc.Peek(2))
+						{
+							_Take(sb); _Take(sb);
+							_ScanString(sb, true, 1);
+						}
+						else
+							_Take(sb);
+						break;
+					case '$':
+						{
+							var dollars = _CountRun('$');
+							var verbatim = '@' == _pc.Peek(dollars);
+							if ('"' == _pc.Peek(dollars + (verbatim ? 1 : 0)))
+							{
+								for (var i = 0; i < dollars; ++i) _Take(sb);
+								if (verbatim) _Take(sb);
+								_ScanString(sb, verbatim, dollars);
+							}
+							else
+								_Take(sb);
+							break;
+						}
+					default:
+						_Take(sb);
+						break;
+				}
+			}
+		}
+		// copies a string literal starting at its opening quote. interpolation is the number of $ before it
+		void _ScanString(StringBuilder sb, bool verbatim, int interpolation)
+		{
+			var quotes = _CountRun('"');
+			if (3 <= quotes)
+			{
+				// """raw""": ends at a run of as many quotes; a hole opens with as many braces as there were $
+				for (var i = 0; i < quotes; ++i) _Take(sb);
+				while (true)
+				{
+					if (-1 == Cur) throw _Error("Unterminated raw string in a semantic action");
+					if ('"' == Cur)
+					{
+						var run = _CountRun('"');
+						for (var i = 0; i < run; ++i) _Take(sb);
+						if (quotes <= run) return;
+						continue;
+					}
+					if (0 < interpolation && '{' == Cur)
+					{
+						// in a run longer than the $ count, the extra braces come first, as content
+						var braces = _CountRun('{');
+						for (var i = 0; i < braces; ++i) _Take(sb);
+						if (braces >= interpolation)
+							_ScanCode(sb, interpolation, true);
+						continue;
+					}
+					if ('\n' == Cur) _multilineLiteral = true;
+					_Take(sb);
+				}
+			}
+			_Take(sb); // the opening "
+			while (true)
+			{
+				switch (Cur)
+				{
+					case -1:
+						throw _Error("Unterminated string in a semantic action");
+					case '"':
+						_Take(sb);
+						if (verbatim && '"' == Cur)
+						{
+							_Take(sb); // "" in a verbatim string
+							break;
+						}
+						return;
+					case '\\':
+						if (!verbatim) _Take(sb);
+						_Take(sb);
+						break;
+					case '{':
+						_Take(sb);
+						if (0 < interpolation)
+						{
+							if ('{' == Cur)
+								_Take(sb); // {{ is a literal brace
+							else
+								_ScanCode(sb, 1, true);
+						}
+						break;
+					case '}':
+						_Take(sb);
+						if (0 < interpolation && '}' == Cur) _Take(sb); // }} is a literal brace
+						break;
+					case '\n':
+						if (!verbatim) throw _Error("Newline in a string in a semantic action");
+						_multilineLiteral = true;
+						_Take(sb);
+						break;
+					default:
+						_Take(sb);
+						break;
+				}
+			}
+		}
+		#endregion
+
 		void _ReadAll()
 		{
 			_SkipWs();
@@ -323,6 +518,7 @@ namespace Parsley
 						break;
 					case "namespace":
 					case "class":
+					case "evaluator":
 						_grammar.Directives[name] = arg;
 						break;
 					default:
@@ -342,11 +538,24 @@ namespace Parsley
 				throw _Error($"\"{id}\" has a code body. Virtual productions are not supported");
 			_Expect('=');
 			var expr = _ReadAlternation();
+			_SkipWs();
+			SemanticAction? action = null;
+			if (_AtArrow())
+			{
+				_Advance(); _Advance();
+				_SkipWs();
+				int aline = _pc.Line, acol = _pc.Column;
+				long apos = _pc.Position;
+				if ('{' != Cur)
+					throw _Error(-1 == Cur ? "Unexpected end of input, expecting '{' to start the semantic action" : $"Unexpected '{(char)Cur}', expecting '{{' to start the semantic action");
+				action = _ReadAction();
+				action.SetLocation(aline, acol, apos, _filename);
+			}
 			_Expect(';');
 
 			// every rule starts as a production; which ones are terminals is decided once everything,
 			// imports included, has been read
-			var p = new Production(id, expr);
+			var p = new Production(id, expr) { Action = action };
 			p.SetLocation(line, col, pos, _filename);
 			p.Attributes.AddRange(attrs);
 			_grammar.Productions.Add(p);
@@ -409,7 +618,7 @@ namespace Parsley
 			while (true)
 			{
 				_SkipWs();
-				if (-1 == Cur || '|' == Cur || ')' == Cur || ']' == Cur || '}' == Cur || ';' == Cur)
+				if (-1 == Cur || '|' == Cur || ')' == Cur || ']' == Cur || '}' == Cur || ';' == Cur || _AtArrow())
 					break;
 				items.Add(_ReadPostfix());
 			}

@@ -17,6 +17,10 @@ namespace Parsley
 		/// </summary>
 		public string? ClassName { get; set; }
 		/// <summary>
+		/// The evaluator class name, overriding the grammar's @evaluator and the default (file name + "Evaluator")
+		/// </summary>
+		public string? EvaluatorClassName { get; set; }
+		/// <summary>
 		/// Whether the class is public (else internal)
 		/// </summary>
 		public bool Public { get; set; } = true;
@@ -25,7 +29,9 @@ namespace Parsley
 	/// <summary>
 	/// Turns an analyzed grammar into C# recursive descent that reads as if written by hand:
 	/// one method per production, each decision written with the cheapest test that decides it,
-	/// and a comment quoting the grammar above each piece.
+	/// and a comment quoting the grammar above each piece. When the start production has a semantic
+	/// action, an evaluator class follows the parser, with one method per production that runs its action
+	/// over a parse node.
 	/// </summary>
 	public static class CSharpSynthesizer
 	{
@@ -67,6 +73,7 @@ namespace Parsley
 			readonly SymbolTable _s;
 			readonly SynthesisOptions _o;
 			readonly string _className;
+			readonly string? _evaluatorName; // null when there's no evaluator to synthesize
 			readonly string[] _const;
 			StringBuilder _sb = new();
 			int _indent;
@@ -81,6 +88,14 @@ namespace Parsley
 				_s = a.Symbols;
 				_o = o;
 				_className = _Ident(o.ClassName ?? a.Grammar.ClassName ?? (a.Grammar.StartSymbol + "Parser"));
+				// only an action on the start production makes an evaluator; validation has already
+				// rejected actions elsewhere without one there
+				if (null != a.Grammar.GetProduction(a.Grammar.StartSymbol!)?.Action)
+				{
+					_evaluatorName = _VerbatimIdent(o.EvaluatorClassName ?? a.Grammar.EvaluatorClassName ?? (a.Grammar.StartSymbol + "Evaluator"));
+					if (_evaluatorName == _className)
+						throw new GrammarException($"The evaluator and the parser are both named \"{_className}\". Use @evaluator or @class to name them apart");
+				}
 				_const = _MakeConstantNames();
 			}
 
@@ -105,6 +120,13 @@ namespace Parsley
 				var s = 0 == sb.Length ? "Symbol" : sb.ToString();
 				return _keywords.Contains(s) ? "@" + s : s;
 			}
+			// a name used as written when it's a valid identifier, with @ in front of a keyword; otherwise made into one
+			static string _VerbatimIdent(string name)
+			{
+				var valid = 0 < name.Length && (char.IsLetter(name[0]) || '_' == name[0]) && name.All(ch => char.IsLetterOrDigit(ch) || '_' == ch);
+				if (!valid) return _Ident(name);
+				return _keywords.Contains(name) ? "@" + name : name;
+			}
 			string[] _MakeConstantNames()
 			{
 				var reserved = new HashSet<string>
@@ -113,6 +135,12 @@ namespace Parsley
 					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "GetHashCode", "ToString", "Equals", "GetType"
 				};
 				foreach (var p in _a.Grammar.Productions) reserved.Add("Parse" + _Ident(p.Name));
+				// the evaluator uses the same constant names, so they mustn't clash with its members either
+				if (null != _evaluatorName)
+				{
+					reserved.UnionWith(new[] { _evaluatorName, "Evaluate", "State" });
+					foreach (var p in _a.Grammar.Productions) reserved.Add(_EvaluateName(p.Name));
+				}
 				var used = new HashSet<string>(reserved);
 				var result = new string[_s.Count];
 				for (var i = 0; i < _s.Count; ++i)
@@ -126,6 +154,7 @@ namespace Parsley
 				return result;
 			}
 			string _MethodName(string production) => "Parse" + _Ident(production);
+			static string _EvaluateName(string production) => "Evaluate" + _Ident(production);
 			string _PredictName(Decision d) => "Predict" + _Ident(d.Production.Name) + d.Index.ToString();
 			#endregion
 
@@ -208,6 +237,7 @@ namespace Parsley
 				_Line("// add members in another part of this partial class instead.");
 				_Line("// </auto-generated>");
 				_Line("#nullable enable");
+				if (null != _evaluatorName) _Line("using System;");
 				_Line("using System.Collections.Generic;");
 				_Line("using Parsley.Runtime;");
 				_Line();
@@ -263,14 +293,147 @@ namespace Parsley
 				_Line();
 				_Tables();
 				_Close();
+				if (null != _evaluatorName)
+				{
+					_Line();
+					_Evaluator(source);
+				}
 				return _sb.ToString();
 			}
+
+			#region Evaluator
+			// the evaluator walks a finished parse tree: one EvaluateXxx per production that has a node,
+			// running its semantic action, or passing through to its one non-terminal child when it has none
+			void _Evaluator(string source)
+			{
+				var g = _a.Grammar;
+				var start = g.GetProduction(g.StartSymbol!)!;
+				var evaluated = g.Productions.Where(p => !p.IsCollapsed).ToList();
+				var startType = start.Type ?? "object";
+				// a typed state has to be passed: null isn't a valid default for every type
+				var stateType = start.StateType ?? "object?";
+				var stateParam = null == start.StateType ? "object? state = null" : $"{stateType} state";
+				_Line("/// <summary>");
+				_Line($"/// Evaluates {g.StartSymbol} parse trees from <see cref=\"{_className}\"/> with the semantic actions in {source}.");
+				_Line("/// </summary>");
+				_Open($"{(_o.Public ? "public" : "internal")} partial class {_evaluatorName}");
+				_Line("#region Symbols");
+				for (var i = 0; i < _s.Count; ++i)
+				{
+					var comment = _s.IsNonTerminal(i) ? "" : null != _s.GetTerminal(i)?.Literal ? $" // {_s.Display(i)}" : "";
+					_Line($"protected const int {_const[i]} = {i};{comment}");
+				}
+				_Line("#endregion");
+				_Line();
+				_Line("/// <summary>");
+				_Line("/// The state passed to Evaluate, for the semantic actions to use");
+				_Line("/// </summary>");
+				_Line($"protected {stateType} State {{ get; }}");
+				_Line();
+				_Line($"protected {_evaluatorName}({stateType} state) {{ State = state; }}");
+				_Line();
+				_Line("/// <summary>");
+				_Line($"/// Evaluates a parse tree from <see cref=\"{_className}\"/>, starting at its {g.StartSymbol} root");
+				_Line("/// </summary>");
+				_Line("/// <param name=\"node\">The root of the tree</param>");
+				_Line("/// <param name=\"state\">Anything the semantic actions need, available to them as State</param>");
+				_Open($"public static {startType} Evaluate(ParseNode node, {stateParam})");
+				_Line($"return new {_evaluatorName}(state).{_EvaluateName(start.Name)}(node);");
+				_Close();
+
+				_Line();
+				_Line("/// <summary>");
+				_Line("/// Evaluates a node of any non-terminal, for when a child can be one of several");
+				_Line("/// </summary>");
+				_Open("protected object Evaluate(ParseNode node)");
+				_Open("switch (node.SymbolId)");
+				foreach (var p in evaluated)
+				{
+					_Line($"case {_const[_s.GetId(p.Name)]}:");
+					++_indent;
+					// a nullable type can return null, which object can't say
+					_Line($"return {_EvaluateName(p.Name)}(node){(null != p.Type && p.Type.TrimEnd().EndsWith("?") ? "!" : "")};");
+					--_indent;
+				}
+				_Close();
+				_Line("throw new InvalidOperationException($\"{node.Symbol} can't be evaluated\");");
+				_Close();
+
+				if (evaluated.Any(p => null == p.Action))
+				{
+					_Line();
+					_Line("// for a production with no semantic action: its node evaluates to its one non-terminal child, terminals aside");
+					_Open("object _PassThrough(ParseNode node)");
+					_Line("ParseNode? only = null;");
+					_Open("foreach (var child in node.Children)");
+					_Line("if (child.IsTerminal) continue;");
+					_Line("if (null != only) throw new InvalidOperationException($\"{node.Symbol} has no semantic action and more than one non-terminal child, so it can't be evaluated\");");
+					_Line("only = child;");
+					_Close();
+					_Line("if (null == only) throw new InvalidOperationException($\"{node.Symbol} has no semantic action and no non-terminal child, so it can't be evaluated\");");
+					_Line("return Evaluate(only);");
+					_Close();
+				}
+
+				foreach (var p in evaluated)
+				{
+					var type = p.Type ?? "object";
+					_Line();
+					_Line($"// {_Comment(XbnfWriter.Write(p, false))}");
+					_Open($"protected {type} {_EvaluateName(p.Name)}(ParseNode node)");
+					if (null == p.Action)
+						_Line(null == p.Type ? "return _PassThrough(node);" : $"return ({type})_PassThrough(node);");
+					else
+						_ActionBody(p.Action);
+					_Close();
+				}
+				_Close();
+			}
+
+			// the action's code, re-indented to sit in its method. code with a string literal that spans
+			// lines goes in exactly as written, because re-indenting it would change the string
+			void _ActionBody(SemanticAction action)
+			{
+				if (action.HasMultilineLiteral)
+				{
+					// a blank line right after the opening brace or right before the closing one can't be
+					// inside a string, so those can go
+					var code = action.Code;
+					var nl = code.IndexOf('\n');
+					if (-1 < nl && 0 == code.Substring(0, nl).Trim().Length) code = code.Substring(nl + 1);
+					nl = code.LastIndexOf('\n');
+					if (-1 < nl && 0 == code.Substring(nl + 1).Trim().Length) code = code.Substring(0, nl + 1);
+					_sb.Append(code);
+					if (!code.EndsWith("\n")) _sb.AppendLine();
+					return;
+				}
+				var lines = action.Code.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
+				// anything on the same line as the opening brace has no indentation to go by
+				var first = lines[0].Trim();
+				lines.RemoveAt(0);
+				while (0 < lines.Count && 0 == lines[lines.Count - 1].Trim().Length)
+					lines.RemoveAt(lines.Count - 1);
+				if (0 < first.Length) _Line(first);
+				string? common = null;
+				foreach (var line in lines)
+				{
+					if (0 == line.Trim().Length) continue;
+					var lead = line.Substring(0, line.Length - line.TrimStart().Length);
+					if (null == common) { common = lead; continue; }
+					var n = 0;
+					while (n < common.Length && n < lead.Length && common[n] == lead[n]) ++n;
+					common = common.Substring(0, n);
+				}
+				foreach (var line in lines)
+					_Line(0 == line.Trim().Length ? "" : line.Substring(common!.Length).TrimEnd());
+			}
+			#endregion
 
 			void _Production(Production p)
 			{
 				var id = _s.GetId(p.Name);
 				var rewritten = p.Expression.Descendants().OfType<Repeat>().Any(r => r.LeftFold);
-				_Line($"// {_Comment(p.ToString())}" + (rewritten ? " (left recursion rewritten as a loop)" : ""));
+				_Line($"// {_Comment(XbnfWriter.Write(p, false))}" + (rewritten ? " (left recursion rewritten as a loop)" : ""));
 				if (p.IsCollapsed)
 				{
 					_Open($"void {_MethodName(p.Name)}(ParseNode parent)");

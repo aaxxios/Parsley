@@ -1,6 +1,6 @@
 # XBNF in Parsley
 
-XBNF is the grammar format Parsley reads. One file holds both halves of a language: the **terminals**, which go to a lexer generator, and the **non-terminals**, which Parsley turns into a parser. This document covers the XBNF that Parsley's reader (`XbnfReader`, used by `Grammar.Parse` and `Grammar.ReadFrom`) accepts.
+XBNF is the grammar format Parsley reads. One file holds both halves of a language: the **terminals**, which go to a lexer generator, and the **non-terminals**, which Parsley turns into a parser. A rule can also carry a **semantic action**, C# that evaluates its parse node, and Parsley then synthesizes an evaluator class alongside the parser (see [Semantic actions](#semantic-actions)). This document covers the XBNF that Parsley's reader (`XbnfReader`, used by `Grammar.Parse` and `Grammar.ReadFrom`) accepts.
 
 ```xbnf
 // based on the spec at json.org
@@ -32,6 +32,7 @@ A file is a sequence of **rules** and **directives**, in any order, each ending 
 @directive "argument";
 Name= expression;
 Name<attribute, attribute=value>= expression;
+Name<type="double">= expression => { /* C# */ };
 ```
 
 - **Comments** are `// to end of line` or `/* block */`. They can go anywhere whitespace can.
@@ -44,7 +45,8 @@ The syntax of XBNF itself, written in XBNF:
 ```xbnf
 File<start>= { Directive | Rule };
 Directive= "@" name literal ";";
-Rule= name [ Attributes ] "=" Expression ";";
+Rule= name [ Attributes ] "=" Expression [ "=>" Action ] ";";
+Action= "{" … "}";                           // C#, read up to its matching brace
 Expression= Sequence { "|" Sequence };
 Sequence= { Primary [ Attributes ] };        // an empty sequence matches nothing
 Primary= name | literal | pattern
@@ -142,6 +144,8 @@ Values can be:
 | `expected` | string | How the rule is named in error messages when none of its alternatives match: `expected="a statement"` gives "Expected a statement but found …". By default the message lists every token the rule can start with. |
 | `policy` | `greedy`, `lazy`, `first` | How to settle decisions in this rule that are ambiguous (see below). A group's own `policy` takes precedence. |
 | `sync` | string | Extra terminals where error recovery may stop while this rule is being parsed. The value is terminal names or literal texts separated by spaces or commas: `sync="semi rbrace"`. |
+| `type` | string | The C# type the rule's `EvaluateXxx` method returns, written verbatim: `type="double"`. Without it, the method returns `object`. Quote it, since a type like `List<int>` can't be a bare word. See [Semantic actions](#semantic-actions). |
+| `state` | string | On the start rule only: the C# type of the evaluator's `State` and of the `state` argument to `Evaluate`, written verbatim: `state="MyContext"`. Without it, both are `object?`. On any other rule it's ignored, with a warning. |
 
 ### On terminal rules
 
@@ -176,8 +180,69 @@ Block= "{" { Stmt }<sync="semi"> "}";
 | `@import "file.xbnf";` | Reads another file's rules in at this point, with the path relative to the importing file. A file is imported only once, so import cycles are harmless. Imported rules keep their own file name in messages. An imported file's directives don't override the importer's. |
 | `@namespace "My.Parsers";` | The namespace of the synthesized parser. Without it, the parser has no namespace. |
 | `@class "MyParser";` | The class name of the synthesized parser. By default it's the file name in PascalCase plus `Parser`, so `json.xbnf` gives `JsonParser`. |
+| `@evaluator "MyEvaluator";` | The class name of the synthesized evaluator, used as written, with `@` added in front of a C# keyword. By default it's the file name in PascalCase plus `Evaluator`, so `json.xbnf` gives `JsonEvaluator`. Only matters when the grammar has [semantic actions](#semantic-actions). |
 
 Other directives are kept, with a warning that they're unknown.
+
+## Semantic actions
+
+A non-terminal rule can end with `=>` and a block of C#, before the `;`. The block is a **semantic action**: the body of a method that turns that rule's node in the parse tree into a value.
+
+```xbnf
+@evaluator "ExprEvaluator";
+
+Expr<start, type="double">= Expr add Term | Expr sub Term | Term => {
+    if (1 == node.Children.Count)
+        return EvaluateTerm(node.Children[0]);
+    var left = EvaluateExpr(node.Children[0]);
+    var right = EvaluateTerm(node.Children[2]);
+    return Add == node.Children[1].SymbolId ? left + right : left - right;
+};
+```
+
+Actions run over the finished tree, not during the parse. The parser can look several tokens ahead before it commits to a branch, and it rebuilds nodes as it folds left recursion into loops, so the tree is the only reliable place to evaluate. Use the synthesized classes like this:
+
+```csharp
+var tree = ExprParser.Parse(tokens);
+double value = ExprEvaluator.Evaluate(tree);
+```
+
+### The evaluator class
+
+When the start rule has an action, Parsley synthesizes an evaluator class in the same file, after the parser. If the start rule has no action, no evaluator is synthesized, and an action on any other rule is an error. The class is `partial`, so you can add members, such as helpers your actions call, in another file. It has:
+
+| Member | What it is |
+| --- | --- |
+| `public static T Evaluate(ParseNode node, S state)` | Evaluates a tree from the parser, starting at its root. It creates an evaluator and calls the start rule's method. `T` is the start rule's `type`, or `object`. `S` is the start rule's `state` type, and then `state` must be passed. Without a `state` type it's `object? state = null`. |
+| `protected T EvaluateXxx(ParseNode node)` | One for each non-terminal that gets a node in the tree, so not for collapsed rules. `Xxx` is the rule name in PascalCase, and `T` is the rule's `type`, or `object`. The body is the rule's action. |
+| `protected object Evaluate(ParseNode node)` | Calls the right `EvaluateXxx` for the node's symbol. Use it in an action when a child can be one of several non-terminals, as it can below a collapsed rule like `Value<collapsed>= Object \| Array;`. Inside the class, `Evaluate(child)` binds to this overload, not to the static one. |
+| `protected S State` | The `state` passed to `Evaluate`, typed by the start rule's `state` attribute, or `object?`. |
+| `protected const int Xxx` | The same symbol constants the parser has, so actions can test `node.Children[0].SymbolId == Number`. |
+
+### Writing an action
+
+- The node is in `node`. Its `Children` are what the rule matched, in order. Terminals carry their text in `Value`, and non-terminals have their own children.
+- Collapsed rules and collapsed terminals have no node, and their children sit directly in the parent. In `Power= Primary [ pow Unary ];` with `Primary<collapsed>= number | lparen Expr rparen;`, the first child of a `Power` node is either a `number` token or an `Expr` node, since `lparen` and `rparen` are collapsed too.
+- Left recursion folds to the left. `E= E "+" T | T;` gives `E(E(T) "+" T)` for `1 + 2`. A node made by folding has three children here, and the innermost one has just the `T`.
+- Return a value of the rule's `type`. The code is copied into the method as written, and Parsley doesn't insert casts, so each `return` needs a value C# converts to that type on its own. When you call `Evaluate(child)`, cast its result yourself.
+- Call other rules' `EvaluateXxx` methods directly when you know which rule a child is.
+- Anything the actions need from outside the tree, such as variables, options or a symbol table, goes in through `state` and is read back as `State`. Give the start rule a `state` type and `State` needs no cast:
+
+  ```xbnf
+  Calc<start, type="int", state="System.Collections.Generic.IDictionary<string, int>">= … => { … };
+  Var<type="int">= name => { return State[node.Children[0].Value!]; };
+  ```
+
+  ```csharp
+  int value = CalcEvaluator.Evaluate(tree, new Dictionary<string, int> { ["x"] = 5 });
+  ```
+- The generated file has `using System;`, `using System.Collections.Generic;` and `using Parsley.Runtime;`. Usings only apply to the file they're in, so write other namespaces out in full: `System.Globalization.CultureInfo.InvariantCulture`.
+- The action is read up to its matching `}`. Braces inside strings, character literals, comments and interpolation holes don't count, including verbatim, interpolated and raw strings. The code is re-indented to fit its method. The exception is a string literal that spans lines, since re-indenting would change it, so that code is copied exactly.
+- An action can't be on a terminal or a collapsed rule, since neither has a node of its own.
+
+### Rules without an action
+
+A rule with no action still gets an `EvaluateXxx` method. Its node evaluates to its one non-terminal child, ignoring terminals, so chains like `Item= Wrapped | Word;` need no code. A node with no non-terminal children, or with more than one, throws `InvalidOperationException` when it's evaluated. Watch for rules like `Unary= sub Unary | Power;`: without an action, the `-` would be ignored and the node would evaluate to its `Unary` child.
 
 ## How rules become a parser
 
@@ -215,6 +280,12 @@ Left recursion is rewritten automatically:
 | A hidden terminal referenced from a non-terminal | Error |
 | A loop whose body can match nothing (`{ [ a ] }`) | Error |
 | A rule with a code body (`Name<virtual> { … }`) | Error: virtual productions aren't supported |
+| A semantic action on a rule other than the start rule, when the start rule has none | Error |
+| A semantic action on a terminal or a collapsed rule | Error |
+| `type` on a collapsed rule | Warning: it has no node, so the type is ignored |
+| `state` on a rule other than the start rule | Warning: it's ignored |
+| `type` or `state` that isn't a string, such as `type=5` | Error |
+| The evaluator and the parser named the same | Error when synthesizing |
 | A non-terminal unreachable from the start symbol | Warning, unless `nowarn` |
 
 Messages carry the file, line and column of the rule or expression they're about.

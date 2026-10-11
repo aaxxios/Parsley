@@ -230,7 +230,15 @@ namespace Parsley
 			if (hasAttrs)
 				sb.Append(e.Attributes.ToString());
 		}
-		public static string Write(Production p) => string.Concat(p.Name, p.Attributes.ToString(), "= ", Write(p.Expression), ";");
+		public static string Write(Production p) => Write(p, true);
+		/// <summary>
+		/// Writes a production, with or without its semantic action
+		/// </summary>
+		public static string Write(Production p, bool withAction)
+		{
+			var action = withAction && null != p.Action ? " => " + p.Action.ToString() : "";
+			return string.Concat(p.Name, p.Attributes.ToString(), "= ", Write(p.Expression), action, ";");
+		}
 		public static string Write(TerminalDeclaration t) => string.Concat(t.Name, t.Attributes.ToString(), "= ", Write(t.Definition), ";");
 		public static string Write(Grammar g)
 		{

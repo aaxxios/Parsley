@@ -6,10 +6,13 @@ internal class Program
 {
     static void Main(string[] args)
     {
-        var lexer = ExprLexer.Tokenize("1+(2^4)*3");
+        var text = "1+(2^4)*3";
+        var lexer = ExprLexer.Tokenize(text);
         try
         {
-            Console.WriteLine(ExprParser.Parse(lexer));
+            var tree = ExprParser.Parse(lexer);
+            Console.WriteLine(tree);
+            Console.WriteLine($"{text} = {ExprEvaluator.Evaluate(tree)}");
         }
         catch (ParseException e)
         {

@@ -99,6 +99,32 @@ namespace Parsley.Tests
                 result?.ToString() ?? "",
                 errors?.Cast<object>().Select(e => e.ToString()!).ToList() ?? new List<string>());
         }
+
+		/// <summary>
+		/// The synthesized evaluator class with this name
+		/// </summary>
+		public Type GetEvaluator(string className) => _parserType.Assembly.GetTypes().First(t => t.Name == className);
+
+		/// <summary>
+		/// Parses, then evaluates the tree with the synthesized evaluator. Throws if the parse fails.
+		/// </summary>
+		public object? Evaluate(string evaluatorClassName, IEnumerable<Parsley.Runtime.Token> tokens, object? state = null)
+		{
+			var list = tokens.ToList();
+			var arr = Array.CreateInstance(_tokenType, list.Count);
+			for (var i = 0; i < list.Count; ++i)
+			{
+				var t = list[i];
+				arr.SetValue(Activator.CreateInstance(_tokenType, t.SymbolId, t.Value, t.Line, t.Column, t.Position), i);
+			}
+			var parse = _parserType.GetMethod("Parse", BindingFlags.Static | BindingFlags.Public)!;
+			object? tree;
+			try { tree = parse.Invoke(null, new object[] { arr }); }
+			catch (TargetInvocationException ex) { throw ex.InnerException!; }
+			var evaluate = GetEvaluator(evaluatorClassName).GetMethod("Evaluate", BindingFlags.Static | BindingFlags.Public)!;
+			try { return evaluate.Invoke(null, new[] { tree, state }); }
+			catch (TargetInvocationException ex) { throw ex.InnerException!; }
+		}
 	}
 
 	static class Interp

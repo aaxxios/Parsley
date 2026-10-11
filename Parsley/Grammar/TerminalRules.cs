@@ -57,6 +57,8 @@ namespace Parsley
 				p.Attributes.Remove("terminal");
 				if (terminalNames.Contains(p.Name) && !Terminals.Any(t => t.Name == p.Name))
 				{
+					if (null != p.Action)
+						messages.Add(new GrammarMessage(ErrorLevel.Error, $"\"{p.Name}\" is a terminal, and semantic actions can't be specified on terminals", p.Action));
 					var t = new TerminalDeclaration(p.Name, p.Expression);
 					t.CopyLocation(p);
 					t.Attributes.AddRange(p.Attributes);

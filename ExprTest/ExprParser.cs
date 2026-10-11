@@ -3,6 +3,7 @@
 // add members in another part of this partial class instead.
 // </auto-generated>
 #nullable enable
+using System;
 using System.Collections.Generic;
 using Parsley.Runtime;
 
@@ -53,7 +54,7 @@ public partial class ExprParser : ParserBase
 		return result;
 	}
 
-	// Expr<start>= Term { add Term | sub Term }; (left recursion rewritten as a loop)
+	// Expr<start, type="double">= Term { add Term | sub Term }; (left recursion rewritten as a loop)
 	ParseNode ParseExpr()
 	{
 		Enter(Expr);
@@ -78,7 +79,7 @@ public partial class ExprParser : ParserBase
 		return node;
 	}
 
-	// Term= Unary { mul Unary | div Unary | mod Unary }; (left recursion rewritten as a loop)
+	// Term<type="double">= Unary { mul Unary | div Unary | mod Unary }; (left recursion rewritten as a loop)
 	ParseNode ParseTerm()
 	{
 		Enter(Term);
@@ -105,7 +106,7 @@ public partial class ExprParser : ParserBase
 		return node;
 	}
 
-	// Unary= sub Unary | Power;
+	// Unary<type="double">= sub Unary | Power;
 	ParseNode ParseUnary()
 	{
 		Enter(Unary);
@@ -123,7 +124,7 @@ public partial class ExprParser : ParserBase
 		return node;
 	}
 
-	// Power= Primary [ pow Unary ];
+	// Power<type="double">= Primary [ pow Unary ];
 	ParseNode ParsePower()
 	{
 		Enter(Power);
@@ -175,4 +176,111 @@ public partial class ExprParser : ParserBase
 		endOfInput: EndOfInput,
 		error: ErrorSymbol);
 	#endregion
+}
+
+/// <summary>
+/// Evaluates Expr parse trees from <see cref="ExprParser"/> with the semantic actions in Expr.xbnf.
+/// </summary>
+public partial class ExprEvaluator
+{
+	#region Symbols
+	protected const int Expr = 0;
+	protected const int Term = 1;
+	protected const int Unary = 2;
+	protected const int Power = 3;
+	protected const int Primary = 4;
+	protected const int Number = 5;
+	protected const int Add = 6; // "+"
+	protected const int Sub = 7; // "-"
+	protected const int Mul = 8; // "*"
+	protected const int Div = 9; // "/"
+	protected const int Mod = 10; // "%"
+	protected const int Pow = 11; // "^"
+	protected const int Lparen = 12; // "("
+	protected const int Rparen = 13; // ")"
+	protected const int Whitespace = 14;
+	protected const int EndOfInput = 15;
+	protected const int ErrorSymbol = 16;
+	#endregion
+
+	/// <summary>
+	/// The state passed to Evaluate, for the semantic actions to use
+	/// </summary>
+	protected object? State { get; }
+
+	protected ExprEvaluator(object? state) { State = state; }
+
+	/// <summary>
+	/// Evaluates a parse tree from <see cref="ExprParser"/>, starting at its Expr root
+	/// </summary>
+	/// <param name="node">The root of the tree</param>
+	/// <param name="state">Anything the semantic actions need, available to them as State</param>
+	public static double Evaluate(ParseNode node, object? state = null)
+	{
+		return new ExprEvaluator(state).EvaluateExpr(node);
+	}
+
+	/// <summary>
+	/// Evaluates a node of any non-terminal, for when a child can be one of several
+	/// </summary>
+	protected object Evaluate(ParseNode node)
+	{
+		switch (node.SymbolId)
+		{
+			case Expr:
+				return EvaluateExpr(node);
+			case Term:
+				return EvaluateTerm(node);
+			case Unary:
+				return EvaluateUnary(node);
+			case Power:
+				return EvaluatePower(node);
+		}
+		throw new InvalidOperationException($"{node.Symbol} can't be evaluated");
+	}
+
+	// Expr<start, type="double">= Term { add Term | sub Term };
+	protected double EvaluateExpr(ParseNode node)
+	{
+		if (1 == node.Children.Count)
+		    return EvaluateTerm(node.Children[0]);
+		var left = EvaluateExpr(node.Children[0]);
+		var right = EvaluateTerm(node.Children[2]);
+		return Add == node.Children[1].SymbolId ? left + right : left - right;
+	}
+
+	// Term<type="double">= Unary { mul Unary | div Unary | mod Unary };
+	protected double EvaluateTerm(ParseNode node)
+	{
+		if (1 == node.Children.Count)
+		    return EvaluateUnary(node.Children[0]);
+		var left = EvaluateTerm(node.Children[0]);
+		var right = EvaluateUnary(node.Children[2]);
+		switch (node.Children[1].SymbolId)
+		{
+		    case Mul: return left * right;
+		    case Div: return left / right;
+		    default: return left % right;
+		}
+	}
+
+	// Unary<type="double">= sub Unary | Power;
+	protected double EvaluateUnary(ParseNode node)
+	{
+		if (2 == node.Children.Count)
+		    return -EvaluateUnary(node.Children[1]);
+		return EvaluatePower(node.Children[0]);
+	}
+
+	// Power<type="double">= Primary [ pow Unary ];
+	protected double EvaluatePower(ParseNode node)
+	{
+		var first = node.Children[0];
+		var value = Number == first.SymbolId
+		    ? double.Parse(first.Value!, System.Globalization.CultureInfo.InvariantCulture)
+		    : EvaluateExpr(first);
+		if (1 == node.Children.Count)
+		    return value;
+		return Math.Pow(value, EvaluateUnary(node.Children[2]));
+	}
 }
