@@ -1,6 +1,6 @@
-# Parsley parser synthesis
+# Parsley
 
-Turns an XBNF grammar into C# recursive descent that reads as if written by hand.
+An advanced ALL(\*) parser generator utilizing code synthesis.
 
 ## Use
 
