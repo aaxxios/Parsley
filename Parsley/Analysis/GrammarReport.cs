@@ -197,7 +197,8 @@ namespace Parsley
 					string verdict, detail;
 					var errors = x.Messages.Count(m => m.Level == ErrorLevel.Error);
 					// an alternation with no policy is an error, counted above, even though it was given one to carry on
-					var defaulted = x.Decisions.Count(d => null != d.AppliedPolicy && !_ExplicitPolicy(d) && d.Kind != DecisionKind.Alternation);
+					// an operator rule's loop is settled by precedence at parse time, not by a policy
+					var defaulted = x.Decisions.Count(d => null != d.AppliedPolicy && !_ExplicitPolicy(d) && d.Kind != DecisionKind.Alternation && !x.IsOperatorLoop(d.Node));
 					var policies = x.Decisions.Count(d => null != d.AppliedPolicy && _ExplicitPolicy(d));
 					if (0 < errors)
 					{
@@ -237,9 +238,13 @@ namespace Parsley
 				var flags = new List<string>();
 				void add(int n, string what) { if (0 < n) flags.Add($"{n} {what}"); }
 				add(prods.Count(p => p.IsCollapsed), "collapsed");
-				add(prods.Count(p => _a.IsNullable(p.Expression)), "nullable");
+				add(prods.Count(p => null == p.OperatorOwner && _a.IsNullable(p.Expression)), "nullable");
 				add(recursive.Count, "recursive");
 				add(prods.Count(p => p.Expression.Descendants().OfType<Repeat>().Any(r => r.LeftFold)), "left recursion rewritten");
+				var rules = prods.Count(p => null != p.Operators);
+				add(rules, 1 == rules ? "operator rule" : "operator rules");
+				var forms = prods.Count(p => null != p.OperatorOwner);
+				add(forms, 1 == forms ? "operator form" : "operator forms");
 				add(prods.Count(p => !reachable.Contains(p.Name)), "unreachable");
 				_Field("Productions", prods.Count.ToString() + (0 < flags.Count ? $" ({string.Join(", ", flags)})" : ""));
 				var terms = _g.Terminals;
@@ -278,14 +283,14 @@ namespace Parsley
 				if (0 < unbounded) byDepth.Add($"unbounded: {unbounded}");
 				_Field("By lookahead", string.Join(", ", byDepth));
 				if (0 < _a.AdaptiveDecisions.Count) _Field("Adaptive", $"{_a.AdaptiveDecisions.Count} (predicted by ALL(*) at parse time)");
-				var policy = ds.Where(d => null != d.AppliedPolicy).ToList();
+				var policy = ds.Where(d => null != d.AppliedPolicy && !_a.IsOperatorLoop(d.Node)).ToList();
 				if (0 < policy.Count)
 					_Field("Settled by policy", $"{policy.Count} ({policy.Count(_ExplicitPolicy)} written in the grammar, {policy.Count(d => !_ExplicitPolicy(d))} by default)");
 				var strings = ds.Where(d => 1 < d.Depth && !d.IsAdaptive).Sum(d => d.Branches.Sum(b => b.Count));
 				if (0 < strings) _Field("Predictor strings", $"{strings} lookahead strings across {_Plural(ds.Count(d => 1 < d.Depth && !d.IsAdaptive), "synthesized predictor")}");
 
 				// only the ones that cost something: plain one-token tests aren't worth listing
-				var notable = ds.Where(d => 1 != d.Depth || d.IsAdaptive || null != d.AppliedPolicy).ToList();
+				var notable = ds.Where(d => 1 != d.Depth || d.IsAdaptive || (null != d.AppliedPolicy && !_a.IsOperatorLoop(d.Node))).ToList();
 				if (0 == notable.Count)
 				{
 					_w.WriteLine("  Every decision is a one-token switch or if.");
@@ -314,6 +319,15 @@ namespace Parsley
 					var flags = new List<string>();
 					if (p.Name == _g.StartSymbol) flags.Add("start");
 					if (p.IsCollapsed) flags.Add("collapsed");
+					if (null != p.OperatorOwner)
+					{
+						// parsed by its operator rule, which makes its nodes
+						flags.Add($"operator form of {p.OperatorOwner.Production.Name}");
+						if (null != p.Action) flags.Add("action");
+						rows.Add(new[] { p.Name, string.Join(", ", flags), "-", "-", "-" });
+						continue;
+					}
+					if (null != p.Operators) flags.Add($"operators, {p.Operators.Forms.Where(f => OperatorKind.Atom != f.Kind).Select(f => f.Level).Distinct().Count()} levels");
 					if (_a.IsNullable(p.Expression)) flags.Add("nullable");
 					if (recursive.Contains(p.Name)) flags.Add("recursive");
 					if (p.Expression.Descendants().OfType<Repeat>().Any(r => r.LeftFold)) flags.Add("left-rec rewritten");
@@ -339,7 +353,7 @@ namespace Parsley
 				var lines = src.Split('\n').Length - 1;
 				_Field("Parser source", $"{lines} lines, {Math.Round(Encoding.UTF8.GetByteCount(src) / 1024.0, 1)} KB" + (_g.HasActions ? " (evaluator included)" : ""));
 				var predictors = _a.Decisions.Count(d => 1 < d.Depth && !d.IsAdaptive);
-				_Field("Methods", $"{_Plural(_g.Productions.Count, "production method")}, {_Plural(predictors, "predictor method")}, {_Plural(_a.AdaptiveDecisions.Count, "adaptive call site")}");
+				_Field("Methods", $"{_Plural(_g.Productions.Count(p => null == p.OperatorOwner), "production method")}, {_Plural(predictors, "predictor method")}, {_Plural(_a.AdaptiveDecisions.Count, "adaptive call site")}");
 				var sets = src.Split('\n').Count(l => l.TrimStart().StartsWith("static readonly bool[] s_"));
 				_Field("Tables", $"{_s.Count} symbols, {_Plural(sets, "token set")}, recovery sets for {_Plural(_s.NonTerminalCount, "non-terminal")}");
 				if (ParserEngine.AllStar == _a.Engine)
@@ -395,6 +409,8 @@ namespace Parsley
 			{
 				var result = null != _g.StartSymbol ? _From(_g.StartSymbol) : new HashSet<string>();
 				if (null != _g.StartSymbol) result.Add(_g.StartSymbol);
+				foreach (var p in _g.Productions)
+					if (null != p.OperatorOwner && result.Contains(p.OperatorOwner.Production.Name)) result.Add(p.Name);
 				return result;
 			}
 			#endregion

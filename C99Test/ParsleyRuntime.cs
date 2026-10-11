@@ -389,6 +389,16 @@ namespace Parsley.Runtime
             return result;
         }
         /// <summary>
+        /// For an operator rule applying an infix or postfix operator: a new node for the given symbol, located
+        /// where its first child, the left operand, starts, with that operand already in it
+        /// </summary>
+        protected ParseNode Wrap(int symbolId, ParseNode first)
+        {
+            var result = new ParseNode(symbolId, _tables.SymbolNames[symbolId], null, false, first.Line, first.Column, first.Position);
+            result.Add(first);
+            return result;
+        }
+        /// <summary>
         /// Reports that none of the expected symbols was found, then recovers
         /// </summary>
         protected void Error(ParseNode parent, string? expected, params int[] symbols)

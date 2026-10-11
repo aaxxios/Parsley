@@ -55,6 +55,8 @@ In code, `GrammarAnalysis.Analyze(grammar, ParserEngine.Auto)` makes the choice 
 
 The documentation for XBNF is [here](XBNF.md).
 
+Operators can be written in one rule, tightest first, instead of one rule per level of precedence. A rule marked `<operators>` is parsed by precedence climbing; `assoc=right` makes an operator right associative, and an operator can have a production of its own, for its own node and semantic action. See [Operator rules](XBNF.md#operator-rules), and `Parsley/ExprOperators.xbnf`, which is `Expr.xbnf` written that way.
+
 For languages whose parse depends on what's been parsed so far, such as C, where a name can be a type or a variable, rules can call your C# as they're parsed (`entering`, `parsed`, `matched`), and a contextual terminal (`when`) lets that code decide what a token is. See [Parse-time hooks](XBNF.md#parse-time-hooks-and-contextual-terminals), and `Parsley.Tests/c99` for a C99 grammar that uses them.
 
 The synthesized class plus `ParsleyRuntime.cs` and its base class file compile on their own (C# 12, .NET 8), with no reference to Parsley:

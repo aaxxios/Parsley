@@ -127,8 +127,70 @@ namespace Parsley
 			return Run(() => _Production(_a.Grammar.GetProduction(_a.Grammar.StartSymbol!)!, null, -1)!);
 		}
 
+		// the operator rule being applied by the innermost loop, and whether its form was too loose to apply here
+		int _minLevel;
+		bool _leave;
+
+		// precedence climbing, as the synthesized method does it
+		ParseNode _Operators(OperatorRule rule, int returnState, int minLevel)
+		{
+			var p = rule.Production;
+			var id = _s.GetId(p.Name);
+			Enter(id, returnState);
+			var node = NewNode(id);
+			if (null != p.Entering) _hooks?.Entering?.Invoke(p.Entering);
+			_Expr(rule.Primary, ref node, p, true);
+			if (null != rule.Loop)
+			{
+				var d = _a.GetDecision(rule.Loop)!;
+				while (0 == _Choose(d))
+				{
+					_minLevel = minLevel;
+					_Expr(rule.Loop.Body, ref node, p, false);
+					if (_leave)
+					{
+						_leave = false;
+						break;
+					}
+				}
+			}
+			if (null != p.Parsed) _hooks?.Parsed?.Invoke(p.Parsed, node);
+			Leave();
+			return node;
+		}
+
+		void _Form(OperatorForm f, ref ParseNode node, Production p)
+		{
+			var symbol = _s.GetId(f.Symbol);
+			switch (f.Kind)
+			{
+				case OperatorKind.Atom:
+					_Expr(f.Option, ref node, p, false, true);
+					return;
+				case OperatorKind.Prefix:
+					if (null != f.Production) node = NewNode(symbol);
+					break;
+				default:
+					// too loose to apply here: the call waiting for this operand applies it
+					if (f.Level < _minLevel)
+					{
+						_leave = true;
+						return;
+					}
+					node = Wrap(symbol, node);
+					break;
+			}
+			foreach (var item in f.Operator)
+				_Expr(item, ref node, p, false);
+			if (null == f.Operand) return;
+			var level = OperatorKind.Infix == f.Kind && !f.IsRightAssociative ? f.Level + 1 : f.Level;
+			var ret = ParserEngine.AllStar == _a.Engine ? _a.Atn.GetReturnState(f.Operand) : -1;
+			node.Add(_Operators(f.Rule, ret, level));
+		}
+
 		ParseNode? _Production(Production p, ParseNode? parent, int returnState)
 		{
+			if (null != p.Operators) return _Operators(p.Operators, returnState, 0);
 			var id = _s.GetId(p.Name);
 			Enter(id, returnState);
 			ParseNode result;
@@ -149,8 +211,13 @@ namespace Parsley
 			return result;
 		}
 
-		void _Expr(Expression e, ref ParseNode node, Production p, bool isRoot)
+		void _Expr(Expression e, ref ParseNode node, Production p, bool isRoot, bool asWritten = false)
 		{
+			if (!asWritten && _a.GetOperatorForm(e) is OperatorForm form)
+			{
+				_Form(form, ref node, p);
+				return;
+			}
 			switch (e)
 			{
 				case EmptyExpression:

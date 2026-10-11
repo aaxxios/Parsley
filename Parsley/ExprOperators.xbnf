@@ -1,0 +1,53 @@
+// Expr.xbnf again, written as an operator rule: the same language, precedence and values in one rule.
+// Alternatives are listed tightest first:
+//   ^          right associative, and tighter than unary minus: -2^2 is -(2^2), 2^3^2 is 2^(3^2)
+//   unary -    so -2 * 3 is (-2) * 3, and 2^-1 works because a prefix form can be an operand
+//   * / %      left associative
+//   + -        left associative, so 10 - 4 - 3 is (10 - 4) - 3
+// Every operator applied makes a node, and so does every atom, so the action sees one of three shapes:
+// an atom (one child), unary minus (two) or a binary operator (three). Negate could be split out into its
+// own production with its own action instead, as Negate= sub Expr => { ... }; and Expr's action would
+// then never see two children.
+@class "ExprParser";
+@evaluator "ExprEvaluator";
+
+Expr<start, type="double", operators, expected="an expression">=
+      Expr pow<assoc=right> Expr
+    | sub Expr
+    | Expr ( mul | div | mod ) Expr
+    | Expr ( add | sub ) Expr
+    | number
+    | lparen Expr rparen
+    => {
+    var c = node.Children;
+    switch (c.Count)
+    {
+        case 1: // an atom: a number, or the Expr in parentheses, which are collapsed
+            return Number == c[0].SymbolId
+                ? double.Parse(c[0].Value!, System.Globalization.CultureInfo.InvariantCulture)
+                : EvaluateExpr(c[0]);
+        case 2: // unary minus
+            return -EvaluateExpr(c[1]);
+    }
+    var left = EvaluateExpr(c[0]);
+    var right = EvaluateExpr(c[2]);
+    switch (c[1].SymbolId)
+    {
+        case Add: return left + right;
+        case Sub: return left - right;
+        case Mul: return left * right;
+        case Div: return left / right;
+        case Mod: return left % right;
+        default: return Math.Pow(left, right);
+    }
+};
+number= '[0-9]+(\.[0-9]+)?';
+add= "+";
+sub= "-";
+mul= "*";
+div= "/";
+mod= "%";
+pow= "^";
+lparen<collapsed>= "(";
+rparen<collapsed>= ")";
+whitespace<hidden>= '[ \t\r\n]+';

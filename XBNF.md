@@ -1,6 +1,6 @@
 # XBNF in Parsley
 
-XBNF is the grammar format Parsley reads. One file holds both halves of a language: the **terminals**, which go to a lexer generator, and the **non-terminals**, which Parsley turns into a parser. A rule can also carry a **semantic action**, C# that evaluates its parse node, and Parsley then synthesizes an evaluator class alongside the parser (see [Semantic actions](#semantic-actions)). This document covers the XBNF that Parsley's reader (`XbnfReader`, used by `Grammar.Parse` and `Grammar.ReadFrom`) accepts.
+XBNF is the grammar format Parsley reads. One file holds both halves of a language: the **terminals**, which go to a lexer generator, and the **non-terminals**, which Parsley turns into a parser. A rule can also carry a **semantic action**, C# that evaluates its parse node, and Parsley then synthesizes an evaluator class alongside the parser (see [Semantic actions](#semantic-actions)). Operators can be written in one rule, tightest first, instead of one rule per level of precedence (see [Operator rules](#operator-rules)). This document covers the XBNF that Parsley's reader (`XbnfReader`, used by `Grammar.Parse` and `Grammar.ReadFrom`) accepts.
 
 ```xbnf
 // based on the spec at json.org
@@ -148,6 +148,8 @@ Values can be:
 | `state` | string | On the start rule only: the C# type of the evaluator's `State` and of the `state` argument to `Evaluate`, written verbatim: `state="MyContext"`. Without it, both are `object?`. On any other rule it's ignored, with a warning. |
 | `entering` | method name | A method the parser calls, with no arguments, as it starts this rule. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
 | `parsed` | method name | A method the parser calls with the finished parse node as this rule ends. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
+| `operators` | flag | The rule's alternatives are operators, listed tightest first, and it's parsed by precedence climbing. See [Operator rules](#operator-rules). |
+| `assoc` | `left`, `right` | On a production that is an operator form of an operator rule: how the form associates. See [Operator rules](#operator-rules). |
 
 ### On terminal rules
 
@@ -170,6 +172,7 @@ Any primary expression can take attributes, which apply to that one occurrence o
 | `policy` | `greedy`, `lazy`, `first` | Settles this decision if it's ambiguous. |
 | `expected` | string | Names this alternation in error messages. |
 | `sync` | string | Like the rule attribute: adds terminals where recovery may stop, for the enclosing rule. |
+| `assoc` | `left`, `right` | On any element of an infix form in an operator rule: how the form associates. See [Operator rules](#operator-rules). |
 
 ```xbnf
 S= ( A | B )<policy=first>;
@@ -247,7 +250,127 @@ When the start rule has an action, Parsley synthesizes an evaluator class in the
 
 ### Rules without an action
 
-A rule with no action still gets an `EvaluateXxx` method. Its node evaluates to its one non-terminal child, ignoring terminals, so chains like `Item= Wrapped | Word;` need no code. A node with no non-terminal children, or with more than one, throws `InvalidOperationException` when it's evaluated. Watch for rules like `Unary= sub Unary | Power;`: without an action, the `-` would be ignored and the node would evaluate to its `Unary` child.
+A rule with no action still gets an `EvaluateXxx` method. Its node evaluates to its one non-terminal child, ignoring terminals, so chains like `Item= Wrapped | Word;` need no code. The exception is an operator form's production, which is evaluated by its operator rule's action (see [Evaluating operator rules](#evaluating-operator-rules)). A node with no non-terminal children, or with more than one, throws `InvalidOperationException` when it's evaluated. Watch for rules like `Unary= sub Unary | Power;`: without an action, the `-` would be ignored and the node would evaluate to its `Unary` child.
+
+## Operator rules
+
+Operators with precedence are usually written as a tower of rules, one per level, as in `Expr.xbnf`: `Expr` for `+` and `-`, `Term` for `*` and `/`, and so on down. A rule marked `operators` writes them all in one rule instead. Its alternatives are listed tightest first, and Parsley parses the rule by precedence climbing.
+
+```xbnf
+Expr<start, type="double", operators, expected="an expression">=
+      Expr pow<assoc=right> Expr        // tightest
+    | sub Expr                          // unary minus
+    | Expr ( mul | div | mod ) Expr
+    | Expr ( add | sub ) Expr           // loosest
+    | number
+    | lparen Expr rparen
+    => { /* see ExprOperators.xbnf */ };
+```
+
+This is the same language as `Expr.xbnf`, with the same precedence: `-2^2` is `-(2^2)`, `2^-1` works, and `10 - 4 - 3` is `(10 - 4) - 3`. `ExprOperators.xbnf`, next to it, is the whole grammar with its action. The tower of rules still works as it always has; `operators` is opt-in, one rule at a time.
+
+### Forms
+
+Each alternative is a **form**, classified by whether it starts or ends with the rule's own name. Whatever lies between is its **operator**, and that can be any expression:
+
+| Starts with the rule | Ends with it | Form | Examples |
+| --- | --- | --- | --- |
+| yes | yes | infix | `Expr add Expr`, `Expr question Expr colon Expr` |
+| no | yes | prefix | `sub Expr`, `lparen name rparen Expr` (a cast) |
+| yes | no | postfix | `Expr "++"`, `Expr lbracket Expr rbracket`, `Expr lparen [ Expr { comma Expr } ] rparen` |
+| no | no | atom | `number`, `name`, `lparen Expr rparen` |
+
+- **The rule inside an operator**, like the middle of a ternary or the index of `a[i]`, is an ordinary operand. It's parsed from the loosest level, as it is between parentheses, so `a ? b = c : d` works.
+- **A group gives several operators one level:** `Expr ( add | sub ) Expr`.
+- **An infix form with nothing between its operands**, `Expr Expr`, is juxtaposition, as in function application `f x`.
+- **The rule needs at least one atom**, since that's what operators apply to.
+
+### Precedence and associativity
+
+- **Earlier alternatives bind tighter.** Atoms have no level, so they can go anywhere; listing them last reads best.
+- **Infix forms are left associative** unless marked `assoc=right`: `a = b = c` is `a = (b = c)`. `assoc` goes on any element of the form, such as its operator (`Expr pow<assoc=right> Expr`) or its last operand (`Expr question Expr colon Expr<assoc=right>`), or on a [form's production](#forms-with-their-own-productions).
+- **A prefix form's operand takes the operators that bind tighter than it.** With `^` above unary minus, `-2^2` is `-(2^2)`. With `*` below it, `-2 * 3` is `(-2) * 3`.
+- **A prefix form can be any operand**, wherever it's listed: `2^-1` is `2^(-1)`, even though unary minus is looser than `^`.
+- **A postfix form applies to everything to its left that binds tighter.** With indexing listed above `!`, `!a[0]` is `!(a[0])`.
+
+### The tree
+
+Every operator applied makes a node, with its children in the order they were read, and so does every atom. Operands are therefore always nodes:
+
+| Form | Children |
+| --- | --- |
+| atom | what the atom matched |
+| prefix | the operator, then the operand |
+| infix | the left operand, the operator, then the right operand |
+| postfix | the operand, then the operator |
+
+As everywhere, collapsed terminals are left out. With the grammar above, where `lparen` and `rparen` are collapsed:
+
+```
+1 + 2 * 3      Expr(Expr(1) + Expr(Expr(2) * Expr(3)))
+-2^2           Expr(- Expr(Expr(2) ^ Expr(2)))
+(1 + 2) * 3    Expr(Expr(Expr(Expr(1) + Expr(2))) * Expr(3))
+7              Expr(7)
+```
+
+So an action sees one of a few shapes, and can tell them apart by the number of children, or by the symbol of the operator.
+
+### Forms with their own productions
+
+An alternative can be a reference to a production whose right side is a single form. Its nodes are then that production's, and it can have an action of its own:
+
+```xbnf
+Expr<start, type="double", operators>=
+      Power                    // tightest
+    | Negate
+    | Expr ( mul | div | mod ) Expr
+    | Sum                      // loosest
+    | number
+    | lparen Expr rparen
+    => { /* atoms, *, / and %, and Sum, which has no action */ };
+Power<assoc=right>= Expr pow Expr => { return Math.Pow(EvaluateExpr(node.Children[0]), EvaluateExpr(node.Children[2])); };
+Negate= sub Expr => { return -EvaluateExpr(node.Children[1]); };
+Sum= Expr ( add | sub ) Expr;
+```
+
+- **Precedence still comes from where it's listed** in the operator rule.
+- **`assoc` can go on the production** as well as on an element of its form.
+- **The operator rule parses it.** It gets no parse method of its own, and its `entering` and `parsed` are ignored, with a warning; the operator rule's hooks run instead.
+- **It can only be used as an alternative of its operator rule**, and only once.
+- **It must be exactly one form.** To give several operators one level, group them: `Sum= Expr ( add | sub ) Expr;`, not `Sum= Expr add Expr | Expr sub Expr;`.
+- **A reference to a production that isn't a form**, like `| Literal` with `Literal= number | string;`, is an atom like any other.
+- **The root of the tree can be one of its nodes:** `1 + 2` gives a `Sum` node, not an `Expr` node.
+
+### Evaluating operator rules
+
+- **`EvaluateExpr` forwards** the nodes of forms whose productions have an action to their own `EvaluateXxx`, so `EvaluateExpr(child)` works on any operand, whatever form it is.
+- **A form's production with no action is evaluated by the operator rule's action**, with a message saying so. In the grammar above, `Sum` nodes reach `Expr`'s action, which tells `+` from `-` by `node.Children[1].SymbolId`.
+- **A form's production with no `type` returns `object`**, like any rule. Since every operand is evaluated through `EvaluateExpr`, the operator rule's `type` is the type of every operand's value.
+- **When forms return different types**, such as arithmetic returning `int` and comparisons returning `bool`, leave the operator rule's `type` off (so `object`), or use a type of your own that holds either. Each form's production can still declare its exact type:
+
+  ```xbnf
+  E<start, operators>= Product | Less | number => { return int.Parse(node.Children[0].Value!); };
+  Product<type="int">= E star E => { return (int)EvaluateE(node.Children[0]) * (int)EvaluateE(node.Children[2]); };
+  Less<type="bool">= E lt E => { return (int)EvaluateE(node.Children[0]) < (int)EvaluateE(node.Children[2]); };
+  ```
+- **When the two types are written differently**, the forwarding casts, as in `return (double)EvaluateNegate(node);`, and the C# compiler decides whether that's allowed. `object` to `double` compiles and unboxes at run time, so it throws if the action actually returned something else, such as a boxed `int`. `bool` to `int` doesn't compile.
+
+### How an operator rule is parsed
+
+The rule gets one method, `ParseExpr(int minLevel = 0)`; in an ALL(\*) parser the return state comes first. `minLevel` is the loosest operator the call may apply:
+
+1. It reads an operand: an atom, or a prefix form, whose own operand is read by calling `ParseExpr` with the form's level.
+2. Then, while the next token starts an infix or postfix form: if the form's level is below `minLevel`, it returns, leaving the operator to the call waiting for this operand. Otherwise it makes the form's node around what it has so far and reads the operator. For an infix form, it reads the right operand by calling `ParseExpr` with the form's level plus one, or the form's level itself if the form is right associative.
+
+Choosing among atoms and prefix forms, and among infix and postfix forms, are ordinary decisions. They use as much lookahead as they need, and ALL(\*) where no fixed amount will do: telling the cast `(a) b` from the parenthesized `(a) + b` takes four tokens.
+
+Whether to apply another operator only ever looks at one token. Without precedence, the rule would be ambiguous there, since an operand's call could take the operator or leave it to its caller. Precedence is what settles that, at parse time, so there's no policy to give and no warning. A token that could start an operator is always taken as one, even where it could also follow the expression in the rest of the grammar.
+
+Other things to know:
+
+- **`entering` and `parsed` on the operator rule** run on every call, including the calls for operands, so `1 + 2` enters the rule twice: once for `2` and once for the whole.
+- **`expected` on the operator rule** names it when no operand is found: "Expected an expression but found …".
+- **Messages** say how many levels the rule has. `-r` shows it as `operators` with its levels, and shows each form's production as an operator form of it.
 
 ## Parse-time hooks and contextual terminals
 
@@ -316,6 +439,7 @@ Left recursion is rewritten automatically:
 - **Indirect left recursion** (`A= B x; B= A y | z;`) is made direct by inlining, with a warning that the inlined rule loses its own node on that path.
 - **Left recursion through a nullable prefix** (`A= N A x;` where `N` can match nothing) is an error.
 - **A rule that derives exactly itself** (`A= A;`) is an error.
+- **An [operator rule](#operator-rules)** isn't rewritten as a loop. Its operator forms start or end with the rule on purpose, and precedence climbing parses them.
 
 ### Errors in other places
 
@@ -333,6 +457,19 @@ Left recursion is rewritten automatically:
 | `type` or `state` that isn't a string, such as `type=5` | Error |
 | The evaluator and the parser named the same | Error when synthesizing |
 | A non-terminal unreachable from the start symbol | Warning, unless `nowarn` |
+| [Operator rules](#operator-rules): | |
+| An operator rule that's collapsed | Error |
+| An operator rule with no atom | Error |
+| An atom, or the operator of a prefix or postfix form, that can match nothing | Error |
+| An alternative that leads back to the operator rule before reading anything, other than by starting with it (`E<operators>= E "+" E \| P; P= E "." name \| name;`) | Error: write it as an operator form instead |
+| A form's production used anywhere but as an alternative of its operator rule, or used twice | Error |
+| A form's production with more than one alternative, all of them forms | Error: group the operators instead, as in `E ( a \| b ) E` |
+| A form's production that's collapsed or is an operator rule itself | Error |
+| `assoc` that isn't `left` or `right`, or both on one form | Error |
+| `assoc` on a form that isn't infix, or outside an operator rule | Warning: it's ignored |
+| `entering` or `parsed` on a form's production | Warning: it's ignored |
+| An operator rule with no operator forms | Warning |
+| A form's production with no action, when its operator rule has one | Message: the operator rule's action evaluates it |
 
 Messages carry the file, line and column of the rule or expression they're about.
 

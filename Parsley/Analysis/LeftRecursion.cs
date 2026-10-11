@@ -84,6 +84,45 @@ namespace Parsley
 			}
 		}
 
+		/// <summary>
+		/// The productions on a path from a production back to itself through the left edges of its
+		/// alternatives (skipping nullable prefixes), starting and ending with it, or null if there is none
+		/// </summary>
+		internal static List<string>? PathBackTo(Grammar g, string name, HashSet<string> nullable)
+		{
+			var names = new HashSet<string>(g.Productions.Select(p => p.Name));
+			var corners = new Dictionary<string, HashSet<string>>();
+			foreach (var p in g.Productions)
+			{
+				var set = new HashSet<string>();
+				_LeftCorners(p.Expression, nullable, names, set);
+				corners[p.Name] = set;
+			}
+			var from = new Dictionary<string, string>();
+			var queue = new Queue<string>();
+			foreach (var c in corners[name])
+			{
+				if (c == name) return new List<string> { name, name };
+				if (from.TryAdd(c, name)) queue.Enqueue(c);
+			}
+			while (0 < queue.Count)
+			{
+				var n = queue.Dequeue();
+				foreach (var c in corners[n])
+				{
+					if (c == name)
+					{
+						var path = new List<string> { n, name };
+						for (var x = n; from[x] != name; x = from[x]) path.Insert(0, from[x]);
+						path.Insert(0, name);
+						return path;
+					}
+					if (from.TryAdd(c, n)) queue.Enqueue(c);
+				}
+			}
+			return null;
+		}
+
 		public static void Eliminate(Grammar g, IList<GrammarMessage> messages)
 		{
 			var names = new HashSet<string>(g.Productions.Select(p => p.Name));

@@ -149,7 +149,7 @@ namespace Parsley
 					_className, "Parse", "Current", "Errors", "Peek", "Advance", "Consume", "Expect", "Error", "NewNode", "Fold",
 					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "GetHashCode", "ToString", "Equals", "GetType",
 					"Start", "ReadToken", "FromLexer", "EndToken", "AdaptivePredict", "Atn",
-					"Classify", "Classified", "OnMatched", "CurrentUnclassified", "Previous"
+					"Classify", "Classified", "OnMatched", "CurrentUnclassified", "Previous", "Wrap"
 				};
 				// the methods hooks call are members too
 				foreach (var (name, _) in _Hooks()) reserved.Add(name);
@@ -309,8 +309,11 @@ namespace Parsley
 				_Line("/// </summary>");
 				_Open("public static bool TryParse(IEnumerable<Token> tokens,out ParseNode result, out IReadOnlyList<ParseError> errors)");
 				_Line($"var parser = new {_className}(tokens);");
+				// an operator rule's method takes the level it starts at, so it's called rather than passed
+				var startIsOperators = null != g.GetProduction(g.StartSymbol!)!.Operators;
 				_Line(_allStar
 					? $"result = parser.Run(() => parser.{_MethodName(g.StartSymbol!)}(-1));"
+					: startIsOperators ? $"result = parser.Run(() => parser.{_MethodName(g.StartSymbol!)}());"
 					: $"result = parser.Run(parser.{_MethodName(g.StartSymbol!)});");
                 _Line($"errors = parser.Errors;");
 				_Line($"return parser.Errors.Count == 0;");
@@ -325,8 +328,11 @@ namespace Parsley
 
                 foreach (var p in g.Productions)
 				{
+					// an operator form's own production is parsed by its operator rule
+					if (null != p.OperatorOwner) continue;
 					_Line();
-					_Production(p);
+					if (null != p.Operators) _OperatorProduction(p);
+					else _Production(p);
 				}
 				foreach (var d in _predictors.ToList())
 				{
@@ -435,15 +441,47 @@ namespace Parsley
 				{
 					var type = p.Type ?? "object";
 					_Line();
-					_Line($"// {_Comment(XbnfWriter.Write(p, false))}");
+					var written = p.Operators?.Text ?? (null != p.OperatorOwner ? p.OperatorOwner.Forms.First(f => f.Production == p).Text + ";" : null) ?? XbnfWriter.Write(p, false);
+					_Line($"// {_Comment(written)}");
 					_Open($"protected {type} {_EvaluateName(p.Name)}(ParseNode node)");
-					if (null == p.Action)
+					if (null != p.Operators)
+					{
+						// nodes of an operator form with an action of its own go to it; the rest are evaluated here
+						var own = p.Operators.Forms.Where(f => null != f.Production?.Action).Select(f => f.Production!).Distinct().ToList();
+						if (0 < own.Count)
+						{
+							_Open("switch (node.SymbolId)");
+							foreach (var q in own)
+							{
+								_Line($"case {_const[_s.GetId(q.Name)]}:");
+								++_indent;
+								_Line($"return {_Cast(q.Type, p.Type)}{_EvaluateName(q.Name)}(node);");
+								--_indent;
+							}
+							_Close();
+						}
+					}
+					if (null != p.OperatorOwner && null == p.Action)
+					{
+						// no action of its own: the operator rule's action evaluates it
+						var rule = p.OperatorOwner.Production;
+						_Line($"return {_Cast(rule.Type, p.Type)}{_EvaluateName(rule.Name)}(node);");
+					}
+					else if (null == p.Action)
 						_Line(null == p.Type ? "return _PassThrough(node);" : $"return ({type})_PassThrough(node);");
 					else
 						_ActionBody(p.Action);
 					_Close();
 				}
 				_Close();
+			}
+
+			// a cast from one evaluate method's type to another's, when they're written differently. Parsley doesn't
+			// know C#'s conversions, so it casts and lets the compiler say whether that's allowed
+			static string _Cast(string? from, string? to)
+			{
+				static string norm(string? t) => string.Concat((t ?? "object").Where(c => !char.IsWhiteSpace(c)));
+				return norm(from) == norm(to) ? "" : $"({to ?? "object"})";
 			}
 
 			// the action's code, re-indented to sit in its method. code with a string literal that spans
@@ -516,9 +554,86 @@ namespace Parsley
 				}
 			}
 
-			// emits the code for an expression. known: the token already established as Current, if any
-			void _Expr(Expression e, string node, IReadOnlyList<int>? known, Production p, bool isRoot)
+			// an operator rule, parsed by precedence climbing: an operand (an atom, or a prefix form and its operand),
+			// then a loop that applies infix and postfix forms for as long as they bind at least as tightly as
+			// minLevel. A form's operand is parsed by a call that starts at the form's level, so it takes the
+			// operators that bind tighter and leaves the rest to this loop.
+			void _OperatorProduction(Production p)
 			{
+				var rule = p.Operators!;
+				var id = _s.GetId(p.Name);
+				_Line($"// {_Comment(rule.Text)}");
+				_Line("// an operator rule, parsed by precedence climbing. minLevel is the loosest operator this call may apply:");
+				_Line("// a looser one is left for the call that's waiting for this operand");
+				var enter = _allStar ? $"Enter({_const[id]}, returnState);" : $"Enter({_const[id]});";
+				_Open($"ParseNode {_MethodName(p.Name)}({(_allStar ? "int returnState, " : "")}int minLevel = 0)");
+				_Line(enter);
+				_Line($"var node = NewNode({_const[id]});");
+				if (null != p.Entering) _Line($"{p.Entering}();");
+				_Expr(rule.Primary, "node", null, p, true);
+				if (null != rule.Loop)
+				{
+					_Expr(rule.Loop, "node", null, p, false);
+					--_indent;
+					_Line("done:");
+					++_indent;
+				}
+				if (null != p.Parsed) _Line($"{p.Parsed}(node);");
+				_Line("Leave();");
+				_Line("return node;");
+				_Close();
+			}
+
+			static string _Describe(OperatorForm f) => f.Kind switch
+			{
+				OperatorKind.Atom => "an atom",
+				OperatorKind.Prefix => $"prefix, level {f.Level}",
+				OperatorKind.Postfix => $"postfix, level {f.Level}",
+				_ => $"infix, level {f.Level}, {(f.IsRightAssociative ? "right" : "left")} associative"
+			};
+
+			// one operator form, chosen by the decision it's an alternative of
+			void _OperatorForm(OperatorForm f, string node, IReadOnlyList<int>? known, Production p)
+			{
+				_Line($"// {_Comment(f.Text)} ({_Describe(f)})");
+				var symbol = _const[_s.GetId(f.Symbol)];
+				switch (f.Kind)
+				{
+					case OperatorKind.Atom:
+						_Expr(f.Option, node, known, p, false, true);
+						return;
+					case OperatorKind.Prefix:
+						// node is new, made for the operand; a form with a production of its own makes its own instead
+						if (null != f.Production) _Line($"{node} = NewNode({symbol});");
+						break;
+					default:
+						_Line($"if ({f.Level} < minLevel) goto done;");
+						_Line($"{node} = Wrap({symbol}, {node});");
+						break;
+				}
+				foreach (var item in f.Operator)
+				{
+					_Expr(item, node, known, p, false);
+					if (null != known && 0 < known.Count && item is SymbolRef sr && _s.GetId(sr.Name!) == known[0])
+						known = known.Skip(1).ToList();
+					else
+						known = null;
+				}
+				if (null == f.Operand) return;
+				// left associative: the operand stops at this level's own operators, so they apply to this node next
+				var level = OperatorKind.Infix == f.Kind && !f.IsRightAssociative ? f.Level + 1 : f.Level;
+				var ret = _allStar ? _a.Atn.GetReturnState(f.Operand).ToString() + ", " : "";
+				_Line($"{node}.Add({_MethodName(p.Name)}({ret}{level}));");
+			}
+
+			// emits the code for an expression. known: the token already established as Current, if any
+			void _Expr(Expression e, string node, IReadOnlyList<int>? known, Production p, bool isRoot, bool asWritten = false)
+			{
+				if (!asWritten && _a.GetOperatorForm(e) is OperatorForm form)
+				{
+					_OperatorForm(form, node, known, p);
+					return;
+				}
 				switch (e)
 				{
 					case EmptyExpression:
@@ -567,9 +682,12 @@ namespace Parsley
 			{
 				// a decision that is the whole body of a loop or optional is already described by its parent's comment
 				var parent = _a.GetParent(d.Node);
-				if (!isRoot && !(parent is Repeat || parent is OptionalExpression))
+				var operatorLoop = _a.IsOperatorLoop(d.Node);
+				if (operatorLoop)
+					_Line("// apply infix and postfix operators while the next token starts one");
+				else if (!isRoot && !(parent is Repeat || parent is OptionalExpression) && !(null != _a.GetOperatorForm(d.Node)))
 					_Line($"// {_Comment(d.Node.ToString())}");
-				if (null != d.AppliedPolicy)
+				if (null != d.AppliedPolicy && !operatorLoop)
 					_Line($"// ambiguous within {_a.MaxK} tokens; resolved {(d.Kind == DecisionKind.Alternation ? "by taking the first alternative" : "greedy" == d.AppliedPolicy ? "greedily" : "lazily")}");
 				if (d.IsAdaptive)
 				{

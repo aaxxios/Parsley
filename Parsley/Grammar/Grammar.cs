@@ -41,9 +41,27 @@ namespace Parsley
 		/// (for a collapsed production, the node its children went into)
 		/// </summary>
 		public string? Parsed => Attributes.Get("parsed") as string;
+		/// <summary>
+		/// For a production marked <c>operators</c>, after analysis: its forms and how it's parsed. Null otherwise.
+		/// </summary>
+		public OperatorRule? Operators { get; internal set; }
+		/// <summary>
+		/// For a production that is an operator form of an operator rule (<c>Sum= Expr add Expr;</c>, used as an
+		/// alternative of <c>Expr</c>), after analysis: that rule. The rule parses it and makes its nodes, so
+		/// it has no parse method of its own. Null otherwise.
+		/// </summary>
+		public OperatorRule? OperatorOwner { get; internal set; }
+		/// <summary>
+		/// The expression as written, kept when analysis rewrites it for an operator rule, so a copy of an
+		/// analyzed grammar can be analyzed again from the start
+		/// </summary>
+		internal Expression? Written { get; set; }
+		/// <summary>
+		/// A deep copy. A production rewritten as part of an operator rule is copied as it was written.
+		/// </summary>
 		public Production Clone()
 		{
-			var result = new Production(Name, Expression.Clone()) { Action = Action?.Clone() };
+			var result = new Production(Name, (Written ?? Expression).Clone()) { Action = Action?.Clone() };
 			result.CopyLocation(this);
 			foreach (var a in Attributes)
 				result.Attributes.Add(a.Clone());
@@ -464,9 +482,9 @@ namespace Parsley
 					result.Add(new GrammarMessage(ErrorLevel.Warning, $"Production \"{p.Name}\" is unreachable from the start symbol", p));
 			return result;
 		}
-		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state", "entering", "parsed", "when", "matched" };
+		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state", "entering", "parsed", "when", "matched", "operators", "assoc" };
 		static bool _IsMethodName(string s) => 0 < s.Length && (char.IsLetter(s[0]) || '_' == s[0]) && s.All(ch => char.IsLetterOrDigit(ch) || '_' == ch);
-		static readonly HashSet<string> _expressionAttributes = new HashSet<string> { "policy", "sync", "expected" };
+		static readonly HashSet<string> _expressionAttributes = new HashSet<string> { "policy", "sync", "expected", "assoc" };
 		static void _ValidateAttributes(AttributeList attrs, GrammarNode owner, bool isProduction, IList<GrammarMessage> result)
 		{
 			foreach (var a in attrs)
@@ -503,6 +521,10 @@ namespace Parsley
 					case "parsed":
 						if (!(a.Value is string m) || !_IsMethodName(m))
 							result.Add(new GrammarMessage(ErrorLevel.Error, $"{a.Name} expects the name of a C# method, such as {a.Name}=\"{("entering" == a.Name ? "PushScope" : "OnDeclaration")}\"", a));
+						break;
+					case "assoc":
+						if (!(a.Value is string s3) || (s3 != "left" && s3 != "right"))
+							result.Add(new GrammarMessage(ErrorLevel.Error, "assoc expects \"left\" or \"right\"", a));
 						break;
 					case "when":
 						result.Add(new GrammarMessage(ErrorLevel.Error, "when makes a contextual terminal, so the rule must be exactly one terminal, as in typedef_name<when=\"IsTypedefName\">= identifier;", a));

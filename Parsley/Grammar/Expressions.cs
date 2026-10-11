@@ -237,7 +237,8 @@ namespace Parsley
 		public static string Write(Production p, bool withAction)
 		{
 			var action = withAction && null != p.Action ? " => " + p.Action.ToString() : "";
-			return string.Concat(p.Name, p.Attributes.ToString(), "= ", Write(p.Expression), action, ";");
+			// an operator rule and its forms' productions as written, not as analysis rewrote them
+			return string.Concat(p.Name, p.Attributes.ToString(), "= ", Write(p.Written ?? p.Expression), action, ";");
 		}
 		public static string Write(TerminalDeclaration t) => string.Concat(t.Name, t.Attributes.ToString(), "= ", Write(t.Definition), ";");
 		public static string Write(Grammar g)

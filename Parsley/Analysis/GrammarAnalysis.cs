@@ -105,6 +105,8 @@ namespace Parsley
 		readonly Dictionary<Expression, Expression?> _parents = new(ReferenceEqualityComparer.Instance);
 		readonly Dictionary<Expression, Production> _owners = new(ReferenceEqualityComparer.Instance);
 		readonly List<GrammarMessage> _messages = new();
+		readonly Dictionary<Expression, OperatorForm> _forms = new(ReferenceEqualityComparer.Instance);
+		readonly HashSet<Expression> _operatorLoops = new(ReferenceEqualityComparer.Instance);
 		HashSet<string> _nullable = new();
 		GrammarAtn? _atn;
 		Runtime.Atn? _runtimeAtn;
@@ -149,6 +151,14 @@ namespace Parsley
 		public Decision? GetDecision(Expression node) => _decisions.TryGetValue(node, out var d) ? d : null;
 		public Expression? GetParent(Expression node) => _parents.TryGetValue(node, out var p) ? p : null;
 		public Production GetOwner(Expression node) => _owners[node];
+		/// <summary>
+		/// The operator form an alternative of an operator rule is, or null if the expression isn't one
+		/// </summary>
+		public OperatorForm? GetOperatorForm(Expression option) => _forms.TryGetValue(option, out var f) ? f : null;
+		/// <summary>
+		/// True for the loop over an operator rule's infix and postfix forms
+		/// </summary>
+		public bool IsOperatorLoop(Expression node) => _operatorLoops.Contains(node);
 		public bool IsNullable(Expression e) => LeftRecursion.IsNullable(e, _nullable);
 		/// <summary>
 		/// The deepest lookahead any decision needs
@@ -192,12 +202,22 @@ namespace Parsley
 		{
 			_messages.AddRange(Grammar.Validate());
 			if (HasErrors) return;
+			OperatorRules.Rewrite(Grammar, _messages);
+			if (HasErrors) return;
 			LeftRecursion.Eliminate(Grammar, _messages);
 			if (HasErrors) return;
 			Symbols = new SymbolTable(Grammar);
 			_nullable = LeftRecursion.ComputeNullable(Grammar);
 			foreach (var p in Grammar.Productions)
 				_Index(p, p.Expression, null);
+			foreach (var p in Grammar.Productions)
+				if (null != p.Operators)
+				{
+					foreach (var f in p.Operators.Forms)
+						_forms[f.Option] = f;
+					if (null != p.Operators.Loop)
+						_operatorLoops.Add(p.Operators.Loop);
+				}
 			foreach (var p in Grammar.Productions)
 			{
 				var index = 0;
@@ -472,6 +492,11 @@ namespace Parsley
 
 		void _Resolve(Decision d)
 		{
+			if (_operatorLoops.Contains(d.Node))
+			{
+				_ResolveOperatorLoop(d);
+				return;
+			}
 			_explorer ??= new LookaheadExplorer(this, Decisions);
 			var branchCount = d.Node is Alternation alt ? alt.Options.Count : 2;
 			var policy = _Policy(d);
@@ -519,6 +544,25 @@ namespace Parsley
 			d.Branches = r.Branches;
 			d.AppliedPolicy = applied;
 			_ChooseDefault(d);
+		}
+
+		// the loop of an operator rule goes around whenever the next token can start an infix or postfix form.
+		// Without precedence, the rewritten rule is ambiguous there: an operand's own loop could take the
+		// operator, or leave it to the loop of the call that's waiting for it. Precedence is what settles
+		// that, at parse time, so one token is all the loop looks at.
+		void _ResolveOperatorLoop(Decision d)
+		{
+			var sets = _BranchSets(d, 1);
+			var go = new HashSet<LookaheadString>(sets[0].Where(x => 0 < x.Count));
+			var tokens = new HashSet<int>(go.Select(x => x[0]));
+			var stop = new HashSet<LookaheadString>(sets[1].Where(x => 0 < x.Count && !tokens.Contains(x[0])));
+			d.Depth = 1;
+			d.Branches = new[] { go, stop };
+			if (stop.Count != sets[1].Count(x => 0 < x.Count))
+				d.AppliedPolicy = "greedy";
+			// test for the operators rather than for what can follow: anything else ends the operand, and
+			// the caller says what it expected there
+			d.DefaultBranch = 1;
 		}
 
 		// picks what unmatched input does, which also decides the shape of the emitted test

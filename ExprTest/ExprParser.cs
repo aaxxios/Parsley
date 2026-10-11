@@ -14,10 +14,10 @@ public partial class ExprParser : LL1ParserBase
 {
 	#region Symbols
 	public const int Expr = 0;
-	public const int Term = 1;
-	public const int Unary = 2;
-	public const int Power = 3;
-	public const int Primary = 4;
+	public const int Power = 1;
+	public const int Negate = 2;
+	public const int Product = 3;
+	public const int Sum = 4;
 	public const int Number = 5;
 	public const int Add = 6; // "+"
 	public const int Sub = 7; // "-"
@@ -41,7 +41,7 @@ public partial class ExprParser : LL1ParserBase
 	public static bool TryParse(IEnumerable<Token> tokens,out ParseNode result, out IReadOnlyList<ParseError> errors)
 	{
 		var parser = new ExprParser(tokens);
-		result = parser.Run(parser.ParseExpr);
+		result = parser.Run(() => parser.ParseExpr());
 		errors = parser.Errors;
 		return parser.Errors.Count == 0;
 	}
@@ -54,123 +54,109 @@ public partial class ExprParser : LL1ParserBase
 		return result;
 	}
 
-	// Expr<start, type="double">= Term { add Term | sub Term }; (left recursion rewritten as a loop)
-	ParseNode ParseExpr()
+	// Expr<start, type="double", operators, expected="an expression">= Power | Negate | Product | Sum | number | lparen Expr rparen;
+	// an operator rule, parsed by precedence climbing. minLevel is the loosest operator this call may apply:
+	// a looser one is left for the call that's waiting for this operand
+	ParseNode ParseExpr(int minLevel = 0)
 	{
 		Enter(Expr);
 		var node = NewNode(Expr);
-		node.Add(ParseTerm());
-		// { add Term | sub Term }
-		while (Current.SymbolId is Add or Sub)
+		switch (Current.SymbolId)
 		{
-			node = Fold(node);
-			if (Current.SymbolId == Add)
-			{
+			case Sub:
+				// Negate<type="double">= sub Expr (prefix, level 5)
+				node = NewNode(Negate);
 				Consume(node);
-				node.Add(ParseTerm());
-			}
-			else
-			{
-				Expect(Sub, node);
-				node.Add(ParseTerm());
-			}
+				node.Add(ParseExpr(5));
+				break;
+			case Number:
+				// number (an atom)
+				Consume(node);
+				break;
+			case Lparen:
+				// lparen Expr rparen (an atom)
+				Consume(node);
+				node.Add(ParseExpr());
+				Expect(Rparen, node);
+				break;
+			default:
+				Error(node, "an expression", Number, Sub, Lparen);
+				break;
 		}
-		Leave();
-		return node;
-	}
-
-	// Term<type="double">= Unary { mul Unary | div Unary | mod Unary }; (left recursion rewritten as a loop)
-	ParseNode ParseTerm()
-	{
-		Enter(Term);
-		var node = NewNode(Term);
-		node.Add(ParseUnary());
-		// { mul Unary | div Unary | mod Unary }
-		while (Current.SymbolId is Mul or Div or Mod)
+		// apply infix and postfix operators while the next token starts one
+		while (s_set2[Current.SymbolId])
 		{
-			node = Fold(node);
 			switch (Current.SymbolId)
 			{
+				case Pow:
+					// Power<type="double", assoc="right">= Expr pow Expr (infix, level 6, right associative)
+					if (6 < minLevel) goto done;
+					node = Wrap(Power, node);
+					Consume(node);
+					node.Add(ParseExpr(6));
+					break;
 				case Mul:
 				case Div:
 				case Mod:
-					Consume(node);
-					node.Add(ParseUnary());
+					// Product<type="double">= Expr ( mul | div | mod ) Expr (infix, level 4, left associative)
+					if (4 < minLevel) goto done;
+					node = Wrap(Product, node);
+					// mul | div | mod
+					switch (Current.SymbolId)
+					{
+						case Mul:
+						case Div:
+						case Mod:
+							Consume(node);
+							break;
+						default:
+							Error(node, null, Mul, Div, Mod);
+							break;
+					}
+					node.Add(ParseExpr(5));
+					break;
+				case Add:
+				case Sub:
+					// Sum<type="double">= Expr ( add | sub ) Expr (infix, level 3, left associative)
+					if (3 < minLevel) goto done;
+					node = Wrap(Sum, node);
+					// add | sub
+					if (Current.SymbolId == Add)
+					{
+						Consume(node);
+					}
+					else
+					{
+						Expect(Sub, node);
+					}
+					node.Add(ParseExpr(4));
 					break;
 				default:
-					Error(node, null, Mul, Div, Mod);
+					Error(node, null, Add, Sub, Mul, Div, Mod, Pow);
 					break;
 			}
 		}
+	done:
 		Leave();
 		return node;
-	}
-
-	// Unary<type="double">= sub Unary | Power;
-	ParseNode ParseUnary()
-	{
-		Enter(Unary);
-		var node = NewNode(Unary);
-		if (Current.SymbolId == Sub)
-		{
-			Consume(node);
-			node.Add(ParseUnary());
-		}
-		else
-		{
-			node.Add(ParsePower());
-		}
-		Leave();
-		return node;
-	}
-
-	// Power<type="double">= Primary [ pow Unary ];
-	ParseNode ParsePower()
-	{
-		Enter(Power);
-		var node = NewNode(Power);
-		ParsePrimary(node);
-		// [ pow Unary ]
-		if (Current.SymbolId == Pow)
-		{
-			Consume(node);
-			node.Add(ParseUnary());
-		}
-		Leave();
-		return node;
-	}
-
-	// Primary<collapsed>= number | lparen Expr rparen;
-	void ParsePrimary(ParseNode parent)
-	{
-		Enter(Primary);
-		if (Current.SymbolId == Number)
-		{
-			Consume(parent);
-		}
-		else
-		{
-			Expect(Lparen, parent);
-			parent.Add(ParseExpr());
-			Expect(Rparen, parent);
-		}
-		Leave();
 	}
 
 	#region Tables
+	// "+", "-", "*", "/", "%", "^"
+	static readonly bool[] s_set2 = ParserTables.Set(SymbolCount, Add, Sub, Mul, Div, Mod, Pow);
 	static readonly ParserTables s_tables = new(
 		terminalStart: Number, // lexer ids count terminals from 0; the parser adds this
-		symbolNames: ["Expr", "Term", "Unary", "Power", "Primary", "number", "add", "sub", "mul", "div", "mod", "pow", "lparen", "rparen", "whitespace", "#EOS", "#ERROR"],
-		displayNames: ["Expr", "Term", "Unary", "Power", "Primary", "number", "\"+\"", "\"-\"", "\"*\"", "\"/\"", "\"%\"", "\"^\"", "\"(\"", "\")\"", "whitespace", "end of input", "an unrecognized token"],
+		symbolNames: ["Expr", "Power", "Negate", "Product", "Sum", "number", "add", "sub", "mul", "div", "mod", "pow", "lparen", "rparen", "whitespace", "#EOS", "#ERROR"],
+		displayNames: ["Expr", "Power", "Negate", "Product", "Sum", "number", "\"+\"", "\"-\"", "\"*\"", "\"/\"", "\"%\"", "\"^\"", "\"(\"", "\")\"", "whitespace", "end of input", "an unrecognized token"],
 		collapsedTerminals: [Lparen, Rparen],
 		// for each non-terminal, where error recovery can stop while parsing it: what can follow it, plus its sync terminals
 		recoverySets:
 		[
-			[Rparen, EndOfInput], // Expr
-			[Add, Sub, Rparen, EndOfInput], // Term
-			[Add, Sub, Mul, Div, Mod, Rparen, EndOfInput], // Unary
-			[Add, Sub, Mul, Div, Mod, Rparen, EndOfInput], // Power
-			[Add, Sub, Mul, Div, Mod, Pow, Rparen, EndOfInput] // Primary
+			[Add, Sub, Mul, Div, Mod, Pow, Rparen, EndOfInput], // Expr
+			[], // Power
+			[], // Negate
+			[], // Product
+			[] // Sum
 		],
 		syncTerminals: [],
 		endOfInput: EndOfInput,
@@ -185,10 +171,10 @@ public partial class ExprEvaluator
 {
 	#region Symbols
 	protected const int Expr = 0;
-	protected const int Term = 1;
-	protected const int Unary = 2;
-	protected const int Power = 3;
-	protected const int Primary = 4;
+	protected const int Power = 1;
+	protected const int Negate = 2;
+	protected const int Product = 3;
+	protected const int Sum = 4;
 	protected const int Number = 5;
 	protected const int Add = 6; // "+"
 	protected const int Sub = 7; // "-"
@@ -229,33 +215,56 @@ public partial class ExprEvaluator
 		{
 			case Expr:
 				return EvaluateExpr(node);
-			case Term:
-				return EvaluateTerm(node);
-			case Unary:
-				return EvaluateUnary(node);
 			case Power:
 				return EvaluatePower(node);
+			case Negate:
+				return EvaluateNegate(node);
+			case Product:
+				return EvaluateProduct(node);
+			case Sum:
+				return EvaluateSum(node);
 		}
 		throw new InvalidOperationException($"{node.Symbol} can't be evaluated");
 	}
 
-	// Expr<start, type="double">= Term { add Term | sub Term };
+	// Expr<start, type="double", operators, expected="an expression">= Power | Negate | Product | Sum | number | lparen Expr rparen;
 	protected double EvaluateExpr(ParseNode node)
 	{
-		if (1 == node.Children.Count)
-		    return EvaluateTerm(node.Children[0]);
-		var left = EvaluateExpr(node.Children[0]);
-		var right = EvaluateTerm(node.Children[2]);
-		return Add == node.Children[1].SymbolId ? left + right : left - right;
+		switch (node.SymbolId)
+		{
+			case Power:
+				return EvaluatePower(node);
+			case Negate:
+				return EvaluateNegate(node);
+			case Product:
+				return EvaluateProduct(node);
+			case Sum:
+				return EvaluateSum(node);
+		}
+		// an atom: a number token, or the Expr between the parentheses, which are collapsed
+		var first = node.Children[0];
+		return Number == first.SymbolId
+		    ? double.Parse(first.Value!, System.Globalization.CultureInfo.InvariantCulture)
+		    : EvaluateExpr(first);
 	}
 
-	// Term<type="double">= Unary { mul Unary | div Unary | mod Unary };
-	protected double EvaluateTerm(ParseNode node)
+	// Power<type="double", assoc="right">= Expr pow Expr;
+	protected double EvaluatePower(ParseNode node)
 	{
-		if (1 == node.Children.Count)
-		    return EvaluateUnary(node.Children[0]);
-		var left = EvaluateTerm(node.Children[0]);
-		var right = EvaluateUnary(node.Children[2]);
+		return Math.Pow(EvaluateExpr(node.Children[0]), EvaluateExpr(node.Children[2]));
+	}
+
+	// Negate<type="double">= sub Expr;
+	protected double EvaluateNegate(ParseNode node)
+	{
+		return -EvaluateExpr(node.Children[1]);
+	}
+
+	// Product<type="double">= Expr ( mul | div | mod ) Expr;
+	protected double EvaluateProduct(ParseNode node)
+	{
+		var left = EvaluateExpr(node.Children[0]);
+		var right = EvaluateExpr(node.Children[2]);
 		switch (node.Children[1].SymbolId)
 		{
 		    case Mul: return left * right;
@@ -264,23 +273,11 @@ public partial class ExprEvaluator
 		}
 	}
 
-	// Unary<type="double">= sub Unary | Power;
-	protected double EvaluateUnary(ParseNode node)
+	// Sum<type="double">= Expr ( add | sub ) Expr;
+	protected double EvaluateSum(ParseNode node)
 	{
-		if (2 == node.Children.Count)
-		    return -EvaluateUnary(node.Children[1]);
-		return EvaluatePower(node.Children[0]);
-	}
-
-	// Power<type="double">= Primary [ pow Unary ];
-	protected double EvaluatePower(ParseNode node)
-	{
-		var first = node.Children[0];
-		var value = Number == first.SymbolId
-		    ? double.Parse(first.Value!, System.Globalization.CultureInfo.InvariantCulture)
-		    : EvaluateExpr(first);
-		if (1 == node.Children.Count)
-		    return value;
-		return Math.Pow(value, EvaluateUnary(node.Children[2]));
+		var left = EvaluateExpr(node.Children[0]);
+		var right = EvaluateExpr(node.Children[2]);
+		return Add == node.Children[1].SymbolId ? left + right : left - right;
 	}
 }
