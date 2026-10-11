@@ -27,7 +27,7 @@ The synthesized class plus `ParsleyRuntime.cs` compile on their own (C# 12, .NET
 ```csharp
 try 
 {
-    ParseNode tree = JsonParser.Parse(tokens);   // IEnumerable<Token> straight from the lexer
+    var tree = JsonParser.Parse(tokens);   // IEnumerable<Token> straight from the lexer
     Console.WriteLine(tree);
 }
 catch(Parsley.Runtime.ParseException ex) {
