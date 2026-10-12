@@ -1,6 +1,6 @@
 {
-  "name": "parsley-xbnf",
-  "displayName": "Parsley XBNF",
+  "name": "parsley-xbnf-lsp",
+  "displayName": "Parsley XBNF Language Provider",
   "description": "Highlighting and language support for Parsley's XBNF grammars: go to definition, find references, completion, hover and diagnostics.",
   "version": "1.0.0",
   "publisher": "honey-the-codewitch",

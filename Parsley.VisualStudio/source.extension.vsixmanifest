@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="Parsley.VisualStudio.8bf67476-aa11-4394-9930-66b18aaf44a4" Version="1.0.0" Language="en-US" Publisher="honey the codewitch" />
+    <Identity Id="Parsley.VisualStudio.8bf67476-aa11-4394-9930-66b18aaf44a4" Version="1.0.0" Language="en-US" Publisher="Dana John" />
     <DisplayName>Parsley XBNF</DisplayName>
     <Description xml:space="preserve">Syntax highlighting and language support for Parsley's XBNF grammars: go to definition, find references, completion, hover, and the grammar's errors and warnings.</Description>
     <MoreInfo>https://github.com/codewitch-honey-crisis/Parsley/</MoreInfo>
@@ -17,10 +17,10 @@
     </InstallationTarget>
   </Installation>
   <Prerequisites>
-    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,)" DisplayName="Visual Studio core editor" />
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" DisplayName="Visual Studio core editor" Version="[17.0,)" />
   </Prerequisites>
   <Assets>
-    <Asset Type="Microsoft.VisualStudio.MefComponent" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|%CurrentProject%|" />
-    <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="File" Path="xbnf.pkgdef" />
+    <Asset Type="Microsoft.VisualStudio.MefComponent" Path="|%CurrentProject%|" d:Source="Project" d:ProjectName="%CurrentProject%" />
+    <Asset Type="Microsoft.VisualStudio.VsPackage" Path="xbnf.pkgdef" d:Source="File" />
   </Assets>
 </PackageManifest>
