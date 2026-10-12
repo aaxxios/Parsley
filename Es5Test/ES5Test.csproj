@@ -59,11 +59,11 @@
   </Target>
 
   <!-- Step 5: compile the generated files even on a clean build, when they didn't exist yet as the
-       project was loaded. Remove first, so a build that already found them doesn't list them twice. -->
+       project was loaded. Remove first, so a build that already found them doesn't list them twice. 
   <Target Name="IncludeGeneratedES5Sources" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateES5Lexer;GenerateES5RegexLexer">
     <ItemGroup>
       <Compile Remove="$(SourceDir)ES5Parser.cs;$(SourceDir)ES5Lexer.cs;$(SourceDir)ES5RegexLexer.cs;$(SourceDir)ParsleyRuntime.cs;$(SourceDir)LLkParserBase.cs" />
       <Compile Include="$(SourceDir)ES5Parser.cs;$(SourceDir)ES5Lexer.cs;$(SourceDir)ES5RegexLexer.cs;$(SourceDir)ParsleyRuntime.cs;$(SourceDir)LLkParserBase.cs" />
     </ItemGroup>
-  </Target>
+  </Target>-->
 </Project>
