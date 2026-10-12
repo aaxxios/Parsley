@@ -14,6 +14,17 @@
   <PropertyGroup>
     <BinDir Condition="'$(SolutionDir)' != '' and '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)bin\</BinDir>
     <BinDir Condition="'$(BinDir)' == ''">$(MSBuildProjectDirectory)\..\bin\</BinDir>
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <Title>Parsley Parser Synthesizer</Title>
+    <Authors>honey the codewitch</Authors>
+    <Copyright>Copyright (C) by honey the codewitch</Copyright>
+    <Description>An advanced LL parser synthesizer for C#</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/codewitch-honey-crisis/Parsley/</RepositoryUrl>
+    <PackageTags>Parser;Generator</PackageTags>
+    <PackAsTool>True</PackAsTool>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="C99Parser.Typedefs.cs" />
@@ -38,6 +49,16 @@
 
     <Copy SourceFiles="@(_ToolDeps)" DestinationFiles="@(_ToolDeps->'$(BinDir)%(DestinationSubDirectory)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
+  <ItemGroup>
+    <None Include="..\LICENSE.txt">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
   <ItemGroup>    
     <PackageReference Include="Cli.Generator" Version="1.0.0">
       <PrivateAssets>all</PrivateAssets>

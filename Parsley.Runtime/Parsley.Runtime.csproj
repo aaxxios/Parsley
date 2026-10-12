@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>Parsley Runtime</Title>
+    <Authors>honey the codewitch</Authors>
+    <Description>The runtime for the Parsley parser synthesizer</Description>
+    <Copyright>Copyright (C) 2026 by honey the codewitch</Copyright>
+    <RepositoryUrl>https://github.com/codewitch-honey-crisis/Parsley/</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\Parsley\Runtime\AllStarParserBase.cs" Link="AllStarParserBase.cs">
+      <LogicalName>Parsley.Runtime.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\Parsley\Runtime\LL1ParserBase.cs" Link="LL1ParserBase.cs">
+      <LogicalName>Parsley.Runtime.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\Parsley\Runtime\LLkParserBase.cs" Link="LLkParserBase.cs">
+      <LogicalName>Parsley.Runtime.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\Parsley\Runtime\ParsleyRuntime.cs" Link="ParsleyRuntime.cs">
+      <LogicalName>Parsley.Runtime.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\LICENSE.txt">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+
+</Project>

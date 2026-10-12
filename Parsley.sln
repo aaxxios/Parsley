@@ -34,6 +34,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ES5Test", "Es5Test\ES5Test.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BamcTest", "BamcTest\BamcTest.csproj", "{760FDD75-C726-F095-EA81-CAC79936A6B1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Parsley.Runtime", "Parsley.Runtime\Parsley.Runtime.csproj", "{A44D4487-F7F3-4052-BD10-C96168E1E49C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -72,6 +74,10 @@ Global
 		{760FDD75-C726-F095-EA81-CAC79936A6B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{760FDD75-C726-F095-EA81-CAC79936A6B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{760FDD75-C726-F095-EA81-CAC79936A6B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A44D4487-F7F3-4052-BD10-C96168E1E49C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A44D4487-F7F3-4052-BD10-C96168E1E49C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A44D4487-F7F3-4052-BD10-C96168E1E49C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A44D4487-F7F3-4052-BD10-C96168E1E49C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
