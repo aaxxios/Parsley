@@ -69,6 +69,10 @@ namespace Parsley.Generator
                     /// Use Unicode character classes in the lexer
                     /// </summary>
                     public bool Unicode { get; set; }
+                    /// Generate the lexer
+                    /// </summary>
+                    public bool Lexer { get; set; } = true;
+                    
                     /// <summary>
                     /// The parsing engine. Defaults to the lightest the grammar allows.
                     /// </summary>
@@ -150,6 +154,7 @@ namespace Parsley.Generator
                     var engine = (ParserEngine)e;
                     spc.AddSource($"Parsley.Runtime.{engine.BaseClassName()}.g.cs", SourceText.From(_Generated(CSharpSynthesizer.BaseSource(engine)), Encoding.UTF8));
                 }
+                
                 spc.AddSource("Luthor.Runtime.LuthorRuntime.g.cs", SourceText.From(_Generated(LexerEmitter.RuntimeSource), Encoding.UTF8));
             });
         }
@@ -170,12 +175,14 @@ namespace Parsley.Generator
             if (1 == attr.ConstructorArguments.Length && attr.ConstructorArguments[0].Value is string s && 0 < s.Trim().Length)
                 grammarFile = s.Trim();
             var unicode = false;
+            var lexer = true;
             var engine = 0;
             foreach (var arg in attr.NamedArguments)
             {
                 switch (arg.Key)
                 {
                     case "Unicode": unicode = arg.Value.Value is bool b && b; break;
+                    case "Lexer": lexer = arg.Value.Value is bool bl && bl; break;
                     case "Engine": engine = arg.Value.Value is int e ? e : 0; break;
                 }
             }
@@ -208,6 +215,7 @@ namespace Parsley.Generator
                 node.SyntaxTree.FilePath,
                 grammarFile,
                 unicode,
+                lexer,
                 engine,
                 new EquatableArray<string>(symbol.MemberNames.Distinct().OrderBy(m => m, StringComparer.Ordinal)),
                 attrLocation,

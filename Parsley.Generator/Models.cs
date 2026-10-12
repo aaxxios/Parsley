@@ -70,6 +70,7 @@ namespace Parsley.Generator
         string SourceFilePath,
         string? GrammarFile,
         bool Unicode,
+        bool Lexer,
         int Engine,
         EquatableArray<string> MemberNames,
         LocationInfo? AttributeLocation,

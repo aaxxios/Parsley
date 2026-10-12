@@ -120,7 +120,7 @@ namespace Parsley
 		public static bool IsValidNamespace(string? ns)
 		{
 			if (string.IsNullOrEmpty(ns)) return false;
-			foreach (var part in ns.Split('.'))
+			foreach (var part in ns!.Split('.'))
 			{
 				var i = 0 < part.Length && '@' == part[0] ? 1 : 0;
 				if (i >= part.Length || !(char.IsLetter(part[i]) || '_' == part[i])) return false;
