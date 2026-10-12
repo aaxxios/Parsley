@@ -14,7 +14,7 @@ If you want to use the Visual Studio XBNF Language support
 https://marketplace.visualstudio.com/items?itemName=honey-the-codewitch.parsley123
 
 Or for VS Code
-https://marketplace.visualstudio.com/manage/publishers/honey-the-codewitch/extensions/parsley-xbnf-lsp/
+https://marketplace.visualstudio.com/items?itemName=honey-the-codewitch.parsley-xbnf-lsp
 
 ## Use
 
