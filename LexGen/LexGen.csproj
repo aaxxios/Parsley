@@ -23,6 +23,7 @@
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <SignAssembly>True</SignAssembly>
     <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Templates\LuthorRuntime.cs" />
