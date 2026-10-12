@@ -25,6 +25,7 @@
     <PackageTags>Parser;Generator</PackageTags>
     <PackAsTool>True</PackAsTool>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <PackageId>parsley-tool</PackageId>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="C99Parser.Typedefs.cs" />

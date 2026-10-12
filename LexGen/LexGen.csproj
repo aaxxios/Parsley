@@ -14,12 +14,31 @@
   <PropertyGroup>
     <BinDir Condition="'$(SolutionDir)' != '' and '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)bin\</BinDir>
     <BinDir Condition="'$(BinDir)' == ''">$(MSBuildProjectDirectory)\..\bin\</BinDir>
+    <PackAsTool>True</PackAsTool>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/codewitch-honey-crisis/Parsley</RepositoryUrl>
+    <PackageTags>lexer;tokenizer</PackageTags>
+    <Description>Luthor lexer generator in a Parsley friendly package</Description>
+    <Copyright>Copyright (C) 2026 by honey the codewitch</Copyright>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Templates\LuthorRuntime.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Templates\LuthorRuntime.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\Luthor\LICENSE.txt">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\..\Luthor\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

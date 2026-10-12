@@ -2,6 +2,14 @@
 
 A parser generator utilizing code synthesis. It looks at what each grammar actually needs and synthesizes the lightest parser that can do it: LL(1), LL(k), or ALL(\*).
 
+## Install
+
+For the main Parsley tool
+`dotnet tool install parsley-tool -g`
+
+If you want to use Luthor lexing with Parsley
+`dotnet tool install parsley-luthor -g`
+
 ## Use
 
 ```
