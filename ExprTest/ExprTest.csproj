@@ -18,11 +18,7 @@
   </ItemGroup>
 
   <Import Project="..\Parsley.Generator\build\Parsley.Generator.targets" />
-  <ItemGroup>
-    
-    <ProjectReference Include="..\Parsley.Generator\Parsley.Generator.csproj" OutputItemType="Analyzer"
-                    ReferenceOutputAssembly="false" />
-  </ItemGroup>
+ 
 
   <!-- Step 1: grammar -> ExprParser.cs + json.lex -->
   <!--<Target Name="GenerateExprParser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)Expr.xbnf" Outputs="$(SourceDir)ExprParser.cs;$(SourceDir)Expr.lex">

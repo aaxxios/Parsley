@@ -10,15 +10,23 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Parsley.Generator\Parsley.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\Parsley.Generator\build\Parsley.Generator.targets" />
+
   <!-- Step 1: grammar -> C99Parser.cs + json.lex -->
-  <Target Name="GenerateC99Parser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)c99.xbnf" Outputs="$(SourceDir)C99Parser.cs;$(SourceDir)c99.lex">
+  <!--<Target Name="GenerateC99Parser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)c99.xbnf" Outputs="$(SourceDir)C99Parser.cs;$(SourceDir)c99.lex">
     <Exec Command="dotnet &quot;$(BinDir)parsley.dll&quot; &quot;$(SourceDir)c99.xbnf&quot; -s -l &quot;$(SourceDir)c99.lex&quot; -o &quot;$(SourceDir)C99Parser.cs&quot;" />
-  </Target>
+  </Target>-->
 
   <!-- Step 2: json.lex -> C99Lexer.cs (runs after the parser has produced json.lex) -->
-  <Target Name="GenerateC99Lexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateC99Parser" Inputs="$(SourceDir)c99.lex" Outputs="$(SourceDir)C99Lexer.cs">
+  <!--<Target Name="GenerateC99Lexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateC99Parser" Inputs="$(SourceDir)c99.lex" Outputs="$(SourceDir)C99Lexer.cs">
     <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)c99.lex&quot; -c C99Lexer -o &quot;$(SourceDir)C99Lexer.cs&quot;" />
-  </Target>
+  </Target>-->
 
   <!-- Step 3: always add the generated files to compilation 
   <Target Name="IncludeGeneratedC99Sources" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateC99Lexer">

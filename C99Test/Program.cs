@@ -2,16 +2,21 @@
 
 namespace C99Test;
 
+[Parsley.Parser("c99.xbnf")]
+partial class C99Parser
+{
+
+}
+
 internal class Program
 {
     static void Main(string[] args)
     {
         var file = args[0];
-        using var reader = new StreamReader(file,true);
-        var tokens = C99Lexer.Tokenize(reader);
         try
         {
-            var tree = C99Parser.Parse(tokens);
+            using var reader = new StreamReader(file, true);
+            var tree = C99Parser.Parse(reader);
             Console.WriteLine(tree);
         }
         catch(ParseException ex)
