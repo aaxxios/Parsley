@@ -87,7 +87,3 @@ and other definitions are built from their constructs.
 Open `Parsley.sln` in Visual Studio, or run `dotnet build Parsley.sln`.
 
 You need dotnet 8 installed to execute the build steps due to luthor being compiled for that framework.
-
-The luthor binary comes from https://www.nuget.org/packages/Luthor-tool (https://github.com/codewitch-honey-crisis/Luthor) and is used to generate a lexer. Parsley does not generate lexer code by itself, but will generate a specification for a lexer to consume. The LexGen project links against Luthor to create parsley-luthor which can consume the Parsley lexer spec directly and produce a Lexer class that is compatible with Parsley using Luthor's algorithms.
-
-I shipped the Luthor binary with this project in order to avoid requiring you to install the dotnet tool yourself. You're more than welcome to replace it, and even rebuild it from the source at the link if you have trust issues.

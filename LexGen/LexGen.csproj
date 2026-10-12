@@ -29,12 +29,6 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="luthor">
-      <HintPath>..\Tools\luthor.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
   <!-- Copy only what's needed to run the tool into the bin folder. -->
   <Target Name="CopyToolTobinDir" AfterTargets="Build">
     <ItemGroup>
