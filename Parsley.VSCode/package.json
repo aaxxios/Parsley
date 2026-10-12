@@ -1,0 +1,73 @@
+{
+  "name": "parsley-xbnf",
+  "displayName": "Parsley XBNF",
+  "description": "Highlighting and language support for Parsley's XBNF grammars: go to definition, find references, completion, hover and diagnostics.",
+  "version": "1.0.0",
+  "publisher": "honey-the-codewitch",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "repository": { "type": "git", "url": "https://github.com/codewitch-honey-crisis/Parsley" },
+  "engines": { "vscode": "^1.91.0" },
+  "categories": [ "Programming Languages", "Linters" ],
+  "keywords": [ "xbnf", "parsley", "parser", "grammar" ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "xbnf",
+        "aliases": [ "XBNF", "xbnf" ],
+        "extensions": [ ".xbnf" ],
+        "configuration": "./syntaxes/xbnf.language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "xbnf",
+        "scopeName": "source.xbnf",
+        "path": "./syntaxes/xbnf.tmLanguage.json",
+        "embeddedLanguages": { "meta.embedded.block.csharp": "csharp" }
+      }
+    ],
+    "configuration": {
+      "title": "Parsley XBNF",
+      "properties": {
+        "parsley.xbnf.dotnetPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The `dotnet` executable that runs the language server. Empty uses the one on the `PATH`."
+        },
+        "parsley.xbnf.serverPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "A `Parsley.LanguageServer.dll` to use instead of the one in the extension, for working on the server."
+        },
+        "parsley.xbnf.trace.server": {
+          "type": "string",
+          "enum": [ "off", "messages", "verbose" ],
+          "default": "off",
+          "description": "Traces the messages between VS Code and the XBNF language server, in its output channel."
+        }
+      }
+    },
+    "commands": [
+      { "command": "parsley.xbnf.restartServer", "title": "Restart XBNF Language Server", "category": "Parsley" }
+    ]
+  },
+  "scripts": {
+    "prepare-assets": "node scripts/prepare-assets.js",
+    "build": "node scripts/build.js",
+    "check": "tsc --noEmit",
+    "vscode:prepublish": "npm run prepare-assets && npm run build -- --production",
+    "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "~1.91.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.6.0"
+  }
+}

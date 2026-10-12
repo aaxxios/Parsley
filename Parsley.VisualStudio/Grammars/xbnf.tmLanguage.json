@@ -1,0 +1,330 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "XBNF",
+  "scopeName": "source.xbnf",
+  "fileTypes": [
+    "xbnf"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#directive"
+    },
+    {
+      "include": "#rule"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.xbnf",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.xbnf",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "directive": {
+      "begin": "(@)([A-Za-z_][A-Za-z0-9_]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.keyword.xbnf"
+        },
+        "2": {
+          "name": "keyword.control.directive.xbnf"
+        }
+      },
+      "end": ";",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.xbnf"
+        }
+      },
+      "name": "meta.directive.xbnf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#literal"
+        },
+        {
+          "include": "#number"
+        }
+      ]
+    },
+    "rule": {
+      "comment": "Name<attributes>= expression [=> { C# }];  The name is a definition; non-terminals start with a capital by convention, terminals with a lower case letter.",
+      "begin": "([A-Za-z_][A-Za-z0-9_]*)\\s*(?=<|=(?!>)|/[/*]|$)",
+      "beginCaptures": {
+        "1": {
+          "name": "entity.name.function.rule.xbnf"
+        }
+      },
+      "end": ";",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.terminator.xbnf"
+        }
+      },
+      "name": "meta.rule.xbnf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#action"
+        },
+        {
+          "include": "#attributes"
+        },
+        {
+          "include": "#literal"
+        },
+        {
+          "include": "#pattern"
+        },
+        {
+          "name": "keyword.operator.definition.xbnf",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.alternation.xbnf",
+          "match": "\\|"
+        },
+        {
+          "name": "keyword.operator.repeat.xbnf",
+          "match": "(?<=\\})\\+"
+        },
+        {
+          "name": "punctuation.section.group.xbnf",
+          "match": "[()]"
+        },
+        {
+          "name": "punctuation.section.optional.xbnf",
+          "match": "[\\[\\]]"
+        },
+        {
+          "name": "punctuation.section.repeat.xbnf",
+          "match": "[{}]"
+        },
+        {
+          "name": "variable.other.rule.xbnf",
+          "match": "[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "attributes": {
+      "begin": "<",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.attributes.begin.xbnf"
+        }
+      },
+      "end": ">",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.attributes.end.xbnf"
+        }
+      },
+      "name": "meta.attributes.xbnf",
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "include": "#literal"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "match": "([A-Za-z_][A-Za-z0-9_]*)\\s*(=)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name.xbnf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.xbnf"
+            },
+            "3": {
+              "name": "constant.language.xbnf"
+            }
+          }
+        },
+        {
+          "match": "([A-Za-z_][A-Za-z0-9_]*)\\s*(=)",
+          "captures": {
+            "1": {
+              "name": "entity.other.attribute-name.xbnf"
+            },
+            "2": {
+              "name": "keyword.operator.assignment.xbnf"
+            }
+          }
+        },
+        {
+          "name": "entity.other.attribute-name.xbnf",
+          "match": "[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "name": "punctuation.separator.comma.xbnf",
+          "match": ","
+        }
+      ]
+    },
+    "literal": {
+      "name": "string.quoted.double.xbnf",
+      "begin": "\"",
+      "end": "\"|$",
+      "patterns": [
+        {
+          "name": "constant.character.escape.xbnf",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "pattern": {
+      "name": "string.regexp.xbnf",
+      "begin": "'",
+      "end": "'|$",
+      "patterns": [
+        {
+          "name": "constant.character.escape.xbnf",
+          "match": "\\\\."
+        },
+        {
+          "name": "keyword.operator.quantifier.regexp.xbnf",
+          "match": "[*+?]|\\{\\d+(,\\d*)?\\}"
+        },
+        {
+          "name": "keyword.operator.or.regexp.xbnf",
+          "match": "\\|"
+        },
+        {
+          "name": "constant.other.character-class.regexp.xbnf",
+          "match": "\\[(\\\\.|[^\\]\\\\])*\\]"
+        }
+      ]
+    },
+    "number": {
+      "name": "constant.numeric.xbnf",
+      "match": "-?\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b"
+    },
+    "action": {
+      "comment": "A semantic action: C# from => { to its matching }",
+      "begin": "(=>)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.operator.action.xbnf"
+        },
+        "2": {
+          "name": "punctuation.section.block.begin.xbnf"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.block.end.xbnf"
+        }
+      },
+      "contentName": "meta.embedded.block.csharp source.cs",
+      "patterns": [
+        {
+          "include": "#csharp"
+        }
+      ]
+    },
+    "csharp": {
+      "comment": "C# statements. With a C# TextMate grammar installed (VS Code) that colors them; Visual Studio has none, so the patterns after it color a subset: comments, strings, keywords, types, literals and calls. The braces keep the action's end at its matching brace either way.",
+      "patterns": [
+        {
+          "include": "#csharp-braces"
+        },
+        {
+          "include": "source.cs#statement"
+        },
+        {
+          "name": "comment.line.double-slash.cs",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cs",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "string.quoted.double.cs",
+          "begin": "\\$?@\"|@\\$\"",
+          "end": "\"(?!\")"
+        },
+        {
+          "name": "string.quoted.double.cs",
+          "begin": "\\$?\"",
+          "end": "\"|$",
+          "patterns": [
+            {
+              "name": "constant.character.escape.cs",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.cs",
+          "match": "'(\\\\.|[^'\\\\])'"
+        },
+        {
+          "name": "constant.numeric.cs",
+          "match": "\\b(0[xX][0-9A-Fa-f_]+|0[bB][01_]+|\\d[\\d_]*(\\.\\d+)?([eE][+-]?\\d+)?)([uU]?[lL]?|[fFdDmM])?\\b"
+        },
+        {
+          "name": "constant.language.cs",
+          "match": "\\b(true|false|null)\\b"
+        },
+        {
+          "name": "keyword.control.cs",
+          "match": "\\b(if|else|switch|case|default|for|foreach|while|do|break|continue|return|goto|throw|try|catch|finally|yield|await|when|in)\\b"
+        },
+        {
+          "name": "keyword.operator.cs",
+          "match": "\\b(new|is|as|typeof|sizeof|nameof|checked|unchecked|stackalloc|and|or|not|with)\\b"
+        },
+        {
+          "name": "storage.type.cs",
+          "match": "\\b(var|bool|byte|sbyte|char|decimal|double|float|int|uint|long|ulong|short|ushort|object|string|void|dynamic|nint|nuint)\\b"
+        },
+        {
+          "name": "storage.modifier.cs",
+          "match": "\\b(const|static|readonly|ref|out|params|async|unsafe|fixed|using|lock)\\b"
+        },
+        {
+          "name": "variable.language.cs",
+          "match": "\\b(this|base)\\b"
+        },
+        {
+          "name": "entity.name.function.cs",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*(<[^<>()]*>)?\\s*\\()"
+        },
+        {
+          "name": "entity.name.type.cs",
+          "match": "\\b[A-Z][A-Za-z0-9_]*(?=\\s*\\.)"
+        }
+      ]
+    },
+    "csharp-braces": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#csharp"
+        }
+      ]
+    }
+  }
+}

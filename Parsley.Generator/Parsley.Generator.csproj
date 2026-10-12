@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- An incremental source generator built from the Parsley and LexGen sources, which are linked, not copied.
+       Generators run inside the compiler, so this targets netstandard2.0; Polyfills.cs fills the gaps. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Parsley.Generator</RootNamespace>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- the linked sources use file IO (only for the command line tools) and WebRequest, which generators shouldn't touch;
+         the generator never calls those paths -->
+    <NoWarn>$(NoWarn);RS1035;RS2008;NU5128</NoWarn>
+    <!-- the linked LexGen sources leave nullable warnings that the tool's own build shows too -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);nullable</WarningsNotAsErrors>
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+
+  <!-- packaging: the dll goes in as an analyzer, with build targets that make every .xbnf file an AdditionalFile -->
+  <PropertyGroup>
+    <PackageId>Parsley.Generator</PackageId>
+    <Title>Parsley Source Generator</Title>
+    <Authors>honey the codewitch</Authors>
+    <Copyright>Copyright (C) 2026 by honey the codewitch</Copyright>
+    <Description>Synthesizes a Parsley parser, lexer and evaluator into a partial class marked [Parsley("grammar.xbnf")]</Description>
+    <RepositoryUrl>https://github.com/codewitch-honey-crisis/Parsley/</RepositoryUrl>
+    <PackageTags>Parser;Generator;SourceGenerator</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.3.1" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Parsley: everything but the command line tool -->
+  <ItemGroup>
+    <Compile Include="..\Parsley\**\*.cs" Exclude="..\Parsley\Program.cs;..\Parsley\Options.cs;..\Parsley\bin\**;..\Parsley\obj\**" LinkBase="Parsley" />
+    <EmbeddedResource Include="..\Parsley\Runtime\*.cs" LinkBase="Parsley\Runtime" LogicalName="Parsley.Runtime.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- LexGen: the lexer builder and emitter, not the command line tool -->
+  <ItemGroup>
+    <Compile Include="..\LexGen\Builder.cs;..\LexGen\Compiler.cs;..\LexGen\UnicodeClasses.cs;..\LexGen\LexerEmitter.cs" LinkBase="LexGen" />
+    <EmbeddedResource Include="..\LexGen\Templates\LuthorRuntime.cs" Link="LexGen\Templates\LuthorRuntime.cs" LogicalName="LexGen.Templates.LuthorRuntime.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="build\Parsley.Generator.targets" Pack="true" PackagePath="build\;buildTransitive\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\LICENSE.txt" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The XBNF language server, which editors run over stdin/stdout. It links the Parsley sources, like the
+       generator does, so its diagnostics are the reader's and the analysis's own. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Parsley.LanguageServer</RootNamespace>
+    <AssemblyName>Parsley.LanguageServer</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- ParseContext.CreateFromUrl uses WebRequest, which .NET marks obsolete -->
+    <NoWarn>$(NoWarn);SYSLIB0014</NoWarn>
+    <SignAssembly>True</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\Key.snk</AssemblyOriginatorKeyFile>
+    <Authors>honey the codewitch</Authors>
+    <Copyright>Copyright (C) 2026 by honey the codewitch</Copyright>
+    <Description>Language server for Parsley's XBNF grammars</Description>
+  </PropertyGroup>
+
+  <!-- Parsley: everything but the command line tool -->
+  <ItemGroup>
+    <Compile Include="..\Parsley\**\*.cs" Exclude="..\Parsley\Program.cs;..\Parsley\Options.cs;..\Parsley\bin\**;..\Parsley\obj\**" LinkBase="Parsley" />
+  </ItemGroup>
+
+</Project>

@@ -231,7 +231,9 @@ public static class Compiler
     // Any single-byte .NET encoding (ASCII, ISO-8859-x, Windows-125x, EBCDIC code pages, ...)
     static (List<DfaState>, int) SingleByte(IList<DfaState> cp, string name)
     {
+#if !NETSTANDARD2_0 // the code pages provider isn't available to the source generator, which only lexes UTF-16
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+#endif
         var enc = int.TryParse(name, out int page)
             ? Encoding.GetEncoding(page, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback)
             : Encoding.GetEncoding(name, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);

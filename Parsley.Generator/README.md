@@ -1,0 +1,100 @@
+# Parsley.Generator
+
+An incremental source generator that synthesizes a Parsley parser, its lexer and, when the grammar has semantic
+actions, its evaluator into a partial class. It's built from the same sources as `parsley` and `parsley-luthor`
+(linked from `../Parsley` and `../LexGen`), so it produces the same parsers the tools do.
+
+```csharp
+using Parsley;
+
+[Parsley("Expr.xbnf")]
+public partial class ExprCalc { }
+
+var tree = ExprCalc.Parse("1+(2^4)*3");
+Console.WriteLine(ExprCalc.Evaluate(tree)); // 49
+```
+
+## The attribute
+
+`[Parsley(grammarFile, Unicode = ..., Engine = ...)]`
+
+| Argument | |
+|---|---|
+| `grammarFile` | The `.xbnf` grammar, relative to the source file the attribute is in. If no file is there, the one AdditionalFile whose path ends with it is used. |
+| `Unicode` | Use Unicode character classes in the lexer (`parsley-luthor -u`). Default `false`. |
+| `Engine` | `ParserEngine.Auto` (the lightest the grammar allows), `LL1`, `LLk` or `AllStar` (`parsley -e`). Default `Auto`. |
+
+The attribute and `ParserEngine` are generated into the project (namespace `Parsley`, internal, and not kept in
+metadata). The class, and any type it's nested in, must be `partial`.
+
+## What's generated
+
+Into the partial class:
+
+- The parser's symbol constants (`Expr`, `Number`, `Add`, ..., `EndOfInput`, `ErrorSymbol`, `SymbolCount`), public.
+- Public static entry points:
+  - `Tokenize(string)` / `Tokenize(TextReader)`, with the lexer's optional position, line, column and tab width
+  - `Parse(IEnumerable<Token>)`, `Parse(string)`, `Parse(TextReader)`, and `TryParse(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)`
+  - `Evaluate(ParseNode, state)`, when the grammar has semantic actions, returning the start production's type
+- Private nested classes: `Parser`, `Evaluator` (with semantic actions) and `Lexer`.
+
+The grammar's `@class`, `@namespace` and `@evaluator` directives are ignored: the class decides the names and the
+namespace. `@using` still applies to semantic actions. A constant that would clash with a member of the class, or
+with the generated members, gets a number after it, as the tools do with clashes inside the parser.
+
+Grammar hooks (`when`, `matched`, `entering`, `parsed`) are partial methods on the nested parser, so implement them
+in another part of it:
+
+```csharp
+partial class C99
+{
+    partial class Parser
+    {
+        private partial bool IsTypedefName(Token token, Token previous) { ... }
+    }
+}
+```
+
+## The runtime
+
+The runtime the parsers and lexers share is generated once per project, for only the engines its parsers use:
+`ParsleyRuntime`, the `LL1ParserBase`, `LLkParserBase` or `AllStarParserBase` it needs (namespace
+`Parsley.Runtime`, public) and `LuthorRuntime` (namespace `Luthor.Runtime`, internal).
+
+If the project references `Parsley.Runtime.dll`, none of it is generated, and the parsers use the dll's.
+Reference the dll when more than one project in an app uses the generator. Each generated copy of
+`Parsley.Runtime` is public, so a project that references two of them would see each type twice.
+
+## Grammar files
+
+The generator reads grammars, and the files they `@import`, from the project's AdditionalFiles, never from disk.
+The package's build targets make every `.xbnf` in the project an AdditionalFile. Set
+`<ParsleyIncludeXbnf>false</ParsleyIncludeXbnf>` to list them yourself.
+
+From a project reference in this solution, rather than the package, reference it as an analyzer and import the
+targets:
+
+```xml
+<ItemGroup>
+  <ProjectReference Include="..\Parsley.Generator\Parsley.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+</ItemGroup>
+<Import Project="..\Parsley.Generator\build\Parsley.Generator.targets" />
+```
+
+The lexer is always built from the grammar's terminals, as `parsley -l` writes it. A grammar that pairs with a
+hand-written `.lex`, like the ES5 test's, gets the grammar-derived lexer instead.
+
+The generated code needs C# 12, as the tools' output does.
+
+## Diagnostics
+
+| Id | |
+|---|---|
+| PARSLEY001 | The grammar file isn't among the AdditionalFiles |
+| PARSLEY002 | More than one AdditionalFile ends with the given path |
+| PARSLEY003 | The class, or a type it's nested in, isn't partial |
+| PARSLEY004 | An error in the grammar, reported at its place in the `.xbnf` |
+| PARSLEY005 | A warning about the grammar |
+| PARSLEY006 | A message about the grammar (info), such as left recursion that was rewritten |
+| PARSLEY007 | Generation failed for another reason |
+| PARSLEY008 | The attribute has no grammar file |

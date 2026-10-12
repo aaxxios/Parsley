@@ -1,0 +1,9 @@
+# only the bundle, the grammar, the server and the docs go in the .vsix
+**
+!dist/extension.js
+!syntaxes/**
+!server/**
+!package.json
+!README.md
+!LICENSE.txt
+!icon.png

@@ -1,0 +1,7 @@
+; Registers the XBNF TextMate grammar, which colors .xbnf files. The language client adds the rest.
+[$RootKey$\TextMate\Repositories]
+"Xbnf"="$PackageFolder$\Grammars"
+
+; Comment toggling, bracket matching and auto-closing for the grammar's scope
+[$RootKey$\TextMate\LanguageConfiguration\GrammarMapping]
+"source.xbnf"="$PackageFolder$\Grammars\xbnf.language-configuration.json"

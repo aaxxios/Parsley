@@ -31,9 +31,11 @@ namespace Parsley
 		readonly Grammar _grammar;
 		readonly List<GrammarMessage> _messages;
 		readonly HashSet<string> _imported;
+		readonly Func<string, string> _readFile;
 
-		XbnfReader(ParseContext pc, string? filename, Grammar grammar, List<GrammarMessage> messages, HashSet<string> imported)
+		XbnfReader(ParseContext pc, string? filename, Grammar grammar, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile)
 		{
+			_readFile = readFile;
 			_pc = pc;
 			_filename = filename;
 			_grammar = grammar;
@@ -42,13 +44,19 @@ namespace Parsley
 		}
 
 		public static IList<GrammarMessage> TryParse(string text, string? filename, out Grammar? grammar)
+			=> TryParse(text, filename, File.ReadAllText, out grammar);
+		/// <summary>
+		/// Parses a grammar, reading the files it @imports with <paramref name="readFile"/>, which takes a full
+		/// path and returns the text or throws
+		/// </summary>
+		public static IList<GrammarMessage> TryParse(string text, string? filename, Func<string, string> readFile, out Grammar? grammar)
 		{
 			var messages = new List<GrammarMessage>();
 			var g = new Grammar { Filename = filename };
 			var imported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			if (null != filename)
 				imported.Add(Path.GetFullPath(filename));
-			_Read(ParseContext.Create(text), filename, g, messages, imported);
+			_Read(ParseContext.Create(text), filename, g, messages, imported, readFile);
 			messages.AddRange(g.ClassifyTerminals());
 			messages.AddRange(g.ResolveTerminals());
 			grammar = g;
@@ -61,7 +69,7 @@ namespace Parsley
             var imported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (null != filename)
                 imported.Add(Path.GetFullPath(filename));
-            _Read(ParseContext.CreateFrom(reader), filename, g, messages, imported);
+            _Read(ParseContext.CreateFrom(reader), filename, g, messages, imported, File.ReadAllText);
             messages.AddRange(g.ClassifyTerminals());
             messages.AddRange(g.ResolveTerminals());
             grammar = g;
@@ -77,9 +85,9 @@ namespace Parsley
             return TryReadFrom( reader, null, out grammar);
         }
 
-        static void _Read(ParseContext pc, string? filename, Grammar g, List<GrammarMessage> messages, HashSet<string> imported)
+        static void _Read(ParseContext pc, string? filename, Grammar g, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile)
 		{
-			var r = new XbnfReader(pc, filename, g, messages, imported);
+			var r = new XbnfReader(pc, filename, g, messages, imported, readFile);
 			r._ReadAll();
 		}
 
@@ -601,7 +609,7 @@ namespace Parsley
 			string text;
 			try
 			{
-				text = File.ReadAllText(full);
+				text = _readFile(full);
 			}
 			catch (Exception ex)
 			{
@@ -611,7 +619,7 @@ namespace Parsley
 			// imported productions keep their own file name; directives in imports don't override the importer's,
 			// except @using, which adds to them
 			var sub = new Grammar { Filename = full };
-			_Read(ParseContext.Create(text), full, sub, _messages, _imported);
+			_Read(ParseContext.Create(text), full, sub, _messages, _imported, _readFile);
 			_grammar.Productions.AddRange(sub.Productions);
 			_grammar.Terminals.AddRange(sub.Terminals);
 			foreach (var d in sub.Directives)

@@ -68,7 +68,7 @@ namespace Parsley.Runtime
             _ruleStart = new int[ruleCount];
             _ruleStop = new int[ruleCount];
             _stopRule = new int[_transitions.Length];
-            Array.Fill(_stopRule, -1);
+            for (var i = 0; i < _stopRule.Length; ++i) _stopRule[i] = -1; // Array.Fill isn't in netstandard2.0
             for (var r = 0; r < ruleCount; ++r)
             {
                 _ruleStart[r] = rules[r * 2];

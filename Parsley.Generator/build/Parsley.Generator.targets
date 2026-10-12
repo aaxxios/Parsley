@@ -1,0 +1,8 @@
+<Project>
+  <!-- Makes every .xbnf grammar in the project an AdditionalFile, so [Parsley("grammar.xbnf")] can find it and
+       anything it @imports. Set ParsleyIncludeXbnf to false to list them yourself. A grammar already listed
+       as an AdditionalFile isn't added twice. -->
+  <ItemGroup Condition="'$(ParsleyIncludeXbnf)' != 'false'">
+    <AdditionalFiles Include="**\*.xbnf" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder);@(AdditionalFiles)" />
+  </ItemGroup>
+</Project>

@@ -444,7 +444,7 @@ namespace Parsley.Runtime
             var display = _tables.DisplayNames[Current.SymbolId];
             var found = Current.SymbolId == _tables.EndOfInput ? "end of input"
                 : Current.SymbolId == _tables.Error ? $"unrecognized input \"{Current.Value}\""
-                : display.StartsWith('"') ? display
+                : display.StartsWith("\"", StringComparison.Ordinal) ? display
                 : $"{display} {Current.Value}";
             _errors.Add(new ParseError($"{message} but found {found}", _current.Line, _current.Column, _current.Position));
         }
