@@ -67,11 +67,11 @@ partial class C99Parser
 		{
 			while (null != declarator)
 			{
-				var direct = declarator.Children.Find(c => "direct_declarator" == c.Symbol);
+				var direct = declarator.Children.Find(c => DirectDeclarator == c.SymbolId);
 				if (null == direct || 0 == direct.Children.Count) return null;
 				var first = direct.Children[0];
-				if ("identifier" == first.Symbol) return first.Value;
-				declarator = direct.Children.Find(c => "declarator" == c.Symbol);
+				if (Identifier == first.SymbolId) return first.Value;
+				declarator = direct.Children.Find(c => Declarator == c.SymbolId);
 			}
 			return null;
 		}
@@ -140,16 +140,16 @@ partial class C99Parser
 		}
 		// a name is in scope as soon as its declarator ends, before any initializer or the next declarator
 		partial void OnInitDeclarator(ParseNode node)
-			=> _Declare(_DeclaratorName(node.Children.Find(c => "declarator" == c.Symbol)), 0 < _isTypedef.Count && _isTypedef[^1]);
+			=> _Declare(_DeclaratorName(node.Children.Find(c => Declarator == c.SymbolId)), 0 < _isTypedef.Count && _isTypedef[^1]);
 		partial void OnEnumerator(ParseNode node)
-			=> _Declare(node.Children.Find(c => "identifier" == c.Symbol)?.Value, false);
+			=> _Declare(node.Children.Find(c => Identifier == c.SymbolId)?.Value, false);
 
 		partial void BeginSpecifiers() => _typeSeen.Add(false);
 		partial void EndSpecifiers(ParseNode node) => _typeSeen.RemoveAt(_typeSeen.Count - 1);
 		partial void OnParameter(ParseNode node)
 		{
 			EndSpecifiers(node);
-			_Declare(_DeclaratorName(node.Children.Find(c => "declarator" == c.Symbol)), false);
+			_Declare(_DeclaratorName(node.Children.Find(c => Declarator == c.SymbolId)), false);
 		}
 		partial void OnTypeSpecifier(ParseNode node)
 		{
