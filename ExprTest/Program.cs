@@ -10,10 +10,9 @@ internal class Program
     static void Main(string[] args)
     {
         var text = "1+(2^4)*3";
-        var lexer = ExprParser.Tokenize(text);
         try
         {
-            var tree = ExprParser.Parse(lexer);
+            var tree = ExprParser.Parse(text);
             Console.WriteLine(tree);
             Console.WriteLine($"{text} = {ExprParser.Evaluate(tree)}");
         }
