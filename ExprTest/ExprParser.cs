@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using Parsley.Runtime;
+using System.Globalization;
 
 /// <summary>
 /// Parses Expr with one token of lookahead (LL(1)). Synthesized from Expr.xbnf.
@@ -244,7 +245,7 @@ public partial class ExprEvaluator
 		// an atom: a number token, or the Expr between the parentheses, which are collapsed
 		var first = node.Children[0];
 		return Number == first.SymbolId
-		    ? double.Parse(first.Value!, System.Globalization.CultureInfo.InvariantCulture)
+		    ? double.Parse(first.Value!, CultureInfo.InvariantCulture)
 		    : EvaluateExpr(first);
 	}
 

@@ -9,7 +9,7 @@ namespace Parsley
 {
 	/// <summary>
 	/// Reads XBNF. A rule that references no symbols (only "literals" and 'patterns') declares a terminal,
-	/// as does one marked &lt;terminal&gt;; anything else declares a non-terminal. Supports @import, @namespace, @class, @evaluator and @maxk directives,
+	/// as does one marked &lt;terminal&gt;; anything else declares a non-terminal. Supports @import, @namespace, @class, @evaluator, @using and @maxk directives,
 	/// attributed groups: <c>( … )&lt;attrs&gt;</c>, <c>[ … ]&lt;attrs&gt;</c>, <c>{ … }&lt;attrs&gt;</c>, and semantic actions:
 	/// <c>Name= expression =&gt; { C# };</c>
 	/// </summary>
@@ -534,16 +534,27 @@ namespace Parsley
 					case "class":
 					case "evaluator":
 						_grammar.Directives[name] = arg;
+						_grammar.DirectiveLocations[name] = at;
+						break;
+					case "using":
+						// can be given more than once; the namespace is checked when the grammar is validated
+						var u = new UsingDirective(arg);
+						u.SetLocation(line, col, pos, _filename);
+						_grammar.Usings.Add(u);
 						break;
 					case "maxk":
 						if (!int.TryParse(arg, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var k) || 1 > k)
 							_messages.Add(new GrammarMessage(ErrorLevel.Error, $"@maxk expects a whole number of at least 1, not \"{arg}\"", at));
 						else
+						{
 							_grammar.Directives[name] = arg;
+							_grammar.DirectiveLocations[name] = at;
+						}
 						break;
 					default:
 						_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"Unknown directive @{name}", at));
 						_grammar.Directives[name] = arg;
+						_grammar.DirectiveLocations[name] = at;
 						break;
 				}
 				return;
@@ -597,14 +608,20 @@ namespace Parsley
 				_messages.Add(new GrammarMessage(ErrorLevel.Error, $"Could not import \"{path}\": {ex.Message}", at));
 				return;
 			}
-			// imported productions keep their own file name; directives in imports don't override the importer's
+			// imported productions keep their own file name; directives in imports don't override the importer's,
+			// except @using, which adds to them
 			var sub = new Grammar { Filename = full };
 			_Read(ParseContext.Create(text), full, sub, _messages, _imported);
 			_grammar.Productions.AddRange(sub.Productions);
 			_grammar.Terminals.AddRange(sub.Terminals);
 			foreach (var d in sub.Directives)
 				if (!_grammar.Directives.ContainsKey(d.Key))
+				{
 					_grammar.Directives.Add(d.Key, d.Value);
+					if (sub.DirectiveLocations.TryGetValue(d.Key, out var dat))
+						_grammar.DirectiveLocations[d.Key] = dat;
+				}
+			_grammar.Usings.AddRange(sub.Usings);
 		}
 
 		T _Locate<T>(T e, int line, int col, long pos) where T : Expression

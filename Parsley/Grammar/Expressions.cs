@@ -246,7 +246,9 @@ namespace Parsley
 			var sb = new StringBuilder();
 			foreach (var d in g.Directives)
 				sb.AppendLine($"@{d.Key} {GrammarAttribute.FormatValue(d.Value)};");
-			if (0 < g.Directives.Count) sb.AppendLine();
+			foreach (var u in g.Usings)
+				sb.AppendLine(u.ToString());
+			if (0 < g.Directives.Count || 0 < g.Usings.Count) sb.AppendLine();
 			foreach (var p in g.Productions)
 				sb.AppendLine(Write(p));
 			foreach (var t in g.Terminals)

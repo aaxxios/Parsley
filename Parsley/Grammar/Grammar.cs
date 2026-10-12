@@ -99,6 +99,46 @@ namespace Parsley
 	}
 
 	/// <summary>
+	/// A namespace the synthesized code imports with a C# <c>using</c>, so semantic actions can name its
+	/// types without qualifying them. Written in XBNF as <c>@using "System.Text";</c>
+	/// </summary>
+	public sealed class UsingDirective : GrammarNode
+	{
+		public UsingDirective(string @namespace)
+		{
+			Namespace = @namespace ?? throw new ArgumentNullException(nameof(@namespace));
+		}
+		/// <summary>
+		/// The namespace, as written, such as <c>System.Text</c>
+		/// </summary>
+		public string Namespace { get; }
+		/// <summary>
+		/// True if <see cref="Namespace"/> is a dotted C# name: identifiers separated by dots, each
+		/// optionally prefixed with <c>@</c>
+		/// </summary>
+		public bool IsValid => IsValidNamespace(Namespace);
+		public static bool IsValidNamespace(string? ns)
+		{
+			if (string.IsNullOrEmpty(ns)) return false;
+			foreach (var part in ns.Split('.'))
+			{
+				var i = 0 < part.Length && '@' == part[0] ? 1 : 0;
+				if (i >= part.Length || !(char.IsLetter(part[i]) || '_' == part[i])) return false;
+				for (++i; i < part.Length; ++i)
+					if (!(char.IsLetterOrDigit(part[i]) || '_' == part[i])) return false;
+			}
+			return true;
+		}
+		public UsingDirective Clone()
+		{
+			var result = new UsingDirective(Namespace);
+			result.CopyLocation(this);
+			return result;
+		}
+		public override string ToString() => $"@using {GrammarAttribute.FormatValue(Namespace)};";
+	}
+
+	/// <summary>
 	/// A terminal: a rule whose definition only uses literals, patterns and other terminals.
 	/// Its definition and the regular expression built from it are for the lexer; the parser only
 	/// uses its name and attributes.
@@ -189,6 +229,15 @@ namespace Parsley
 		/// </summary>
 		public Dictionary<string, string> Directives { get; } = new Dictionary<string, string>();
 		/// <summary>
+		/// Where each directive in <see cref="Directives"/> was given, for directives read from XBNF
+		/// </summary>
+		public Dictionary<string, GrammarNode> DirectiveLocations { get; } = new Dictionary<string, GrammarNode>();
+		/// <summary>
+		/// The @using directives, in the order given. Unlike other directives, a grammar can have
+		/// several, and an imported file's are added to the importer's.
+		/// </summary>
+		public List<UsingDirective> Usings { get; } = new List<UsingDirective>();
+		/// <summary>
 		/// The file this grammar was read from, if any. Used for messages and default naming.
 		/// </summary>
 		public string? Filename { get; set; }
@@ -237,6 +286,15 @@ namespace Parsley
 				t.Attributes.Set(a);
 			Terminals.Add(t);
 			return t;
+		}
+		/// <summary>
+		/// Adds a namespace for the synthesized code to import with a C# <c>using</c>
+		/// </summary>
+		public UsingDirective Using(string @namespace)
+		{
+			var u = new UsingDirective(@namespace);
+			Usings.Add(u);
+			return u;
 		}
 		#endregion
 
@@ -306,6 +364,8 @@ namespace Parsley
 			foreach (var p in Productions) result.Productions.Add(p.Clone());
 			foreach (var t in Terminals) result.Terminals.Add(t.Clone());
 			foreach (var d in Directives) result.Directives.Add(d.Key, d.Value);
+			foreach (var d in DirectiveLocations) result.DirectiveLocations.Add(d.Key, d.Value);
+			foreach (var u in Usings) result.Usings.Add(u.Clone());
 			return result;
 		}
 
@@ -365,6 +425,11 @@ namespace Parsley
 			return name;
 		}
 
+		GrammarMessage _DirectiveMessage(ErrorLevel level, string message, string directive)
+			=> DirectiveLocations.TryGetValue(directive, out var at)
+				? new GrammarMessage(level, message, at)
+				: new GrammarMessage(level, message, 0, 0, -1, Filename);
+
 		/// <summary>
 		/// Checks names and attributes. Literals should be resolved first.
 		/// </summary>
@@ -396,6 +461,18 @@ namespace Parsley
 				var first = Productions.FirstOrDefault(p => null != p.Action);
 				if (null != first)
 					result.Add(new GrammarMessage(ErrorLevel.Error, $"\"{first.Name}\" has a semantic action, but the start production \"{start.Name}\" does not. Semantic actions require one on the start production", first.Action));
+			}
+			foreach (var u in Usings)
+				if (!u.IsValid)
+					result.Add(new GrammarMessage(ErrorLevel.Error, $"@using expects a namespace, such as \"System.Text\", not \"{u.Namespace}\"", u));
+			// @evaluator and @using only affect the evaluator, which only semantic actions make
+			if (!HasActions)
+			{
+				if (Directives.ContainsKey("evaluator"))
+					result.Add(_DirectiveMessage(ErrorLevel.Warning, "@evaluator is ignored because the grammar has no semantic actions", "evaluator"));
+				foreach (var u in Usings)
+					if (u.IsValid)
+						result.Add(new GrammarMessage(ErrorLevel.Warning, $"@using \"{u.Namespace}\" is ignored because the grammar has no semantic actions", u));
 			}
 			foreach (var p in Productions)
 			{

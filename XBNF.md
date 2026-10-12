@@ -188,9 +188,10 @@ Block= "{" { Stmt }<sync="semi"> "}";
 | `@namespace "My.Parsers";` | The namespace of the synthesized parser. Without it, the parser has no namespace. |
 | `@class "MyParser";` | The class name of the synthesized parser. By default it's the file name in PascalCase plus `Parser`, so `json.xbnf` gives `JsonParser`. |
 | `@maxk 2;` | The most tokens a decision with fixed lookahead looks at; 4 if not given. A decision that needs more is predicted by ALL(\*) at parse time, or settled by its `policy`. A lower limit gives smaller predictors at the cost of more ALL(\*); a higher one, the reverse. It's part of the grammar so the same grammar always synthesizes the same parser. |
-| `@evaluator "MyEvaluator";` | The class name of the synthesized evaluator, used as written, with `@` added in front of a C# keyword. By default it's the file name in PascalCase plus `Evaluator`, so `json.xbnf` gives `JsonEvaluator`. Only matters when the grammar has [semantic actions](#semantic-actions). |
+| `@evaluator "MyEvaluator";` | The class name of the synthesized evaluator, used as written, with `@` added in front of a C# keyword. By default it's the file name in PascalCase plus `Evaluator`, so `json.xbnf` gives `JsonEvaluator`. Only matters when the grammar has [semantic actions](#semantic-actions); without any, it's ignored with a warning. |
+| `@using "System.Text";` | Adds `using System.Text;` to the top of the synthesized file, so [semantic actions](#semantic-actions) can use the namespace's types without qualifying them. Give it once per namespace; it can appear any number of times. The argument must be a namespace name, such as `System.Text` or `My.@class`: not `static` or an alias. A namespace the file already imports, or one given twice, is written once, without a message. Usings from an `@import`ed file are added to the importer's. Only matters when the grammar has semantic actions; without any, it's ignored with a warning and the file is unchanged. |
 
-Other directives are kept, with a warning that they're unknown.
+Other directives are kept, with a warning that they're unknown. Every directive except `@using` takes one value, and if one is given more than once, the last wins.
 
 ## Semantic actions
 
@@ -244,7 +245,7 @@ When the start rule has an action, Parsley synthesizes an evaluator class in the
   ```csharp
   int value = CalcEvaluator.Evaluate(tree, new Dictionary<string, int> { ["x"] = 5 });
   ```
-- The generated file has `using System;`, `using System.Collections.Generic;` and `using Parsley.Runtime;`. Usings only apply to the file they're in, so write other namespaces out in full: `System.Globalization.CultureInfo.InvariantCulture`.
+- The generated file has `using System;`, `using System.Collections.Generic;` and `using Parsley.Runtime;`. For other namespaces, add an [`@using`](#directives) for each, such as `@using "System.Globalization";`, or write them out in full: `System.Globalization.CultureInfo.InvariantCulture`. A using in another file of your project doesn't help, since usings only apply to the file they're in (unless it's a `global using`).
 - The action is read up to its matching `}`. Braces inside strings, character literals, comments and interpolation holes don't count, including verbatim, interpolated and raw strings. The code is re-indented to fit its method. The exception is a string literal that spans lines, since re-indenting would change it, so that code is copied exactly.
 - An action can't be on a terminal or a collapsed rule, since neither has a node of its own.
 

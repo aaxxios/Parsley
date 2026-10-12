@@ -6,7 +6,7 @@
 //   + -        left associative, so 10 - 4 - 3 is (10 - 4) - 3
 @class "ExprParser";
 @evaluator "ExprEvaluator";
-
+@using "System.Globalization";
 // the operators by name, tightest first, then the atoms. Expr's own action only sees atoms,
 // since every operator has its own production and action
 Expr<start, type="double", operators, expected="an expression">=
@@ -20,7 +20,7 @@ Expr<start, type="double", operators, expected="an expression">=
     // an atom: a number token, or the Expr between the parentheses, which are collapsed
     var first = node.Children[0];
     return Number == first.SymbolId
-        ? double.Parse(first.Value!, System.Globalization.CultureInfo.InvariantCulture)
+        ? double.Parse(first.Value!, CultureInfo.InvariantCulture)
         : EvaluateExpr(first);
 };
 Power<type="double", assoc=right>= Expr pow Expr => {

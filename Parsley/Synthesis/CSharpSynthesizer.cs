@@ -278,9 +278,18 @@ namespace Parsley
 				_Line("// add members in another part of this partial class instead.");
 				_Line("// </auto-generated>");
 				_Line("#nullable enable");
-				if (null != _evaluatorName) _Line("using System;");
-				_Line("using System.Collections.Generic;");
-				_Line("using Parsley.Runtime;");
+				var usings = new List<string>();
+				if (null != _evaluatorName) usings.Add("System");
+				usings.Add("System.Collections.Generic");
+				usings.Add("Parsley.Runtime");
+				// @using is for semantic actions, so it only applies when there's an evaluator; validation warns
+				// otherwise. One the file already has is skipped.
+				if (null != _evaluatorName)
+					foreach (var u in g.Usings)
+						if (!usings.Contains(u.Namespace))
+							usings.Add(u.Namespace);
+				foreach (var u in usings)
+					_Line($"using {u};");
 				_Line();
 				var ns = _o.Namespace ?? g.Namespace;
 				if (null != ns)

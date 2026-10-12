@@ -131,6 +131,8 @@ namespace Parsley
 				_Field("Parser class", (_g.ClassName ?? "(from start symbol)") + (null != _g.Namespace ? $" in {_g.Namespace}" : ""));
 				var actions = _g.Productions.Count(p => null != p.Action);
 				_Field("Evaluator", 0 == actions ? "none (no semantic actions)" : $"{_g.EvaluatorClassName}, semantic actions on {_Plural(actions, "production")}");
+				if (0 < _g.Usings.Count)
+					_Field("Usings", string.Join(", ", _g.Usings.Select(u => u.Namespace).Distinct()) + (0 == actions ? " (ignored: no semantic actions)" : ""));
 			}
 
 			void _Engine()

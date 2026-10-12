@@ -143,5 +143,105 @@ namespace Parsley.Tests
 			var p = CompiledParser.Compile(CSharpSynthesizer.Synthesize(a), "PtParser");
 			T.Throws<InvalidOperationException>(() => p.Evaluate("PtEvaluator", new RegexLexer(a).Tokenize("a")), "a node with no non-terminal child and no action");
 		}
+
+		static GrammarMessage[] _Messages(string xbnf, ErrorLevel level)
+		{
+			var msgs = XbnfReader.TryParse(xbnf, null, out var g).ToList();
+			if (!msgs.Any(m => m.Level == ErrorLevel.Error))
+				msgs.AddRange(GrammarAnalysis.Analyze(g!).Messages);
+			return msgs.Where(m => m.Level == level).ToArray();
+		}
+
+		public static void ReadsUsings()
+		{
+			var g = Grammar.Parse("@using \"System.Text\";\n@using \"System.Globalization\"; S= a => { return 1; }; a= \"a\";");
+			T.Equal(2, g.Usings.Count, "@using can be given more than once");
+			T.Equal("System.Text", g.Usings[0].Namespace, "first using");
+			T.Equal("System.Globalization", g.Usings[1].Namespace, "second using, in order");
+			T.Equal(1, g.Usings[0].Line, "using has its location");
+			T.Equal(2, g.Usings[1].Line, "second using's line");
+			T.Check(!g.Directives.ContainsKey("using"), "usings aren't single-valued directives");
+			var g2 = Grammar.Parse(g.ToString());
+			T.Equal(string.Join(",", g.Usings.Select(u => u.Namespace)), string.Join(",", g2.Usings.Select(u => u.Namespace)), "usings round trip");
+			T.Equal(2, g.Clone().Usings.Count, "clone keeps usings");
+			var b = new Grammar();
+			b.Using("System.Text");
+			T.Equal("System.Text", b.Usings.Single().Namespace, "builder API");
+		}
+
+		public static void UsingErrors()
+		{
+			foreach (var bad in new[] { "", "System.", ".Text", "System Text", "static System.Math", "M = System.Math", "1System", "System.Text;" })
+				T.Check(_Messages($"@using \"{bad}\"; S= a => {{ return 1; }}; a= \"a\";", ErrorLevel.Error).Any(m => m.Message.Contains("@using expects a namespace")), $"\"{bad}\" is not a namespace");
+			T.Check(_Messages("@using 5; S= a => { return 1; }; a= \"a\";", ErrorLevel.Error).Any(m => m.Message.Contains("@using expects a namespace")), "a number is not a namespace");
+			foreach (var good in new[] { "System", "System.Text", "My_Ns.@class.Sub2", "_x" })
+				T.Equal(0, _Messages($"@using \"{good}\"; S= a => {{ return 1; }}; a= \"a\";", ErrorLevel.Error).Length, $"\"{good}\" is a namespace");
+			var err = _Messages("S= a => { return 1; };\n@using \"a b\"; a= \"a\";", ErrorLevel.Error).Single();
+			T.Equal(2, err.Line, "the error points at the @using");
+		}
+
+		public static void WarnsWhenUsingOrEvaluatorHasNoActions()
+		{
+			var w = _Messages("@evaluator \"E\";\n@using \"System.Text\";\n@using \"System.Linq\"; S= a; a= \"a\";", ErrorLevel.Warning);
+			var ev = w.Where(m => m.Message.Contains("@evaluator")).ToArray();
+			T.Equal(1, ev.Length, "@evaluator without actions warns");
+			T.Check(ev[0].Message.Contains("no semantic actions"), "says why");
+			T.Equal(1, ev[0].Line, "@evaluator warning has its location");
+			var us = w.Where(m => m.Message.StartsWith("@using")).ToArray();
+			T.Equal(2, us.Length, "each @using without actions warns");
+			T.Check(us[0].Message.Contains("System.Text") && us[1].Message.Contains("System.Linq"), "names each namespace");
+			T.Equal(2, us[0].Line, "@using warning has its location");
+			T.Equal(0, _Messages("@evaluator \"E\"; @using \"System.Text\"; S= a => { return 1; }; a= \"a\";", ErrorLevel.Warning).Count(m => m.Message.Contains("no semantic actions")), "no warning when there are actions");
+			T.Equal(0, _Messages("S= a; a= \"a\";", ErrorLevel.Warning).Count(m => m.Message.Contains("no semantic actions")), "no warning without the directives");
+			// the builder API has no locations, but still warns
+			var b = new Grammar();
+			b.Production("S", Ebnf.Sym("a"));
+			b.Terminal("a", "a");
+			b.Directives["evaluator"] = "E";
+			b.Using("System.Text");
+			var bw = GrammarAnalysis.Analyze(b).Messages.Where(m => m.Message.Contains("no semantic actions")).ToArray();
+			T.Equal(2, bw.Length, "builder grammars warn too");
+		}
+
+		public static void SynthesizesUsings()
+		{
+			const string actions = "S<type=\"string\">= a => { var sb = new StringBuilder(); sb.Append(node.Children[0].Value); return sb.ToString() + CultureInfo.InvariantCulture.Name; }; a= \"a\";";
+			var a = GrammarAnalysis.Analyze(Grammar.Parse("@class \"UParser\"; @evaluator \"UEvaluator\"; @namespace \"U.Ns\";"
+				+ " @using \"System.Text\"; @using \"System.Globalization\"; @using \"System.Text\"; @using \"System\"; @using \"Parsley.Runtime\"; @using \"System.Collections.Generic\"; " + actions));
+			T.Equal(0, a.Messages.Count(m => m.Level != ErrorLevel.Message), "no errors or warnings");
+			var src = CSharpSynthesizer.Synthesize(a);
+			var lines = src.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+			var usingLines = lines.Where(l => l.StartsWith("using ")).ToList();
+			T.Equal("using System;|using System.Collections.Generic;|using Parsley.Runtime;|using System.Text;|using System.Globalization;", string.Join("|", usingLines), "usings in order, each once, the file's own first");
+			T.Check(lines.IndexOf("using System.Globalization;") < lines.IndexOf("namespace U.Ns;"), "usings come before the namespace");
+			var p = CompiledParser.Compile(src, "UParser");
+			T.Check(!p.Diagnostics.Any(d => d.Id == "CS0105"), "no duplicate using warnings");
+			T.Equal((object)"a", p.Evaluate("UEvaluator", new RegexLexer(a).Tokenize("a")), "actions use the imported namespaces unqualified");
+
+			// without actions, @using doesn't change the parser
+			var plain = CSharpSynthesizer.Synthesize(Grammar.Parse("@using \"System.Text\"; S= a; a= \"a\";"));
+			T.Check(!plain.Contains("System.Text"), "@using is ignored without actions");
+			T.Check(!plain.Contains("using System;"), "parser output unchanged");
+		}
+
+		public static void ImportedUsingsAreAdded()
+		{
+			var dir = Path.Combine(Path.GetTempPath(), "parsley-using-" + Guid.NewGuid().ToString("N"));
+			Directory.CreateDirectory(dir);
+			try
+			{
+				File.WriteAllText(Path.Combine(dir, "sub.xbnf"), "@using \"System.Text\";\n@using \"System.Linq\";\n@evaluator \"SubEvaluator\";\nA= \"a\";");
+				File.WriteAllText(Path.Combine(dir, "main.xbnf"), "@using \"System.Linq\";\n@import \"sub.xbnf\";\nS<start>= A;");
+				var g = Grammar.ReadFrom(Path.Combine(dir, "main.xbnf"));
+				T.Equal("System.Linq,System.Text,System.Linq", string.Join(",", g.Usings.Select(u => u.Namespace)), "an import's usings are added to the importer's");
+				T.Check(g.Usings[1].Filename!.EndsWith("sub.xbnf"), "imported using keeps its file name");
+				var w = GrammarAnalysis.Analyze(g).Messages.Where(m => m.Level == ErrorLevel.Warning && m.Message.Contains("no semantic actions")).ToArray();
+				T.Check(w.Any(m => m.Message.StartsWith("@evaluator") && m.Filename!.EndsWith("sub.xbnf") && 3 == m.Line), "an imported @evaluator's warning points into the import");
+			}
+			finally
+			{
+				Directory.Delete(dir, true);
+			}
+		}
 	}
 }
