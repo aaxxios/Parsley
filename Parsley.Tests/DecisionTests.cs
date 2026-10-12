@@ -159,5 +159,13 @@ namespace Parsley.Tests
 				}
 			}
 		}
+
+		public static void SlangImportsAreReported()
+		{
+			// Slang.xbnf imports files we don't have and declares virtual productions
+			var msgs = XbnfReader.TryReadFrom(Path.Combine(T.Dir, "Slang.xbnf"), out _);
+			T.Check(msgs.Any(m => m.Message.Contains("Could not import")), "missing imports reported");
+			T.Check(msgs.Any(m => m.Message.Contains("Virtual productions are not supported")), "virtual productions reported");
+		}
 	}
 }
