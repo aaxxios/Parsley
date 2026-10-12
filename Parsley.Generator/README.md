@@ -16,12 +16,13 @@ Console.WriteLine(ExprCalc.Evaluate(tree)); // 49
 
 ## The attribute
 
-`[Parsley(grammarFile, Unicode = ..., Engine = ...)]`
+`[Parsley(grammarFile, Unicode = ..., Lexer = ..., Engine = ...)]`
 
 | Argument | |
 |---|---|
 | `grammarFile` | The `.xbnf` grammar, relative to the source file the attribute is in. If no file is there, the one AdditionalFile whose path ends with it is used. |
 | `Unicode` | Use Unicode character classes in the lexer (`parsley-luthor -u`). Default `false`. |
+| `Lexer` | Generate the lexer. Default `true`. When `false`, no lexer, `Tokenize`, or text `Parse` overloads are generated: feed `Parse`/`TryParse` tokens from a lexer of your own. |
 | `Engine` | `ParserEngine.Auto` (the lightest the grammar allows), `LL1`, `LLk` or `AllStar` (`parsley -e`). Default `Auto`. |
 
 The attribute and `ParserEngine` are generated into the project (namespace `Parsley`, internal, and not kept in
@@ -33,10 +34,10 @@ Into the partial class:
 
 - The parser's symbol constants (`Expr`, `Number`, `Add`, ..., `EndOfInput`, `ErrorSymbol`, `SymbolCount`), public.
 - Public static entry points:
-  - `Tokenize(string)` / `Tokenize(TextReader)`, with the lexer's optional position, line, column and tab width
-  - `Parse(IEnumerable<Token>)`, `Parse(string)`, `Parse(TextReader)`, and `TryParse(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)`
+  - `Tokenize(string)` / `Tokenize(TextReader)`, with the lexer's optional position, line, column and tab width (unless `Lexer = false`)
+  - `Parse(IEnumerable<Token>)`, `Parse(string)`, `Parse(TextReader)` (the last two unless `Lexer = false`), and `TryParse(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)`
   - `Evaluate(ParseNode, state)`, when the grammar has semantic actions, returning the start production's type
-- Private nested classes: `Parser`, `Evaluator` (with semantic actions) and `Lexer`.
+- Private nested classes: `Parser`, `Evaluator` (with semantic actions) and `Lexer` (unless `Lexer = false`).
 
 The grammar's `@class`, `@namespace` and `@evaluator` directives are ignored: the class decides the names and the
 namespace. `@using` still applies to semantic actions. A constant that would clash with a member of the class, or
@@ -59,7 +60,7 @@ partial class C99
 
 The runtime the parsers and lexers share is generated once per project, for only the engines its parsers use:
 `ParsleyRuntime`, the `LL1ParserBase`, `LLkParserBase` or `AllStarParserBase` it needs (namespace
-`Parsley.Runtime`, public) and `LuthorRuntime` (namespace `Luthor.Runtime`, internal).
+`Parsley.Runtime`, public) and, when at least one parser has a lexer, `LuthorRuntime` (namespace `Luthor.Runtime`, internal).
 
 If the project references `Parsley.Runtime.dll`, none of it is generated, and the parsers use the dll's.
 Reference the dll when more than one project in an app uses the generator. Each generated copy of
@@ -82,7 +83,8 @@ targets:
 ```
 
 The lexer is always built from the grammar's terminals, as `parsley -l` writes it. A grammar that pairs with a
-hand-written `.lex`, like the ES5 test's, gets the grammar-derived lexer instead.
+hand-written `.lex`, like the ES5 test's, gets the grammar-derived lexer instead, unless `Lexer = false`, which
+leaves you to supply the tokens.
 
 The generated code needs C# 12, as the tools' output does.
 

@@ -83,7 +83,7 @@ namespace Parsley.Generator
 
     /// <summary>
     /// What the generator produced for one class. Engine is the parser engine it needs the base class of, or -1
-    /// when it produced nothing.
+    /// when it produced nothing. HasLexer is whether it produced a lexer, which needs the lexer runtime.
     /// </summary>
-    internal sealed record GeneratedParser(string HintName, string? Source, int Engine, EquatableArray<DiagnosticInfo> Diagnostics);
+    internal sealed record GeneratedParser(string HintName, string? Source, int Engine, bool HasLexer, EquatableArray<DiagnosticInfo> Diagnostics);
 }

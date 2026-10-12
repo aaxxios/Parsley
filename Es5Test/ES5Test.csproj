@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <BinDir Condition="'$(SolutionDir)' != '' and '$(SolutionDir)' != '*Undefined*'">$(SolutionDir)bin\</BinDir>
     <BinDir Condition="'$(BinDir)' == ''">$(MSBuildProjectDirectory)\..\bin\</BinDir>

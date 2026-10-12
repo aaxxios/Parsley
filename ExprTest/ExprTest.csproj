@@ -11,16 +11,28 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Parsley.Generator\Parsley.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\Parsley.Generator\build\Parsley.Generator.targets" />
+  <ItemGroup>
+    
+    <ProjectReference Include="..\Parsley.Generator\Parsley.Generator.csproj" OutputItemType="Analyzer"
+                    ReferenceOutputAssembly="false" />
+  </ItemGroup>
 
   <!-- Step 1: grammar -> ExprParser.cs + json.lex -->
-  <Target Name="GenerateExprParser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)Expr.xbnf" Outputs="$(SourceDir)ExprParser.cs;$(SourceDir)Expr.lex">
+  <!--<Target Name="GenerateExprParser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)Expr.xbnf" Outputs="$(SourceDir)ExprParser.cs;$(SourceDir)Expr.lex">
     <Exec Command="dotnet &quot;$(BinDir)parsley.dll&quot; &quot;$(SourceDir)Expr.xbnf&quot; -s -l &quot;$(SourceDir)Expr.lex&quot; -o &quot;$(SourceDir)ExprParser.cs&quot;" />
-  </Target>
+  </Target>-->
 
   <!-- Step 2: json.lex -> ExprLexer.cs (runs after the parser has produced json.lex) -->
-  <Target Name="GenerateExprLexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateExprParser" Inputs="$(SourceDir)Expr.lex" Outputs="$(SourceDir)ExprLexer.cs">
+  <!--<Target Name="GenerateExprLexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateExprParser" Inputs="$(SourceDir)Expr.lex" Outputs="$(SourceDir)ExprLexer.cs">
     <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)Expr.lex&quot; -n Expr -c ExprLexer -o &quot;$(SourceDir)ExprLexer.cs&quot;" />
-  </Target>
+  </Target>-->
 
   <!-- Step 3: always add the generated files to compilation 
   <Target Name="IncludeGeneratedExprSources" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateExprLexer">

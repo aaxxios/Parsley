@@ -23,7 +23,7 @@ namespace Parsley.Generator
     [Microsoft.CodeAnalysis.Generator(LanguageNames.CSharp)]
     public sealed class ParsleyGenerator : IIncrementalGenerator
     {
-        const string AttributeMetadataName = "Parsley.ParsleyAttribute";
+        const string AttributeMetadataName = "Parsley.ParserAttribute";
         const string RuntimeAssemblyName = "Parsley.Runtime";
         const string ParserName = "Parser";
         const string LexerName = "Lexer";
@@ -35,7 +35,7 @@ namespace Parsley.Generator
             namespace Parsley
             {
                 /// <summary>
-                /// The parsing engine a <see cref="ParsleyAttribute"/> parser is synthesized for
+                /// The parsing engine a <see cref="ParserAttribute"/> parser is synthesized for
                 /// </summary>
                 internal enum ParserEngine
                 {
@@ -56,10 +56,10 @@ namespace Parsley.Generator
                 /// </summary>
                 [global::System.AttributeUsage(global::System.AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
                 [global::System.Diagnostics.Conditional("PARSLEY_GENERATOR_KEEP_ATTRIBUTES")]
-                internal sealed class ParsleyAttribute : global::System.Attribute
+                internal sealed class ParserAttribute : global::System.Attribute
                 {
                     /// <param name="grammarFile">The XBNF grammar, relative to the source file this attribute is in</param>
-                    public ParsleyAttribute(string grammarFile) { GrammarFile = grammarFile; }
+                    public ParserAttribute(string grammarFile) { GrammarFile = grammarFile; }
                     /// <summary>
                     /// The XBNF grammar, relative to the source file this attribute is in. It has to be one of the
                     /// project's AdditionalFiles, which every .xbnf file is unless ParsleyIncludeXbnf is false.
@@ -69,10 +69,12 @@ namespace Parsley.Generator
                     /// Use Unicode character classes in the lexer
                     /// </summary>
                     public bool Unicode { get; set; }
-                    /// Generate the lexer
+                    /// <summary>
+                    /// Generate the lexer, Tokenize, and the Parse overloads that take text. Defaults to true. When false,
+                    /// only Parse and TryParse over tokens are generated, for tokens from a lexer of your own, and the
+                    /// lexer runtime isn't generated unless another parser in the project needs it.
                     /// </summary>
                     public bool Lexer { get; set; } = true;
-                    
                     /// <summary>
                     /// The parsing engine. Defaults to the lightest the grammar allows.
                     /// </summary>
@@ -111,7 +113,7 @@ namespace Parsley.Generator
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            context.RegisterPostInitializationOutput(ctx => ctx.AddSource("ParsleyAttribute.g.cs", SourceText.From(AttributeSource, Encoding.UTF8)));
+            context.RegisterPostInitializationOutput(ctx => ctx.AddSource("ParserAttribute.g.cs", SourceText.From(AttributeSource, Encoding.UTF8)));
 
             var classes = context.SyntaxProvider.ForAttributeWithMetadataName(
                 AttributeMetadataName,
@@ -139,14 +141,19 @@ namespace Parsley.Generator
             // the runtime: once per project, for the engines the parsers use, unless Parsley.Runtime.dll supplies it
             var hasRuntimeAssembly = context.CompilationProvider.Select(static (c, _) =>
                 c.ReferencedAssemblyNames.Any(a => string.Equals(a.Name, RuntimeAssemblyName, StringComparison.OrdinalIgnoreCase)));
-            var engines = parsers
+            var generated = parsers.Where(static p => 0 <= p.Engine);
+            var engines = generated
                 .Select(static (p, _) => p.Engine)
-                .Where(static e => 0 <= e)
                 .Collect()
                 .Select(static (es, _) => new EquatableArray<int>(es.Distinct().OrderBy(e => e)));
-            context.RegisterSourceOutput(engines.Combine(hasRuntimeAssembly), static (spc, pair) =>
+            // the lexer runtime only when some parser has a lexer
+            var anyLexer = generated
+                .Select(static (p, _) => p.HasLexer)
+                .Collect()
+                .Select(static (ls, _) => ls.Any(l => l));
+            context.RegisterSourceOutput(engines.Combine(anyLexer).Combine(hasRuntimeAssembly), static (spc, pair) =>
             {
-                var (used, hasRuntime) = pair;
+                var ((used, lexers), hasRuntime) = pair;
                 if (hasRuntime || 0 == used.Count) return;
                 spc.AddSource("Parsley.Runtime.ParsleyRuntime.g.cs", SourceText.From(_Generated(CSharpSynthesizer.RuntimeSource), Encoding.UTF8));
                 foreach (var e in used)
@@ -154,8 +161,8 @@ namespace Parsley.Generator
                     var engine = (ParserEngine)e;
                     spc.AddSource($"Parsley.Runtime.{engine.BaseClassName()}.g.cs", SourceText.From(_Generated(CSharpSynthesizer.BaseSource(engine)), Encoding.UTF8));
                 }
-                
-                spc.AddSource("Luthor.Runtime.LuthorRuntime.g.cs", SourceText.From(_Generated(LexerEmitter.RuntimeSource), Encoding.UTF8));
+                if (lexers)
+                    spc.AddSource("Luthor.Runtime.LuthorRuntime.g.cs", SourceText.From(_Generated(LexerEmitter.RuntimeSource), Encoding.UTF8));
             });
         }
 
@@ -233,7 +240,7 @@ namespace Parsley.Generator
         static GeneratedParser _Generate(ParserClassInfo info, EquatableArray<GrammarFileInfo> grammars, CancellationToken ct)
         {
             var diagnostics = new List<DiagnosticInfo>(info.Diagnostics);
-            GeneratedParser failed() => new GeneratedParser(info.HintName, null, -1, new EquatableArray<DiagnosticInfo>(diagnostics));
+            GeneratedParser failed() => new GeneratedParser(info.HintName, null, -1, false, new EquatableArray<DiagnosticInfo>(diagnostics));
             if (diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error) || null == info.GrammarFile)
                 return failed();
 
@@ -279,24 +286,29 @@ namespace Parsley.Generator
                 ct.ThrowIfCancellationRequested();
 
                 // the lexer, from the terminals in the order the parser numbers them; contextual terminals are
-                // assigned by the parser, never lexed
-                var rules = analysis.Grammar.Terminals
-                    .Where(t => !t.IsContextual)
-                    .Select(t => new Rule(t.Name, t.Regex ?? throw new InvalidOperationException($"The terminal {t.Name} has no pattern"), t.IsHidden))
-                    .ToList();
-                var lexer = new StringWriter();
-                LexerEmitter.Emit(rules, lexer, new LexerEmitOptions
+                // assigned by the parser, never lexed. Without one, the tokens come from the caller's own lexer.
+                string? lexer = null;
+                if (info.Lexer)
                 {
-                    ClassName = LexerName,
-                    Access = "private",
-                    Unicode = info.Unicode,
-                    Nested = true,
-                    Indent = new string('\t', depth),
-                });
-                ct.ThrowIfCancellationRequested();
+                    var rules = analysis.Grammar.Terminals
+                        .Where(t => !t.IsContextual)
+                        .Select(t => new Rule(t.Name, t.Regex ?? throw new InvalidOperationException($"The terminal {t.Name} has no pattern"), t.IsHidden))
+                        .ToList();
+                    var writer = new StringWriter();
+                    LexerEmitter.Emit(rules, writer, new LexerEmitOptions
+                    {
+                        ClassName = LexerName,
+                        Access = "private",
+                        Unicode = info.Unicode,
+                        Nested = true,
+                        Indent = new string('\t', depth),
+                    });
+                    lexer = writer.ToString();
+                    ct.ThrowIfCancellationRequested();
+                }
 
-                var source = _Write(info, grammarFile, parser, lexer.ToString());
-                return new GeneratedParser(info.HintName, source, (int)parser.Engine, new EquatableArray<DiagnosticInfo>(diagnostics));
+                var source = _Write(info, grammarFile, parser, lexer);
+                return new GeneratedParser(info.HintName, source, (int)parser.Engine, null != lexer, new EquatableArray<DiagnosticInfo>(diagnostics));
             }
             catch (OperationCanceledException)
             {
@@ -397,8 +409,9 @@ namespace Parsley.Generator
             return Diagnostic.Create(passthrough, d.Location?.ToLocation() ?? Location.None, d.Message);
         }
 
-        // the partial class: the parser's constants and static entry points, then the private Parser, Evaluator and Lexer
-        static string _Write(ParserClassInfo info, GrammarFileInfo grammar, SynthesizedParser parser, string lexer)
+        // the partial class: the parser's constants and static entry points, then the private Parser, Evaluator and,
+        // unless it's null, Lexer
+        static string _Write(ParserClassInfo info, GrammarFileInfo grammar, SynthesizedParser parser, string? lexer)
         {
             var sb = new StringBuilder();
             var indent = 0;
@@ -439,15 +452,18 @@ namespace Parsley.Generator
             const string node = "global::Parsley.Runtime.ParseNode";
             const string lexArgs = "long position = 0, int line = 1, int column = 1, int tabWidth = 4";
             const string lexPass = "position, line, column, tabWidth";
-            line("/// <summary>");
-            line("/// Splits text into tokens for Parse. Hidden terminals are skipped.");
-            line("/// </summary>");
-            line($"public static {tokens} Tokenize(string text, {lexArgs}) => {LexerName}.Tokenize(text, {lexPass});");
-            line("/// <summary>");
-            line("/// Splits what a reader reads into tokens. Hidden terminals are skipped.");
-            line("/// </summary>");
-            line($"public static {tokens} Tokenize(global::System.IO.TextReader reader, {lexArgs}) => {LexerName}.Tokenize(reader, {lexPass});");
-            line();
+            if (null != lexer)
+            {
+                line("/// <summary>");
+                line("/// Splits text into tokens for Parse. Hidden terminals are skipped.");
+                line("/// </summary>");
+                line($"public static {tokens} Tokenize(string text, {lexArgs}) => {LexerName}.Tokenize(text, {lexPass});");
+                line("/// <summary>");
+                line("/// Splits what a reader reads into tokens. Hidden terminals are skipped.");
+                line("/// </summary>");
+                line($"public static {tokens} Tokenize(global::System.IO.TextReader reader, {lexArgs}) => {LexerName}.Tokenize(reader, {lexPass});");
+                line();
+            }
             line("/// <summary>");
             line("/// Parses tokens, returning the tree and the problems found, if any. Returns false when there were problems.");
             line("/// </summary>");
@@ -456,14 +472,17 @@ namespace Parsley.Generator
             line("/// Parses tokens and returns the tree. Throws a ParseException with every problem found if there were any.");
             line("/// </summary>");
             line($"public static {node} Parse({tokens} tokens) => {ParserName}.Parse(tokens);");
-            line("/// <summary>");
-            line("/// Tokenizes and parses text, and returns the tree. Throws a ParseException with every problem found if there were any.");
-            line("/// </summary>");
-            line($"public static {node} Parse(string text) => {ParserName}.Parse({LexerName}.Tokenize(text));");
-            line("/// <summary>");
-            line("/// Tokenizes and parses what a reader reads, and returns the tree. Throws a ParseException with every problem found if there were any.");
-            line("/// </summary>");
-            line($"public static {node} Parse(global::System.IO.TextReader reader) => {ParserName}.Parse({LexerName}.Tokenize(reader));");
+            if (null != lexer)
+            {
+                line("/// <summary>");
+                line("/// Tokenizes and parses text, and returns the tree. Throws a ParseException with every problem found if there were any.");
+                line("/// </summary>");
+                line($"public static {node} Parse(string text) => {ParserName}.Parse({LexerName}.Tokenize(text));");
+                line("/// <summary>");
+                line("/// Tokenizes and parses what a reader reads, and returns the tree. Throws a ParseException with every problem found if there were any.");
+                line("/// </summary>");
+                line($"public static {node} Parse(global::System.IO.TextReader reader) => {ParserName}.Parse({LexerName}.Tokenize(reader));");
+            }
             if (null != parser.EvaluatorClassName)
             {
                 line();
@@ -478,8 +497,11 @@ namespace Parsley.Generator
 
             // the synthesizer and lexer emitter indent the nested classes themselves
             sb.Append(parser.Code.Replace("\r\n", "\n").Replace("\n", "\r\n"));
-            line();
-            sb.Append(lexer.Replace("\r\n", "\n").Replace("\n", "\r\n"));
+            if (null != lexer)
+            {
+                line();
+                sb.Append(lexer.Replace("\r\n", "\n").Replace("\n", "\r\n"));
+            }
 
             close();
             for (var i = 0; i < info.Types.Count - 1; ++i) close();
