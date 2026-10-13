@@ -10,6 +10,9 @@ For the main Parsley tool
 If you want to use Luthor lexing with Parsley
 `dotnet tool install parsley-luthor -g`
 
+If you want to use the C# Source Generator instead:
+`dotnet add package Parsley.Generator`
+
 If you want to use the Visual Studio XBNF Language support
 https://marketplace.visualstudio.com/items?itemName=honey-the-codewitch.parsley123
 
