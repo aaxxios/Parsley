@@ -7,21 +7,28 @@
 @class "ExprParser";
 @evaluator "ExprEvaluator";
 @using "System.Globalization";
+@using "System.Collections.Generic";
 // the operators by name, tightest first, then the atoms. Expr's own action only sees atoms,
 // since every operator has its own production and action
-Expr<start, type="double", operators, expected="an expression">=
+Expr<start,state="Dictionary<string,double>", type="double", operators, expected="an expression">=
       Power
     | Negate
     | Product
     | Sum
+    | identifier
     | number
     | lparen Expr rparen
     => {
     // an atom: a number token, or the Expr between the parentheses, which are collapsed
     var first = node.Children[0];
-    return Number == first.SymbolId
-        ? double.Parse(first.Value!, CultureInfo.InvariantCulture)
-        : EvaluateExpr(first);
+    switch(first.SymbolId) {
+        case Number:
+          return double.Parse(first.Value!, CultureInfo.InvariantCulture);
+        case Identifier:
+            return State[first.Value!];
+        default:
+            return EvaluateExpr(first);
+    }
 };
 Power<type="double", assoc=right>= Expr pow Expr => {
     return Math.Pow(EvaluateExpr(node.Children[0]), EvaluateExpr(node.Children[2]));
@@ -44,6 +51,7 @@ Sum<type="double">= Expr ( add | sub ) Expr => {
     var right = EvaluateExpr(node.Children[2]);
     return Add == node.Children[1].SymbolId ? left + right : left - right;
 };
+identifier = '[A-Z_a-z][0-9A-Z_a-z]*';
 number= '[0-9]+(\.[0-9]+)?';
 add= "+";
 sub= "-";

@@ -9,12 +9,12 @@ internal class Program
 {
     static void Main(string[] args)
     {
-        var text = "1+(2^4)*3";
+        var text = "1+(2^4)*pi";
         try
         {
             var tree = ExprParser.Parse(text);
             Console.WriteLine(tree);
-            Console.WriteLine($"{text} = {ExprParser.Evaluate(tree)}");
+            Console.WriteLine($"{text} = {ExprParser.Evaluate(tree,new Dictionary<string, double>() { ["pi"] = 3.14})}");
         }
         catch (Parsley.Runtime.ParseException e)
         {
