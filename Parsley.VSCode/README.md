@@ -30,20 +30,3 @@ runtime** or later. Highlighting works without it.
 | `parsley.xbnf.trace.server` | `messages` or `verbose` to log the protocol traffic |
 
 **Parsley: Restart XBNF Language Server** restarts it.
-
-## Building
-
-From this folder, with Node.js and the .NET 8 SDK:
-
-```
-npm install
-npm run package
-```
-
-`npm run package` copies the grammar and language configuration from `../Parsley.VisualStudio/Grammars`,
-publishes `../Parsley.LanguageServer` into `server/`, bundles the extension into `dist/` and writes
-`parsley-xbnf-lsp-<version>.vsix`. Install that with **Extensions: Install from VSIX…**, or run
-`code --install-extension parsley-xbnf-lsp-2.0.0.vsix`.
-
-To try changes without packaging, run `npm run prepare-assets` and `npm run build` once, open this folder in
-VS Code and press F5.
