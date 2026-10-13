@@ -8,10 +8,12 @@ namespace Parsley
 	partial class Grammar
 	{
 		/// <summary>
-		/// Turns rules into terminals, as XBNF does: by default a rule is a terminal only when it references
-		/// no symbols at all, just "literals" and 'patterns'. <c>&lt;terminal&gt;</c> forces a terminal, which
-		/// may then reference other terminals (their regexes are inlined); <c>&lt;terminal=false&gt;</c> forces a
-		/// non-terminal. The start rule is never made a terminal unless forced. Changes this grammar.
+		/// Turns rules into terminals, as XBNF does: by default a rule is a terminal only when its right side is a
+		/// single "literal" or a single 'pattern'. <c>&lt;terminal&gt;</c> forces a terminal, which may then combine
+		/// literals and patterns and reference other terminals (their regexes are inlined);
+		/// <c>&lt;terminal=false&gt;</c> forces a non-terminal. The start rule and shared rules are never made
+		/// terminals unless forced, and islands and contextual terminals are terminals by their attributes.
+		/// Changes this grammar.
 		/// </summary>
 		public IList<GrammarMessage> ClassifyTerminals()
 		{
@@ -27,8 +29,16 @@ namespace Parsley
 				foreach (var p in rules)
 				{
 					if (terminalNames.Contains(p.Name)) continue;
-					// a contextual terminal is one terminal reference, read differently by the parser
-					if (null != p.Attributes.Get("when"))
+					// an island is a terminal the lexer controller produces; it has no body
+					if (p.Attributes.Contains("entry"))
+					{
+						terminalNames.Add(p.Name);
+						changed = true;
+						continue;
+					}
+					// a contextual terminal is one terminal reference, read differently by the parser. With
+					// lexer=, when is the lexer controller's instead, and the rule is an ordinary terminal
+					if (null != p.Attributes.Get("when") && !p.Attributes.Contains("lexer"))
 					{
 						if (p.Expression is SymbolRef only && null != only.Name && only.Name != p.Name && terminalNames.Contains(only.Name))
 						{
@@ -38,10 +48,11 @@ namespace Parsley
 						continue;
 					}
 					var f = forced(p);
-					if (false == f || (p.Name == start && true != f)) continue;
+					// like the start rule, a shared rule is never made a terminal automatically: it's an entry point
+					if (false == f || ((p.Name == start || p.Attributes.IsSet("shared")) && true != f)) continue;
 					var refs = p.Expression.Descendants().OfType<SymbolRef>().Where(r => null != r.Name).Select(r => r.Name!).ToList();
-					// by default only rules with no references; a forced terminal may reference other terminals
-					if (0 == refs.Count || (true == f && refs.All(r => r != p.Name && terminalNames.Contains(r))))
+					// by default only a lone literal or pattern; a forced terminal may combine them and reference other terminals
+					if (true == f ? refs.All(r => r != p.Name && terminalNames.Contains(r)) : _IsLoneLiteralOrPattern(p.Expression))
 					{
 						terminalNames.Add(p.Name);
 						changed = true;
@@ -81,6 +92,9 @@ namespace Parsley
 			return messages;
 		}
 
+		// a single "literal" or 'pattern', the only rule that's a terminal by default
+		static bool _IsLoneLiteralOrPattern(Expression e) => e is SymbolRef sr && null == sr.Name && (null != sr.Literal || null != sr.Pattern);
+
 		/// <summary>
 		/// Builds <see cref="TerminalDeclaration.Regex"/> for every terminal. Patterns pass through as written;
 		/// literals are escaped; other definitions are built from their EBNF constructs with referenced
@@ -92,8 +106,8 @@ namespace Parsley
 			var done = new Dictionary<string, (string Text, int Prec)?>();
 			foreach (var t in Terminals)
 			{
-				// the lexer never produces a contextual terminal, so it has no regex
-				if (t.IsContextual)
+				// the lexer never produces a contextual terminal or an island, so they have no regex
+				if (t.IsContextual || t.IsIsland)
 				{
 					t.Regex = null;
 					continue;
@@ -147,9 +161,9 @@ namespace Parsley
 								: $"Terminal \"{owner.Name}\" references \"{sr.Name}\", which is not defined", sr));
 							return null;
 						}
-						if (target.IsContextual)
+						if (target.IsContextual || target.IsIsland)
 						{
-							messages.Add(new GrammarMessage(ErrorLevel.Error, $"Terminal \"{owner.Name}\" references \"{sr.Name}\", which is contextual and has no regex", sr));
+							messages.Add(new GrammarMessage(ErrorLevel.Error, $"Terminal \"{owner.Name}\" references \"{sr.Name}\", which is {(target.IsIsland ? "an island" : "contextual")} and has no regex", sr));
 							return null;
 						}
 						return _TerminalRegex(target, done, visiting, messages);

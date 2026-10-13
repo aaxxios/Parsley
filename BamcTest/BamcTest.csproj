@@ -12,21 +12,22 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <!-- Step 1: grammar -> BamcParser.cs + json.lex -->
-  <Target Name="GenerateBamcParser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)Bamc.xbnf" Outputs="$(SourceDir)BamcParser.cs;$(SourceDir)Bamc.lex">
-    <Exec Command="dotnet &quot;$(BinDir)parsley.dll&quot; &quot;$(SourceDir)Bamc.xbnf&quot; -s -l &quot;$(SourceDir)Bamc.lex&quot; -o &quot;$(SourceDir)BamcParser.cs&quot;" />
+  <!-- bamc.xbnf embeds json.xbnf: add-headers takes a JSON object, an island that json.xbnf lexes and parses.
+       Each grammar gets its parser and its lexer; bamc's parser lexes through a LexerController that switches between them. -->
+
+  <!-- Step 1: grammars -> BamcParser.cs + Bamc.lex, JsonParser.cs + Json.lex -->
+  <Target Name="GenerateBamcParser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)bamc.xbnf;$(SourceDir)json.xbnf" Outputs="$(SourceDir)BamcParser.cs;$(SourceDir)Bamc.lex">
+    <Exec Command="dotnet &quot;$(BinDir)parsley.dll&quot; &quot;$(SourceDir)bamc.xbnf&quot; -s -l &quot;$(SourceDir)Bamc.lex&quot; -o &quot;$(SourceDir)BamcParser.cs&quot;" />
+  </Target>
+  <Target Name="GenerateJsonParser" BeforeTargets="BeforeBuild" Inputs="$(SourceDir)json.xbnf" Outputs="$(SourceDir)JsonParser.cs;$(SourceDir)Json.lex">
+    <Exec Command="dotnet &quot;$(BinDir)parsley.dll&quot; &quot;$(SourceDir)json.xbnf&quot; -l &quot;$(SourceDir)Json.lex&quot; -o &quot;$(SourceDir)JsonParser.cs&quot;" />
   </Target>
 
-  <!-- Step 2: json.lex -> BamcLexer.cs (runs after the parser has produced json.lex) -->
+  <!-- Step 2: lexer files -> BamcLexer.cs, JsonLexer.cs. JsonLexer goes in json.xbnf's namespace, where bamc's parser looks for it. -->
   <Target Name="GenerateBamcLexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateBamcParser" Inputs="$(SourceDir)Bamc.lex" Outputs="$(SourceDir)BamcLexer.cs">
     <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)Bamc.lex&quot; -c BamcLexer -o &quot;$(SourceDir)BamcLexer.cs&quot;" />
   </Target>
-
-  <!-- Step 3: always add the generated files to compilation 
-  <Target Name="IncludeGeneratedBamcSources" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateBamcLexer">
-    <ItemGroup>
-      <Compile Include="$(SourceDir)BamcLexer.cs;$(SourceDir)BamcParser.cs" />
-    </ItemGroup>
+  <Target Name="GenerateJsonLexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateJsonParser" Inputs="$(SourceDir)Json.lex" Outputs="$(SourceDir)JsonLexer.cs">
+    <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)Json.lex&quot; -c JsonLexer -n BamcTest.Json -o &quot;$(SourceDir)JsonLexer.cs&quot;" />
   </Target>
-  -->
 </Project>

@@ -189,14 +189,43 @@ namespace Parsley
 		/// </summary>
 		public bool IsImplicit { get; internal set; }
 		/// <summary>
-		/// The <c>when</c> attribute of a contextual terminal: the method the parser asks, each time it looks at a
-		/// token of <see cref="ContextualBase"/>, whether the token is this terminal instead
+		/// The <c>when</c> attribute. On a contextual terminal: the method the parser asks, each time it looks at a
+		/// token of <see cref="ContextualBase"/>, whether the token is this terminal instead. On a terminal with
+		/// <see cref="Lexer"/>: the method the lexer controller asks whether to lex this terminal instead.
 		/// </summary>
 		public string? When => Attributes.Get("when") as string;
 		/// <summary>
 		/// A contextual terminal: never produced by the lexer, but read from another terminal's tokens by the parser
 		/// </summary>
-		public bool IsContextual => null != When;
+		public bool IsContextual => null != When && null == Lexer && !IsIsland;
+		/// <summary>
+		/// The <c>entry</c> attribute of an island: the shared production of an external grammar, as
+		/// <c>Alias.Production</c>, that parses the island's text
+		/// </summary>
+		public string? Entry => Attributes.Get("entry") as string;
+		/// <summary>
+		/// An island: text in another language, lexed and parsed by an external grammar. The lexer controller
+		/// produces it as one token, so the lexer never does.
+		/// </summary>
+		public bool IsIsland => null != Entry;
+		/// <summary>
+		/// The <c>lexer</c> attribute: the alias of the lexer that produces this terminal instead of the grammar's
+		/// own, when the controller decides to switch (see <see cref="On"/> and <see cref="When"/>)
+		/// </summary>
+		public string? Lexer => Attributes.Get("lexer") as string;
+		/// <summary>
+		/// The terminals the attribute names, as written: names or literal texts separated by spaces or commas
+		/// </summary>
+		public IReadOnlyList<string> GetNames(string attribute)
+			=> Attributes.Get(attribute) is string s ? s.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries) : Array.Empty<string>();
+		/// <summary>
+		/// The grammar's own lexer produces it: it isn't contextual, an island, or from another lexer
+		/// </summary>
+		public bool IsLexed => !IsContextual && !IsIsland && null == Lexer;
+		/// <summary>
+		/// An island ends when the external grammar's lexer produces an error, unless <c>popOnError=false</c>
+		/// </summary>
+		public bool PopOnError => !(Attributes.Get("popOnError") is bool b) || b;
 		/// <summary>
 		/// The terminal a contextual terminal's tokens arrive as: the one its definition names
 		/// </summary>
@@ -241,6 +270,14 @@ namespace Parsley
 		/// The file this grammar was read from, if any. Used for messages and default naming.
 		/// </summary>
 		public string? Filename { get; set; }
+		/// <summary>
+		/// The grammars declared with @external, which islands are parsed with
+		/// </summary>
+		public List<ExternalGrammar> Externals { get; } = new List<ExternalGrammar>();
+		/// <summary>
+		/// The @lexer directives, which name the lexer used for this grammar or for one of its aliases
+		/// </summary>
+		public List<LexerDirective> Lexers { get; } = new List<LexerDirective>();
 
 		#region Builder API
 		/// <summary>
@@ -313,7 +350,8 @@ namespace Parsley
 			return null;
 		}
 		/// <summary>
-		/// The production marked <c>start</c>, else the first production
+		/// The production marked <c>start</c>, else in a subordinate grammar the first shared production,
+		/// else the first production. An island is never the start symbol.
 		/// </summary>
 		public string? StartSymbol
 		{
@@ -322,9 +360,24 @@ namespace Parsley
 				foreach (var p in Productions)
 					if (p.Attributes.IsSet("start"))
 						return p.Name;
-				return 0 < Productions.Count ? Productions[0].Name : null;
+				foreach (var p in Productions)
+					if (p.Attributes.IsSet("shared") && !p.Attributes.Contains("entry"))
+						return p.Name;
+				foreach (var p in Productions)
+					if (!p.Attributes.Contains("entry"))
+						return p.Name;
+				return null;
 			}
 		}
+		/// <summary>
+		/// A grammar with shared productions and none marked <c>start</c>: it's only parsed through its shared
+		/// productions, as islands of other grammars, so it gets no Parse of its own
+		/// </summary>
+		public bool IsSubordinate => !Productions.Any(p => p.Attributes.IsSet("start")) && Productions.Any(p => p.Attributes.IsSet("shared"));
+		/// <summary>
+		/// The productions marked <c>shared</c>, which other grammars can parse islands with
+		/// </summary>
+		public IEnumerable<Production> SharedProductions => Productions.Where(p => p.Attributes.IsSet("shared"));
 		/// <summary>
 		/// The class name to synthesize: the @class directive, else the file name + "Parser"
 		/// </summary>
@@ -366,6 +419,8 @@ namespace Parsley
 			foreach (var d in Directives) result.Directives.Add(d.Key, d.Value);
 			foreach (var d in DirectiveLocations) result.DirectiveLocations.Add(d.Key, d.Value);
 			foreach (var u in Usings) result.Usings.Add(u.Clone());
+			foreach (var x in Externals) result.Externals.Add(x.Clone());
+			foreach (var l in Lexers) result.Lexers.Add(l.Clone());
 			return result;
 		}
 
@@ -534,16 +589,30 @@ namespace Parsley
 							if (!(a.Value is string))
 								result.Add(new GrammarMessage(ErrorLevel.Warning, $"On \"{t.Name}\": {a.Name} expects a string", a));
 							break;
+						case "entry": case "lexer":
+							if (!(a.Value is string))
+								result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": {a.Name} expects a name", a));
+							break;
+						case "after": case "on":
+							if (!(a.Value is string))
+								result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": {a.Name} expects terminal names or literals, separated by spaces or commas", a));
+							break;
+						case "nest": case "pop": case "popOnError": case "shared":
+							// checked with the rest of the island and shared rules
+							break;
 						default:
 							result.Add(new GrammarMessage(ErrorLevel.Message, $"On \"{t.Name}\": unknown attribute \"{a.Name}\" will be ignored", a));
 							break;
 					}
 				}
 			}
-			// reachability
+			_ValidateIslands(result);
+			// reachability: from the start production, unless the grammar is only parsed through its shared
+			// productions, and from every shared production
 			var reached = new HashSet<string>();
 			var stack = new Stack<string>();
-			stack.Push(start.Name);
+			if (!IsSubordinate) stack.Push(start.Name);
+			foreach (var sp in SharedProductions) stack.Push(sp.Name);
 			while (0 < stack.Count)
 			{
 				var n = stack.Pop();
@@ -556,10 +625,10 @@ namespace Parsley
 			}
 			foreach (var p in Productions)
 				if (!reached.Contains(p.Name) && !p.Attributes.IsSet("nowarn"))
-					result.Add(new GrammarMessage(ErrorLevel.Warning, $"Production \"{p.Name}\" is unreachable from the start symbol", p));
+					result.Add(new GrammarMessage(ErrorLevel.Warning, IsSubordinate ? $"Production \"{p.Name}\" is unreachable from the shared productions" : $"Production \"{p.Name}\" is unreachable from the start symbol", p));
 			return result;
 		}
-		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state", "entering", "parsed", "when", "matched", "operators", "assoc" };
+		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "shared", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state", "entering", "parsed", "when", "matched", "lexer", "on", "operators", "assoc" };
 		static bool _IsMethodName(string s) => 0 < s.Length && (char.IsLetter(s[0]) || '_' == s[0]) && s.All(ch => char.IsLetterOrDigit(ch) || '_' == ch);
 		static readonly HashSet<string> _expressionAttributes = new HashSet<string> { "policy", "sync", "expected", "assoc" };
 		static void _ValidateAttributes(AttributeList attrs, GrammarNode owner, bool isProduction, IList<GrammarMessage> result)
@@ -608,6 +677,9 @@ namespace Parsley
 						break;
 					case "matched":
 						result.Add(new GrammarMessage(ErrorLevel.Error, "matched goes on a terminal; this rule is a non-terminal", a));
+						break;
+					case "lexer": case "on":
+						result.Add(new GrammarMessage(ErrorLevel.Error, $"{a.Name} goes on a terminal; this rule is a non-terminal. Only a lone literal or pattern is a terminal by default: mark it <terminal> otherwise", a));
 						break;
 					default:
 						if (!(a.Value is bool))

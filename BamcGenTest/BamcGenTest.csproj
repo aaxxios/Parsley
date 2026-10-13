@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- BamcTest's grammars through the source generator instead of the command line tools: one [Parser] attribute
+       synthesizes bamc's parser and lexer, and json.xbnf's, which bamc embeds, nested in a class named Json -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Parsley.Generator\Parsley.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\Parsley.Generator\build\Parsley.Generator.targets" />
+
+  <!-- the grammars are BamcTest's. bamc.xbnf's @external reads json.xbnf from beside it, so both are listed. -->
+  <ItemGroup>
+    <AdditionalFiles Include="..\BamcTest\bamc.xbnf;..\BamcTest\json.xbnf" />
+    <None Include="..\BamcTest\*.bamc" CopyToOutputDirectory="PreserveNewest" LinkBase="examples" />
+  </ItemGroup>
+</Project>

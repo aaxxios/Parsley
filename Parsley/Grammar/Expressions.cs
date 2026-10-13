@@ -240,7 +240,9 @@ namespace Parsley
 			// an operator rule and its forms' productions as written, not as analysis rewrote them
 			return string.Concat(p.Name, p.Attributes.ToString(), "= ", Write(p.Written ?? p.Expression), action, ";");
 		}
-		public static string Write(TerminalDeclaration t) => string.Concat(t.Name, t.Attributes.ToString(), "= ", Write(t.Definition), ";");
+		public static string Write(TerminalDeclaration t) => t.IsIsland && t.Definition is EmptyExpression
+			? string.Concat(t.Name, t.Attributes.ToString(), ";")
+			: string.Concat(t.Name, t.Attributes.ToString(), "= ", Write(t.Definition), ";");
 		public static string Write(Grammar g)
 		{
 			var sb = new StringBuilder();
@@ -248,7 +250,11 @@ namespace Parsley
 				sb.AppendLine($"@{d.Key} {GrammarAttribute.FormatValue(d.Value)};");
 			foreach (var u in g.Usings)
 				sb.AppendLine(u.ToString());
-			if (0 < g.Directives.Count || 0 < g.Usings.Count) sb.AppendLine();
+			foreach (var x in g.Externals)
+				sb.AppendLine(x.ToString());
+			foreach (var l in g.Lexers)
+				sb.AppendLine(l.ToString());
+			if (0 < g.Directives.Count || 0 < g.Usings.Count || 0 < g.Externals.Count || 0 < g.Lexers.Count) sb.AppendLine();
 			foreach (var p in g.Productions)
 				sb.AppendLine(Write(p));
 			foreach (var t in g.Terminals)

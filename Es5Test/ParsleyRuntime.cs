@@ -5,6 +5,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace Parsley.Runtime
@@ -19,7 +20,35 @@ namespace Parsley.Runtime
     /// <see cref="ParserTables.TerminalStart"/> as each token arrives, so inside the parser (Current, Peek,
     /// ParseNode.SymbolId) ids match the synthesized parser's constants.
     /// </remarks>
-    public readonly record struct Token(int SymbolId, string Value, int Line, int Column, long Position);
+    public readonly record struct Token(int SymbolId, string Value, int Line, int Column, long Position)
+    {
+        /// <summary>
+        /// Whatever the token's producer attaches to it, or null. A lexer can put its state after this token here,
+        /// for a <see cref="LexerController"/> to hand back when it restarts the lexer after the token (see
+        /// <see cref="LexerMode.Resume"/>). An island's token carries its <see cref="IslandParse"/>.
+        /// </summary>
+        public object? Tag { get; init; }
+    }
+
+    /// <summary>
+    /// What an island's token carries: the tree its external grammar parsed, and the problems found
+    /// </summary>
+    public sealed class IslandParse
+    {
+        public IslandParse(ParseNode node, IReadOnlyList<ParseError> errors)
+        {
+            Node = node ?? throw new ArgumentNullException(nameof(node));
+            Errors = errors ?? throw new ArgumentNullException(nameof(errors));
+        }
+        /// <summary>
+        /// The root of the island's tree, a node of its external grammar's shared production. Its symbol ids
+        /// are the external grammar's.
+        /// </summary>
+        public ParseNode Node { get; }
+        public IReadOnlyList<ParseError> Errors { get; }
+        // the parser that consumes the token reports the errors once, however often it looks at it
+        internal bool Reported;
+    }
 
     /// <summary>
     /// Wraps an enumerator so code can look ahead of the current item without advancing.
@@ -342,7 +371,22 @@ namespace Parsley.Runtime
             _current = ReadToken(out var t) ? t : EndToken(last);
             ++_index;
         }
-        ParseNode _Leaf(Token t) => new ParseNode(t.SymbolId, _tables.SymbolNames[t.SymbolId], t.Value, true, t.Line, t.Column, t.Position);
+        ParseNode _Leaf(Token t)
+        {
+            // an island's token becomes a node holding the island's tree, and the island's problems become the parser's
+            if (t.Tag is IslandParse island)
+            {
+                var node = new ParseNode(t.SymbolId, _tables.SymbolNames[t.SymbolId], null, false, t.Line, t.Column, t.Position);
+                node.Add(island.Node);
+                if (!island.Reported)
+                {
+                    island.Reported = true;
+                    _errors.AddRange(island.Errors);
+                }
+                return node;
+            }
+            return new ParseNode(t.SymbolId, _tables.SymbolNames[t.SymbolId], t.Value, true, t.Line, t.Column, t.Position);
+        }
         /// <summary>
         /// Adds Current to the tree (unless its terminal is collapsed) and moves past it
         /// </summary>
@@ -444,7 +488,7 @@ namespace Parsley.Runtime
             var display = _tables.DisplayNames[Current.SymbolId];
             var found = Current.SymbolId == _tables.EndOfInput ? "end of input"
                 : Current.SymbolId == _tables.Error ? $"unrecognized input \"{Current.Value}\""
-                : display.StartsWith('"') ? display
+                : display.StartsWith("\"", StringComparison.Ordinal) ? display
                 : $"{display} {Current.Value}";
             _errors.Add(new ParseError($"{message} but found {found}", _current.Line, _current.Column, _current.Position));
         }
@@ -513,4 +557,517 @@ namespace Parsley.Runtime
             if (null != err) root.Add(err);
         }
     }
+
+    #region Lexer controller
+    /// <summary>
+    /// A lexer as a <see cref="LexerController"/> uses it: lexes from a reader, reporting positions, lines and
+    /// columns from the given start. The static Tokenize a Luthor lexer has, or any adapter with its shape.
+    /// </summary>
+    public delegate IEnumerable<Token> TokenizeFunc(TextReader reader, long position, int line, int column, int tabWidth);
+    /// <summary>
+    /// A lexer that can carry on from the state it put in the <see cref="Token.Tag"/> of the last token before
+    /// it stopped. Optional: see <see cref="LexerMode.Resume"/>.
+    /// </summary>
+    public delegate IEnumerable<Token> ResumeFunc(TextReader reader, long position, int line, int column, int tabWidth, object tag);
+    /// <summary>
+    /// Parses an island: the shared production's TryParse entry point of an external grammar's parser
+    /// </summary>
+    public delegate bool IslandParseFunc(IEnumerable<Token> tokens, out ParseNode result, out IReadOnlyList<ParseError> errors);
+    /// <summary>
+    /// Decides, from a token as the lexer produced it and the token before it, whether another lexer takes over
+    /// </summary>
+    public delegate bool LexerSwitchWhen(Token token, Token previous);
+
+    /// <summary>
+    /// A lexer and what a <see cref="LexerController"/> does around it: islands that start after its tokens,
+    /// and terminals another lexer produces instead. Ids are the lexer's own, counting terminals from 0.
+    /// </summary>
+    public sealed class LexerMode
+    {
+        public LexerMode(TokenizeFunc tokenize, IslandRule[]? islands = null, LexerSwitch[]? switches = null, ResumeFunc? resume = null)
+        {
+            Tokenize = tokenize ?? throw new ArgumentNullException(nameof(tokenize));
+            Islands = islands ?? Array.Empty<IslandRule>();
+            Switches = switches ?? Array.Empty<LexerSwitch>();
+            Resume = resume;
+        }
+        /// <summary>
+        /// The lexer. Text it can't match it reports as a token with SymbolId -1, holding the text it skipped.
+        /// </summary>
+        public TokenizeFunc Tokenize { get; }
+        public IReadOnlyList<IslandRule> Islands { get; }
+        public IReadOnlyList<LexerSwitch> Switches { get; }
+        /// <summary>
+        /// Used instead of <see cref="Tokenize"/> to restart the lexer when the last token it produced before
+        /// stopping has a <see cref="Token.Tag"/>. Null: the lexer always starts fresh.
+        /// </summary>
+        public ResumeFunc? Resume { get; }
+    }
+
+    /// <summary>
+    /// An island: after one of <see cref="After"/>, the text is another language's, lexed by
+    /// <see cref="Inner"/> and parsed by <see cref="Parse"/>, until a <see cref="Pop"/> that balances the
+    /// <see cref="Nest"/>s before it, an error from the inner lexer (unless <see cref="PopOnError"/> is false),
+    /// or the end of the input. The enclosing lexer sees it as one token of <see cref="Terminal"/>.
+    /// </summary>
+    public sealed class IslandRule
+    {
+        public IslandRule(int terminal, int[] after, LexerMode inner, IslandParseFunc parse, int nest = -1, int pop = -1, bool popOnError = true)
+        {
+            Terminal = terminal;
+            After = after ?? throw new ArgumentNullException(nameof(after));
+            Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            Parse = parse ?? throw new ArgumentNullException(nameof(parse));
+            Nest = nest;
+            Pop = pop;
+            PopOnError = popOnError;
+        }
+        /// <summary>
+        /// The island's terminal, in the enclosing lexer's ids
+        /// </summary>
+        public int Terminal { get; }
+        /// <summary>
+        /// The enclosing lexer's terminals the island starts after
+        /// </summary>
+        public int[] After { get; }
+        public LexerMode Inner { get; }
+        public IslandParseFunc Parse { get; }
+        /// <summary>
+        /// The inner lexer's terminal that opens a nested pair, or -1
+        /// </summary>
+        public int Nest { get; }
+        /// <summary>
+        /// The inner lexer's terminal that ends the island, once it balances every <see cref="Nest"/> before it, or -1
+        /// </summary>
+        public int Pop { get; }
+        public bool PopOnError { get; }
+    }
+
+    /// <summary>
+    /// A terminal another lexer produces: where the enclosing lexer produces one of <see cref="On"/>, and
+    /// <see cref="When"/> (if any) agrees, <see cref="Tokenize"/> lexes from there instead. If what it lexes is
+    /// <see cref="LexedAs"/>, that becomes a token of <see cref="Terminal"/>, and the enclosing lexer goes on after it.
+    /// </summary>
+    public sealed class LexerSwitch
+    {
+        public LexerSwitch(int terminal, int[] on, TokenizeFunc tokenize, int lexedAs, LexerSwitchWhen? when = null)
+        {
+            Terminal = terminal;
+            On = on ?? throw new ArgumentNullException(nameof(on));
+            Tokenize = tokenize ?? throw new ArgumentNullException(nameof(tokenize));
+            LexedAs = lexedAs;
+            When = when;
+        }
+        /// <summary>
+        /// The terminal, in the enclosing lexer's ids
+        /// </summary>
+        public int Terminal { get; }
+        public int[] On { get; }
+        public TokenizeFunc Tokenize { get; }
+        /// <summary>
+        /// The terminal in <see cref="Tokenize"/>'s own ids
+        /// </summary>
+        public int LexedAs { get; }
+        public LexerSwitchWhen? When { get; }
+    }
+
+    /// <summary>
+    /// The tokens of text in more than one language. It runs one lexer at a time over a buffer it owns and
+    /// decides every switch as it lexes, from the tokens so far: an island starts after the tokens its
+    /// <see cref="IslandRule.After"/> names and ends where the island's lexer says (its pop, or an error), and a
+    /// <see cref="LexerSwitch"/> relexes one token with another lexer. Each switch restarts the lexer that takes
+    /// over at the end of the last token produced, so lexers needn't know they're embedded.
+    /// </summary>
+    /// <remarks>
+    /// An island is parsed as it's reached, by its external grammar's parser over the island's tokens, and
+    /// comes out as one token whose <see cref="Token.Tag"/> is the <see cref="IslandParse"/>. A parser reading
+    /// these tokens never sees inside an island, however far it looks ahead.
+    /// <para>
+    /// Lexers must report each token's Value as exactly the text it matched (or empty, for a token they make up),
+    /// and text they can't match as a token with SymbolId -1: the controller works out where to restart from
+    /// them, and where an island's text ends. Lines and
+    /// columns are counted as Luthor lexers count them: \n ends a line, a tab moves to the next tab stop, other
+    /// control characters take no width, and a surrogate pair is one column.
+    /// </para>
+    /// </remarks>
+    public sealed class LexerController : IEnumerable<Token>
+    {
+        readonly LexerMode _mode;
+        readonly Func<TextReader> _open;
+        readonly long _position;
+        readonly int _line, _column, _tabWidth;
+        bool _opened;
+        readonly bool _reopenable;
+
+        public LexerController(LexerMode mode, TextReader reader, long position = 0, int line = 1, int column = 1, int tabWidth = 4)
+            : this(mode, () => reader ?? throw new ArgumentNullException(nameof(reader)), false, position, line, column, tabWidth) { }
+        public LexerController(LexerMode mode, string text, long position = 0, int line = 1, int column = 1, int tabWidth = 4)
+            : this(mode, () => new StringReader(text ?? throw new ArgumentNullException(nameof(text))), true, position, line, column, tabWidth) { }
+        LexerController(LexerMode mode, Func<TextReader> open, bool reopenable, long position, int line, int column, int tabWidth)
+        {
+            _mode = mode ?? throw new ArgumentNullException(nameof(mode));
+            if (tabWidth < 1) throw new ArgumentOutOfRangeException(nameof(tabWidth));
+            if (position < 0) throw new ArgumentOutOfRangeException(nameof(position));
+            if (line < 1) throw new ArgumentOutOfRangeException(nameof(line));
+            if (column < 1) throw new ArgumentOutOfRangeException(nameof(column));
+            _open = open;
+            _reopenable = reopenable;
+            _position = position;
+            _line = line;
+            _column = column;
+            _tabWidth = tabWidth;
+        }
+
+        public IEnumerator<Token> GetEnumerator()
+        {
+            // a reader can only be read once
+            if (_opened && !_reopenable) throw new InvalidOperationException("The tokens of a TextReader can only be enumerated once");
+            _opened = true;
+            return new _Run(_mode, new _Source(_open(), _position), _position, _line, _column, _tabWidth).Tokens().GetEnumerator();
+        }
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        /// <summary>
+        /// The line and column after the text, starting from the given ones, counted as Luthor lexers count them
+        /// </summary>
+        public static void Advance(string text, int tabWidth, ref int line, ref int column)
+        {
+            var afterHigh = false;
+            foreach (var c in text)
+            {
+                if ('\n' == c) { ++line; column = 1; afterHigh = false; }
+                else if ('\t' == c) { column = ((column - 1) / tabWidth + 1) * tabWidth + 1; afterHigh = false; }
+                else if (c < ' ') afterHigh = false;
+                else if (char.IsLowSurrogate(c) && afterHigh) afterHigh = false;
+                else { ++column; afterHigh = char.IsHighSurrogate(c); }
+            }
+        }
+
+        // the input, read as lexers need it and dropped once no lexer can restart before it. Positions are absolute.
+        sealed class _Source
+        {
+            readonly TextReader _reader;
+            char[] _buf = new char[4096];
+            long _base; // the position of _buf[0]
+            int _count;
+            bool _eof;
+            public _Source(TextReader reader, long position)
+            {
+                _reader = reader;
+                _base = position;
+            }
+            // the character at the position, or -1 past the end
+            public int At(long position)
+            {
+                while (position >= _base + _count)
+                {
+                    if (_eof || !_Fill()) return -1;
+                }
+                return _buf[position - _base];
+            }
+            bool _Fill()
+            {
+                if (_count == _buf.Length) Array.Resize(ref _buf, _buf.Length * 2);
+                var n = _reader.Read(_buf, _count, _buf.Length - _count);
+                if (0 >= n)
+                {
+                    _eof = true;
+                    return false;
+                }
+                _count += n;
+                return true;
+            }
+            // copies up to count characters from the position, returning how many
+            public int Read(long position, char[] buffer, int index, int count)
+            {
+                if (count <= 0 || -1 == At(position)) return 0;
+                var available = (int)Math.Min(count, _base + _count - position);
+                Array.Copy(_buf, position - _base, buffer, index, available);
+                return available;
+            }
+            public string Text(long from, long to) => from >= to ? "" : new string(_buf, (int)(from - _base), (int)(to - from));
+            // nothing before floor is needed again
+            public void Release(long floor)
+            {
+                var drop = (int)Math.Min(floor - _base, _count);
+                // only when it's worth moving what's left
+                if (drop < 4096 || drop * 2 < _count) return;
+                Array.Copy(_buf, drop, _buf, 0, _count - drop);
+                _count -= drop;
+                _base += drop;
+            }
+        }
+
+        // what a lexer reads: the source from a position on
+        sealed class _View : TextReader
+        {
+            readonly _Source _source;
+            long _position;
+            public _View(_Source source, long position)
+            {
+                _source = source;
+                _position = position;
+            }
+            public override int Peek() => _source.At(_position);
+            public override int Read()
+            {
+                var c = _source.At(_position);
+                if (-1 != c) ++_position;
+                return c;
+            }
+            public override int Read(char[] buffer, int index, int count)
+            {
+                var n = _source.Read(_position, buffer, index, count);
+                _position += n;
+                return n;
+            }
+        }
+
+        // one lexer in use: the outermost, or an island's
+        sealed class _Level
+        {
+            public _Level(LexerMode mode, IslandRule? island, long end, int line, int column, object? tag)
+            {
+                Mode = mode;
+                Island = island;
+                End = end;
+                EndLine = line;
+                EndColumn = column;
+                Tag = tag;
+            }
+            public readonly LexerMode Mode;
+            public readonly IslandRule? Island;
+            // null: start the lexer at End before the next token
+            public IEnumerator<Token>? Lexer;
+            // the furthest end of the tokens produced at this level: where its lexer restarts
+            public long End;
+            public int EndLine, EndColumn;
+            // the Tag of the last token its lexer produced, for Resume
+            public object? Tag;
+            public Token Previous = new Token(-1, "", 0, 0, -1);
+            // an island to start before the next token
+            public IslandRule? Pending;
+            public int Depth; // nesting, in an island with Nest
+            public bool Done;
+        }
+
+        sealed class _Run
+        {
+            readonly LexerMode _mode;
+            readonly _Source _source;
+            readonly long _position;
+            readonly int _line, _column, _tabWidth;
+            readonly List<_Level> _levels = new();
+
+            public _Run(LexerMode mode, _Source source, long position, int line, int column, int tabWidth)
+            {
+                _mode = mode;
+                _source = source;
+                _position = position;
+                _line = line;
+                _column = column;
+                _tabWidth = tabWidth;
+            }
+
+            public IEnumerable<Token> Tokens()
+            {
+                var top = new _Level(_mode, null, _position, _line, _column, null);
+                _levels.Add(top);
+                try
+                {
+                    while (true)
+                    {
+                        var t = _Next(top);
+                        if (null == t) yield break;
+                        yield return t.Value;
+                    }
+                }
+                finally
+                {
+                    foreach (var l in _levels) l.Lexer?.Dispose();
+                }
+            }
+
+            void _Stop(_Level level)
+            {
+                level.Lexer?.Dispose();
+                level.Lexer = null;
+            }
+
+            bool _Lex(_Level level, out Token token)
+            {
+                if (null == level.Lexer)
+                {
+                    var view = new _View(_source, level.End);
+                    var tokens = null != level.Mode.Resume && null != level.Tag
+                        ? level.Mode.Resume(view, level.End, level.EndLine, level.EndColumn, _tabWidth, level.Tag)
+                        : level.Mode.Tokenize(view, level.End, level.EndLine, level.EndColumn, _tabWidth);
+                    level.Lexer = tokens.GetEnumerator();
+                }
+                if (level.Lexer.MoveNext())
+                {
+                    token = level.Lexer.Current;
+                    return true;
+                }
+                token = default;
+                return false;
+            }
+
+            // the next token at the level, or null where it ends
+            public Token? _Next(_Level level)
+            {
+                if (level.Done) return null;
+                if (null != level.Pending)
+                {
+                    var rule = level.Pending;
+                    level.Pending = null;
+                    return _Island(level, rule);
+                }
+                if (!_Lex(level, out var t))
+                {
+                    level.Done = true;
+                    _Stop(level);
+                    return null;
+                }
+                // the island's lexer can't read this: the island ends before it, and the enclosing lexer goes
+                // on from the end of the island's last token
+                if (null != level.Island && level.Island.PopOnError && 0 > t.SymbolId)
+                {
+                    level.Done = true;
+                    _Stop(level);
+                    return null;
+                }
+                var fromLexer = true;
+                foreach (var sw in level.Mode.Switches)
+                {
+                    if (0 > Array.IndexOf(sw.On, t.SymbolId)) continue;
+                    if (null != sw.When && !sw.When(t, level.Previous)) continue;
+                    var other = _LexOne(sw.Tokenize, t.Position, t.Line, t.Column);
+                    if (null == other || other.Value.SymbolId != sw.LexedAs) continue;
+                    t = new Token(sw.Terminal, other.Value.Value, t.Line, t.Column, t.Position);
+                    // the level's lexer read on with its own idea of the text; it restarts after this token
+                    _Stop(level);
+                    fromLexer = false;
+                    break;
+                }
+                _Produced(level, t, fromLexer);
+                if (null != level.Island && -1 != level.Island.Pop)
+                {
+                    if (t.SymbolId == level.Island.Nest) ++level.Depth;
+                    else if (t.SymbolId == level.Island.Pop && 0 >= --level.Depth)
+                    {
+                        level.Done = true;
+                        _Stop(level);
+                        return t;
+                    }
+                }
+                foreach (var island in level.Mode.Islands)
+                    if (0 <= Array.IndexOf(island.After, t.SymbolId))
+                    {
+                        level.Pending = island;
+                        // the level's lexer may have read into the island; it restarts after it
+                        _Stop(level);
+                        break;
+                    }
+                return t;
+            }
+
+            Token? _LexOne(TokenizeFunc tokenize, long position, int line, int column)
+            {
+                using var e = tokenize(new _View(_source, position), position, line, column, _tabWidth).GetEnumerator();
+                return e.MoveNext() ? e.Current : null;
+            }
+
+            void _Produced(_Level level, Token t, bool fromLexer)
+            {
+                level.Previous = t;
+                if (fromLexer) level.Tag = t.Tag;
+                var value = t.Value ?? "";
+                var end = t.Position + value.Length;
+                // a token a lexer made up (empty) can sit anywhere; only one that reaches further moves the restart point
+                if (end >= level.End && (0 < value.Length || end > level.End))
+                {
+                    int line = t.Line, column = t.Column;
+                    Advance(value, _tabWidth, ref line, ref column);
+                    level.End = end;
+                    level.EndLine = line;
+                    level.EndColumn = column;
+                }
+                _Release();
+            }
+
+            void _Release()
+            {
+                var floor = long.MaxValue;
+                foreach (var l in _levels) floor = Math.Min(floor, l.End);
+                _source.Release(floor);
+            }
+
+            // parses an island with its grammar, and makes it one token of the enclosing level
+            Token _Island(_Level outer, IslandRule rule)
+            {
+                var level = new _Level(rule.Inner, rule, outer.End, outer.EndLine, outer.EndColumn, null);
+                _levels.Add(level);
+                var stream = new _IslandTokens(this, level);
+                ParseNode node;
+                IReadOnlyList<ParseError> errors;
+                try
+                {
+                    rule.Parse(stream, out node, out errors);
+                    // a parser that gave up early leaves the rest of the island unread
+                    stream.Drain();
+                }
+                finally
+                {
+                    _Stop(level);
+                    _levels.Remove(level);
+                }
+                var first = stream.First;
+                var start = first?.Position ?? outer.End;
+                var token = new Token(rule.Terminal, _source.Text(start, level.End), first?.Line ?? outer.EndLine, first?.Column ?? outer.EndColumn, start)
+                {
+                    Tag = new IslandParse(node, errors)
+                };
+                outer.Previous = token;
+                outer.Tag = null;
+                outer.End = level.End;
+                outer.EndLine = level.EndLine;
+                outer.EndColumn = level.EndColumn;
+                _Release();
+                return token;
+            }
+
+            // an island's tokens, as its parser reads them. One pass: the parser's and Drain share it.
+            sealed class _IslandTokens : IEnumerable<Token>
+            {
+                readonly _Run _run;
+                readonly _Level _level;
+                IEnumerator<Token>? _e;
+                public Token? First;
+                public _IslandTokens(_Run run, _Level level)
+                {
+                    _run = run;
+                    _level = level;
+                }
+                IEnumerable<Token> _Tokens()
+                {
+                    while (true)
+                    {
+                        var t = _run._Next(_level);
+                        if (null == t) yield break;
+                        First ??= t;
+                        yield return t.Value;
+                    }
+                }
+                public IEnumerator<Token> GetEnumerator() => _e ??= _Tokens().GetEnumerator();
+                IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+                public void Drain()
+                {
+                    var e = GetEnumerator();
+                    while (e.MoveNext()) { }
+                }
+            }
+        }
+    }
+    #endregion
 }

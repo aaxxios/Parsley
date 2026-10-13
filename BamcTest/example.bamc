@@ -1,4 +1,6 @@
 ﻿browser "firefox"
+feature "use-http-proxy" "USER:PASS@IP:PORT"
+add-headers {"DNT": "1", "X-Test": {"nested": [1, 2.5, {"deep": true}], "empty": {}}} // JSON, then bamc again
 visit "https://google.com"
 fill-text "#APjFqb" "This is a test"
 wait-for-seconds .2

@@ -1,0 +1,12 @@
+<Project>
+  <!-- The version of everything built from this repository: the tools, the runtime, the generator, the language
+       server and the samples. Parsley.VisualStudio isn't SDK style, so its Properties/AssemblyInfo.cs and
+       source.extension.vsixmanifest carry it too, as does Parsley.VSCode/package.json. -->
+  <PropertyGroup>
+    <Version>2.0.0</Version>
+    <PackageVersion>2.0.0</PackageVersion>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
+    <InformationalVersion>2.0.0</InformationalVersion>
+  </PropertyGroup>
+</Project>

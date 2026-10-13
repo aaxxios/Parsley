@@ -3,13 +3,14 @@
 Highlighting and language support for `.xbnf` grammars in Visual Studio 2022 (17.8 and later) and Visual Studio 2026.
 
 - **Colors**, from the TextMate grammar in `Grammars/`: rule definitions and references, attributes, literals,
-  regex patterns (with their classes, quantifiers and escapes), directives, comments, and the C# in semantic
+  regex patterns (with their classes, quantifiers and escapes), directives (with an `@external` or `@lexer` alias), comments, and the C# in semantic
   actions.
 - **Go to definition** (F12) and **find all references** (Shift+F12) for rule names, across `@import`ed files.
   References also cover any open grammar that imports this one.
 - **Completion**: rule names in expressions, attribute names and their values (`policy=`, `assoc=` and so on)
   inside `< >`, and directives after `@`.
-- **Hover**: a rule as written, with its action shortened to `=> { … }`, and the `//` comments right above it.
+- **Hover**: a rule as written, with its action shortened to `=> { … }`, the `//` comments right above it, and
+  what it is: a terminal, a non-terminal, an island, a contextual terminal or one from another lexer.
   Attributes and directives get a one-line description.
 - **Diagnostics**: syntax errors, undefined names and duplicate rules as you type. The full analysis
   (conflicts, lookahead, rewritten left recursion and so on) runs when you **save**, in the background, and

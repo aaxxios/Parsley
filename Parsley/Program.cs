@@ -78,14 +78,32 @@ namespace Parsley
                 {
                     // from the analyzed grammar: its terminals are in the order the parser numbers them, and each
                     // has its regex, including those built from alternatives or other terminals
-                    foreach (var term in analysis.Grammar.Terminals)
+                    void write(TextWriter w, IEnumerable<TerminalDeclaration> terms)
                     {
-                        // the lexer never produces a contextual terminal; the parser reads it from another one
-                        if (term.IsContextual) continue;
-                        if (term.IsHidden) options.Lexer.Write('.');
-                        options.Lexer.Write(term.Name);
-                        options.Lexer.Write(' ');
-                        options.Lexer.WriteLine(term.Regex);
+                        foreach (var term in terms)
+                        {
+                            if (term.IsHidden) w.Write('.');
+                            w.Write(term.Name);
+                            w.Write(' ');
+                            w.WriteLine(term.Regex);
+                        }
+                    }
+                    // the lexer never produces a contextual terminal, which the parser reads from another one, an
+                    // island, which the lexer controller makes, or a terminal another lexer produces
+                    write(options.Lexer, analysis.Grammar.Terminals.Where(t => t.IsLexed));
+                    // each lexer terminals name with lexer= gets a file of its own beside this one: es5.lex, es5.Regex.lex
+                    var groups = analysis.Grammar.LexerGroups;
+                    if (0 < groups.Count)
+                    {
+                        var lexFile = (options.Lexer as StreamWriter)?.BaseStream is FileStream fs ? fs.Name : null;
+                        if (null == lexFile)
+                            throw new ArgumentException("The grammar has terminals from other lexers, which are written to files beside the lexer file, so --lexer must name a file.");
+                        foreach (var alias in groups)
+                        {
+                            var path = Path.Combine(Path.GetDirectoryName(lexFile) ?? "", Path.GetFileNameWithoutExtension(lexFile) + "." + alias + Path.GetExtension(lexFile));
+                            using var w = new StreamWriter(path);
+                            write(w, analysis.Grammar.Terminals.Where(t => t.Lexer == alias && !t.IsIsland));
+                        }
                     }
                 }
             }

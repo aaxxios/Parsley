@@ -4,13 +4,14 @@ Highlighting and language support for [Parsley](https://github.com/codewitch-hon
 grammars.
 
 - **Colors**: rule definitions and references, attributes, literals, regex patterns (classes, quantifiers and
-  escapes), directives and comments. The C# in semantic actions is colored by VS Code's own C# grammar.
+  escapes), directives (with an `@external` or `@lexer` alias) and comments. The C# in semantic actions is colored by VS Code's own C# grammar.
 - **Go to definition** (F12), **peek** and **find all references** (Shift+F12) for rule names, across
   `@import`ed files. References also cover any open grammar that imports this one.
 - **Highlights** of every use of the rule under the cursor.
 - **Completion**: rule names in expressions, attribute names and values (`policy=`, `assoc=` and so on) inside
   `< >`, and directives after `@`.
-- **Hover**: a rule as written, with its action shortened to `=> { … }`, and the `//` comments right above it.
+- **Hover**: a rule as written, with its action shortened to `=> { … }`, the `//` comments right above it, and
+  what it is: a terminal, a non-terminal, an island, a contextual terminal or one from another lexer.
   Attributes and directives get a one-line description.
 - **Diagnostics**: syntax errors, undefined names and duplicate rules as you type. The full analysis
   (conflicts, lookahead, rewritten left recursion and so on) runs when you **save** and stays until the next
@@ -41,8 +42,8 @@ npm run package
 
 `npm run package` copies the grammar and language configuration from `../Parsley.VisualStudio/Grammars`,
 publishes `../Parsley.LanguageServer` into `server/`, bundles the extension into `dist/` and writes
-`parsley-xbnf-<version>.vsix`. Install that with **Extensions: Install from VSIX…**, or run
-`code --install-extension parsley-xbnf-1.0.0.vsix`.
+`parsley-xbnf-lsp-<version>.vsix`. Install that with **Extensions: Install from VSIX…**, or run
+`code --install-extension parsley-xbnf-lsp-2.0.0.vsix`.
 
 To try changes without packaging, run `npm run prepare-assets` and `npm run build` once, open this folder in
 VS Code and press F5.

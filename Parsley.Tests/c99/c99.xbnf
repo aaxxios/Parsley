@@ -213,10 +213,10 @@ character_constant= 'L?\'([^\'\\\n]|\\([\'"?\\abfnrtv]|[0-7]{1,3}|x[0-9A-Fa-f]+|
 string_literal= 'L?"([^"\\\n]|\\([\'"?\\abfnrtv]|[0-7]{1,3}|x[0-9A-Fa-f]+|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}))*"';
 
 // A.1.7 Punctuators. <: :> <% %> are digraphs for [ ] { }; %: and %:%: belong to the preprocessor.
-lbracket= "[" | "<:";
-rbracket= "]" | ":>";
-lbrace<collapsed>= "{" | "<%";
-rbrace<collapsed>= "}" | "%>";
+lbracket<terminal>= "[" | "<:";
+rbracket<terminal>= "]" | ":>";
+lbrace<collapsed, terminal>= "{" | "<%";
+rbrace<collapsed, terminal>= "}" | "%>";
 lparen= "(";
 rparen= ")";
 dot= ".";

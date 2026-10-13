@@ -14,7 +14,17 @@
     <RepositoryUrl>https://github.com/codewitch-honey-crisis/Parsley/</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <!-- the lexer runtime is public, and in Parsley.Runtime, when compiled in here -->
+    <DefineConstants>$(DefineConstants);LUTHOR_RUNTIME_PUBLIC</DefineConstants>
   </PropertyGroup>
+
+  <!-- The runtime every synthesized parser and generated lexer needs, compiled in: reference this dll instead of
+       generating the runtime into each project (the source generator then generates none). The sources are also
+       embedded, as Parsley.Runtime.*, like the tool embeds them. -->
+  <ItemGroup>
+    <Compile Include="..\Parsley\Runtime\*.cs" LinkBase="Runtime" />
+    <Compile Include="..\LexGen\Templates\LuthorRuntime.cs" Link="Runtime\LuthorRuntime.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="..\Parsley\Runtime\AllStarParserBase.cs" Link="AllStarParserBase.cs">

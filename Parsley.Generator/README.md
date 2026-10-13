@@ -37,7 +37,20 @@ Into the partial class:
   - `Tokenize(string)` / `Tokenize(TextReader)`, with the lexer's optional position, line, column and tab width (unless `Lexer = false`)
   - `Parse(IEnumerable<Token>)`, `Parse(string)`, `Parse(TextReader)` (the last two unless `Lexer = false`), and `TryParse(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)`
   - `Evaluate(ParseNode, state)`, when the grammar has semantic actions, returning the start production's type
+  - `TryParseXxx(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)` for each `shared` production, and
+    `CreateLexerMode(TokenizeFunc)`, for other grammars to embed this one as islands. A grammar with shared
+    productions and no `start` gets no `Parse` or `TryParse` of its own.
 - Private nested classes: `Parser`, `Evaluator` (with semantic actions) and `Lexer` (unless `Lexer = false`).
+- For a grammar with islands, for each `@external` grammar: an internal nested class named after its alias, holding
+  that grammar's `Parser`, `Lexer` and `Evaluator`, its symbol constants, and its own `@external` grammars' classes
+  in turn. So `[Parser("bamc.xbnf")]` also gets json.xbnf's parser and lexer, as `BamcParser.Json`, and
+  `BamcParser.Json.Object` is the id of json.xbnf's `Object`, for looking at an island's tree. `Tokenize` lexes
+  through a `LexerController`, which switches to an island's lexer and back. See XBNF.md's
+  [Islands and other lexers](../XBNF.md#islands-and-other-lexers).
+- A lexer for each `lexer=` alias, named after it (`RegexLexer`). A `when` on such a terminal is a static partial
+  method on the nested parser, as a contextual terminal's is an instance one.
+
+A lexer `@lexer` names, for the grammar, an `@external` alias or a `lexer=` alias, is used instead of generating one.
 
 The grammar's `@class`, `@namespace` and `@evaluator` directives are ignored: the class decides the names and the
 namespace. `@using` still applies to semantic actions. A constant that would clash with a member of the class, or
@@ -60,15 +73,18 @@ partial class C99
 
 The runtime the parsers and lexers share is generated once per project, for only the engines its parsers use:
 `ParsleyRuntime`, the `LL1ParserBase`, `LLkParserBase` or `AllStarParserBase` it needs (namespace
-`Parsley.Runtime`, public) and, when at least one parser has a lexer, `LuthorRuntime` (namespace `Luthor.Runtime`, internal).
+`Parsley.Runtime`, public) and, when at least one parser has a lexer, the lexer runtime, `LuthorRuntime` and the
+types it uses (also in `Parsley.Runtime`, internal). Generated lexers call it there.
 
-If the project references `Parsley.Runtime.dll`, none of it is generated, and the parsers use the dll's.
+If the project references `Parsley.Runtime.dll`, none of it is generated, and the parsers and lexers use the dll's,
+which has all of it, the lexer runtime public.
 Reference the dll when more than one project in an app uses the generator. Each generated copy of
 `Parsley.Runtime` is public, so a project that references two of them would see each type twice.
 
 ## Grammar files
 
-The generator reads grammars, and the files they `@import`, from the project's AdditionalFiles, never from disk.
+The generator reads grammars, and the files they `@import` or declare with `@external`, from the project's
+AdditionalFiles, never from disk.
 The package's build targets make every `.xbnf` in the project an AdditionalFile. Set
 `<ParsleyIncludeXbnf>false</ParsleyIncludeXbnf>` to list them yourself.
 

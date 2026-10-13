@@ -19,6 +19,10 @@ namespace Parsley.Tests
 		readonly Type _parserType;
 		readonly Type _tokenType;
 		public IReadOnlyList<Diagnostic> Diagnostics { get; }
+		/// <summary>
+		/// The compiled assembly, for calling into other classes compiled with the parser
+		/// </summary>
+		public Assembly Assembly => _parserType.Assembly;
 
 		CompiledParser(Type parserType, Type tokenType, IReadOnlyList<Diagnostic> diagnostics)
 		{

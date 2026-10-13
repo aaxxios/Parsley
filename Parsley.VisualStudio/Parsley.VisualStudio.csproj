@@ -53,6 +53,7 @@
   <ItemGroup>
     <Compile Include="XbnfContentDefinition.cs" />
     <Compile Include="XbnfLanguageClient.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
 
   <ItemGroup>

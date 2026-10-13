@@ -252,8 +252,10 @@ namespace Parsley
 				var terms = _g.Terminals;
 				flags.Clear();
 				add(terms.Count(t => null != t.Literal), "literal");
-				add(terms.Count(t => null == t.Literal && !t.IsContextual), "pattern");
+				add(terms.Count(t => null == t.Literal && !t.IsContextual && !t.IsIsland), "pattern");
 				add(terms.Count(t => t.IsContextual), "contextual");
+				add(terms.Count(t => t.IsIsland), "island");
+				add(terms.Count(t => null != t.Lexer && !t.IsIsland), "from other lexers");
 				add(terms.Count(t => t.IsHidden), "hidden");
 				add(terms.Count(t => t.IsCollapsed), "collapsed");
 				add(terms.Count(t => t.IsImplicit), "implicit");
@@ -263,6 +265,17 @@ namespace Parsley
 				var contextual = terms.Where(t => t.IsContextual).ToList();
 				if (0 < contextual.Count)
 					_Field("Contextual", string.Join(", ", contextual.Select(t => $"{t.Name}, read from {t.ContextualBase} when {t.When} says so")));
+				var islands = terms.Where(t => t.IsIsland).ToList();
+				if (0 < islands.Count)
+					_Field("Islands", string.Join(", ", islands.Select(t => $"{t.Name}, parsed by {t.Entry} after {string.Join(" or ", t.GetNames("after"))}")));
+				var others = terms.Where(t => null != t.Lexer && !t.IsIsland).ToList();
+				if (0 < others.Count)
+					_Field("Other lexers", string.Join(", ", others.Select(t => $"{t.Name}, lexed by {t.Lexer} on {string.Join(" or ", t.GetNames("on"))}{(null != t.When ? $" when {t.When} says so" : "")}")));
+				if (0 < _g.Externals.Count)
+					_Field("External grammars", string.Join(", ", _g.Externals.Select(x => $"{x.Alias} ({x.Path})")));
+				var shared = prods.Where(p => p.Attributes.IsSet("shared")).ToList();
+				if (0 < shared.Count)
+					_Field("Shared", string.Join(", ", shared.Select(p => p.Name)) + (_g.IsSubordinate ? " (no start: only parsed as islands)" : ""));
 				var hooks = prods.Count(p => null != p.Entering) + prods.Count(p => null != p.Parsed) + terms.Count(t => null != t.Matched);
 				if (0 < hooks)
 					_Field("Parse-time hooks", $"{_Plural(hooks, "call")} into your code: {prods.Count(p => null != p.Entering)} entering, {prods.Count(p => null != p.Parsed)} parsed, {terms.Count(t => null != t.Matched)} matched");
@@ -411,6 +424,12 @@ namespace Parsley
 			{
 				var result = null != _g.StartSymbol ? _From(_g.StartSymbol) : new HashSet<string>();
 				if (null != _g.StartSymbol) result.Add(_g.StartSymbol);
+				// islands of other grammars start at shared productions
+				foreach (var p in _g.SharedProductions)
+				{
+					result.Add(p.Name);
+					result.UnionWith(_From(p.Name));
+				}
 				foreach (var p in _g.Productions)
 					if (null != p.OperatorOwner && result.Contains(p.OperatorOwner.Production.Name)) result.Add(p.Name);
 				return result;

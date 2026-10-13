@@ -38,7 +38,7 @@ public static class ES5Tokenizer
 	/// The lexer id the parser expects for a regular expression literal. It's the last terminal in the
 	/// grammar, the one the build leaves out of es5.lex, so it comes right after the main lexer's last.
 	/// </summary>
-	public const int RegularExpressionLiteral = ES5Lexer.ERROR;
+	public const int RegularExpressionLiteral = ES5Lexer.TerminalCount;
 
 	public static IEnumerable<Token> Tokenize(TextReader reader) => Tokenize(reader.ReadToEnd());
 

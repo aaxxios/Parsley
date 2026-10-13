@@ -80,10 +80,15 @@ namespace Parsley
 				_Add(end, Runtime.Atn.Epsilon, _rules[i * 2 + 1], 0);
 			}
 			StartRule = _s.GetId(a.Grammar.StartSymbol!);
+			EntryRules = a.Grammar.SharedProductions.Select(p => _s.GetId(p.Name)).Where(id => id != StartRule).ToArray();
 			EndOfInput = _s.EndOfInput;
 		}
 
 		public int StartRule { get; }
+		/// <summary>
+		/// The shared productions other than the start, which parses can also start with
+		/// </summary>
+		public int[] EntryRules { get; }
 		public int EndOfInput { get; }
 		public int StateCount => _states.Count;
 		/// <summary>
@@ -115,8 +120,8 @@ namespace Parsley
 		/// A runtime network for the given adaptive decisions, in order
 		/// </summary>
 		public Runtime.Atn ToRuntime(IEnumerable<Decision> adaptive)
-			=> new Runtime.Atn(StartRule, EndOfInput, _rules.ToArray(), SerializeStates(), adaptive.Select(d => GetDecisionState(d.Node)).ToArray());
-		internal Runtime.Atn ToRuntime(int[] decisionStates) => new Runtime.Atn(StartRule, EndOfInput, _rules.ToArray(), SerializeStates(), decisionStates);
+			=> new Runtime.Atn(StartRule, EndOfInput, _rules.ToArray(), SerializeStates(), adaptive.Select(d => GetDecisionState(d.Node)).ToArray(), EntryRules);
+		internal Runtime.Atn ToRuntime(int[] decisionStates) => new Runtime.Atn(StartRule, EndOfInput, _rules.ToArray(), SerializeStates(), decisionStates, EntryRules);
 		/// <summary>
 		/// The terminals a state's transitions match
 		/// </summary>

@@ -56,11 +56,16 @@
         },
         {
           "include": "#number"
+        },
+        {
+          "comment": "the alias of @external and @lexer: @external Json \"json.xbnf\";",
+          "name": "entity.name.namespace.alias.xbnf",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b"
         }
       ]
     },
     "rule": {
-      "comment": "Name<attributes>= expression [=> { C# }];  The name is a definition; non-terminals start with a capital by convention, terminals with a lower case letter.",
+      "comment": "Name<attributes>= expression [=> { C# }];  or an island, Name<entry=\"Alias.Rule\", ...>; with no body. The name is a definition. By convention non-terminals start with a capital and terminals with a lower case letter; only a lone literal or pattern is a terminal unless the rule is marked <terminal>.",
       "begin": "([A-Za-z_][A-Za-z0-9_]*)\\s*(?=<|=(?!>)|/[/*]|$)",
       "beginCaptures": {
         "1": {

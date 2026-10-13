@@ -41,6 +41,7 @@ namespace Parsley.Runtime
         readonly int[][] _follow; // per non-terminal: the states its calls return to
         readonly int[] _decisions;
         readonly int _startRule;
+        readonly bool[] _entry; // per non-terminal: a parse can start (and so end) with it
         readonly int _endOfInput;
         internal readonly Dfa[] Dfas;
 
@@ -49,7 +50,8 @@ namespace Parsley.Runtime
         /// <param name="rules">For each non-terminal in id order, its start state then its stop state</param>
         /// <param name="states">For each state in order, its number of transitions, then kind, a, b for each</param>
         /// <param name="decisions">For each adaptive decision, the state whose epsilon transitions are its branches, in order</param>
-        public Atn(int startRule, int endOfInput, int[] rules, int[] states, int[] decisions)
+        /// <param name="entryRules">Other non-terminals a parse can start with: a grammar's shared productions, which parse islands</param>
+        public Atn(int startRule, int endOfInput, int[] rules, int[] states, int[] decisions, int[]? entryRules = null)
         {
             _startRule = startRule;
             _endOfInput = endOfInput;
@@ -65,6 +67,10 @@ namespace Parsley.Runtime
             }
             _transitions = list.ToArray();
             var ruleCount = rules.Length / 2;
+            _entry = new bool[ruleCount];
+            if (0 <= startRule && startRule < ruleCount) _entry[startRule] = true;
+            if (null != entryRules)
+                foreach (var r in entryRules) _entry[r] = true;
             _ruleStart = new int[ruleCount];
             _ruleStop = new int[ruleCount];
             _stopRule = new int[_transitions.Length];
@@ -334,8 +340,9 @@ namespace Parsley.Runtime
                         continue;
                     }
                     // the stack is empty. With the parser's real stack, that means the start rule is done.
-                    // Without it, the rule could have been called from anywhere, so go everywhere it returns to.
-                    if (fullContext || rule == _startRule)
+                    // Without it, the rule could have been called from anywhere, so go everywhere it returns to,
+                    // and if a parse can start with it, to the end of the input as well.
+                    if (fullContext || _entry[rule])
                         result.Add(new Config(Accept, c.Alt, Stack.Empty));
                     if (!fullContext)
                         foreach (var f in _follow[rule])

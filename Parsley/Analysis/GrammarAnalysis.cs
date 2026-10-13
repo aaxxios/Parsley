@@ -189,10 +189,17 @@ namespace Parsley
 			if (ParserEngine.LL1 == engine) k = 1;
 			var g = grammar.Clone();
 			g.ResolveLiterals();
-			// contextual terminals go after every terminal the lexer produces, so lexer ids don't count them
-			var contextual = g.Terminals.Where(t => t.IsContextual).ToList();
-			g.Terminals.RemoveAll(t => t.IsContextual);
-			g.Terminals.AddRange(contextual);
+			// the terminals the grammar's own lexer produces come first, so its ids match the parser's. Then
+			// those from other lexers (lexer=), grouped by lexer, then islands, which the lexer controller
+			// produces, and last contextual terminals, which only the parser assigns
+			var groups = g.LexerGroups;
+			var ordered = g.Terminals.Where(t => t.IsLexed)
+				.Concat(groups.SelectMany(alias => g.Terminals.Where(t => t.Lexer == alias && !t.IsIsland)))
+				.Concat(g.Terminals.Where(t => t.IsIsland))
+				.Concat(g.Terminals.Where(t => t.IsContextual))
+				.ToList();
+			g.Terminals.Clear();
+			g.Terminals.AddRange(ordered);
 			var a = new GrammarAnalysis(g, k, engine);
 			a._Run();
 			return a;
@@ -231,6 +238,31 @@ namespace Parsley
 			foreach (var d in _decisions.Values.OrderBy(d => Grammar.Productions.IndexOf(d.Production)).ThenBy(d => d.Index))
 				_Resolve(d);
 			_ChooseEngine();
+			_CheckIslandTriggers();
+		}
+
+		// the lexer controller starts an island after every token its after= names, wherever it is, so anything
+		// else that can follow that token in the grammar can never be parsed
+		void _CheckIslandTriggers()
+		{
+			foreach (var island in Grammar.Terminals.Where(t => t.IsIsland))
+			{
+				var id = Symbols.GetId(island.Name);
+				foreach (var name in island.GetNames("after"))
+				{
+					var trigger = Grammar.FindTerminal(name);
+					if (null == trigger) continue;
+					var tid = Symbols.GetId(trigger.Name);
+					var others = new SortedSet<int>();
+					foreach (var p in Grammar.Productions)
+						foreach (var sr in p.Expression.Descendants().OfType<SymbolRef>())
+							if (sr.Name == trigger.Name)
+								foreach (var x in GetFollow(sr, 1))
+									if (0 < x.Count && x[0] != id) others.Add(x[0]);
+					if (0 < others.Count)
+						_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"The island \"{island.Name}\" starts after every \"{trigger.Name}\", but {string.Join(", ", others.Select(Symbols.Display))} can follow \"{trigger.Name}\" too, and won't be lexed as this grammar where that happens", island));
+				}
+			}
 		}
 
 		bool _AllowsAdaptive => ParserEngine.Auto == RequestedEngine || ParserEngine.AllStar == RequestedEngine;
@@ -331,6 +363,9 @@ namespace Parsley
 			foreach (var p in Grammar.Productions)
 				s.ProductionFollow[p.Name] = new HashSet<LookaheadString>();
 			s.ProductionFollow[Grammar.StartSymbol!].Add(new LookaheadString(Symbols.EndOfInput));
+			// a shared production is parsed on its own as an island, so the island's end can follow it
+			foreach (var p in Grammar.SharedProductions)
+				s.ProductionFollow[p.Name].Add(new LookaheadString(Symbols.EndOfInput));
 			changed = true;
 			while (changed)
 			{

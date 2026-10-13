@@ -8,8 +8,9 @@ using System.Text;
 namespace Parsley
 {
 	/// <summary>
-	/// Reads XBNF. A rule that references no symbols (only "literals" and 'patterns') declares a terminal,
-	/// as does one marked &lt;terminal&gt;; anything else declares a non-terminal. Supports @import, @namespace, @class, @evaluator, @using and @maxk directives,
+	/// Reads XBNF. A rule whose right side is a lone "literal" or 'pattern' declares a terminal, as does one marked
+	/// &lt;terminal&gt;, an island (a rule with entry= and no body) or a contextual terminal; anything else declares a
+	/// non-terminal. Supports @import, @namespace, @class, @evaluator, @using, @maxk, @external and @lexer directives,
 	/// attributed groups: <c>( … )&lt;attrs&gt;</c>, <c>[ … ]&lt;attrs&gt;</c>, <c>{ … }&lt;attrs&gt;</c>, and semantic actions:
 	/// <c>Name= expression =&gt; { C# };</c>
 	/// </summary>
@@ -32,9 +33,12 @@ namespace Parsley
 		readonly List<GrammarMessage> _messages;
 		readonly HashSet<string> _imported;
 		readonly Func<string, string> _readFile;
+		// the grammars being read through @external, outermost first, to catch one that's its own external
+		readonly IReadOnlyList<string> _externals;
 
-		XbnfReader(ParseContext pc, string? filename, Grammar grammar, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile)
+		XbnfReader(ParseContext pc, string? filename, Grammar grammar, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile, IReadOnlyList<string> externals)
 		{
+			_externals = externals;
 			_readFile = readFile;
 			_pc = pc;
 			_filename = filename;
@@ -85,9 +89,10 @@ namespace Parsley
             return TryReadFrom( reader, null, out grammar);
         }
 
-        static void _Read(ParseContext pc, string? filename, Grammar g, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile)
+        static void _Read(ParseContext pc, string? filename, Grammar g, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile, IReadOnlyList<string>? externals = null)
 		{
-			var r = new XbnfReader(pc, filename, g, messages, imported, readFile);
+			externals ??= null != filename ? new[] { Path.GetFullPath(filename) } : Array.Empty<string>();
+			var r = new XbnfReader(pc, filename, g, messages, imported, readFile, externals);
 			r._ReadAll();
 		}
 
@@ -515,6 +520,13 @@ namespace Parsley
 				_Advance();
 				var name = _ReadIdentifier();
 				_SkipWs();
+				// @external and @lexer take an alias before their argument: @external Json "json.xbnf";
+				string? alias = null;
+				if (("external" == name || "lexer" == name) && _IsIdStart(Cur))
+				{
+					alias = _ReadIdentifier();
+					_SkipWs();
+				}
 				// a number can be written bare, as in @maxk 2;
 				string arg;
 				if (-1 != Cur && char.IsDigit((char)Cur))
@@ -538,6 +550,19 @@ namespace Parsley
 					case "import":
 						_Import(arg, at);
 						break;
+					case "external":
+						if (null == alias)
+							_messages.Add(new GrammarMessage(ErrorLevel.Error, $"@external expects an alias and a file, as in @external Json \"json.xbnf\";", at));
+						else
+							_External(alias, arg, line, col, pos);
+						break;
+					case "lexer":
+						{
+							var l = new LexerDirective(alias, arg);
+							l.SetLocation(line, col, pos, _filename);
+							_grammar.Lexers.Add(l);
+							break;
+						}
 					case "namespace":
 					case "class":
 					case "evaluator":
@@ -575,6 +600,18 @@ namespace Parsley
 			_SkipWs();
 			if ('{' == Cur)
 				throw _Error($"\"{id}\" has a code body. Virtual productions are not supported");
+			// an island has no body: Headers<entry="Json.Object", after="addHeadersKeyword">;
+			if (';' == Cur)
+			{
+				_Advance();
+				if (!attrs.Contains("entry"))
+					_messages.Add(new GrammarMessage(ErrorLevel.Error, $"\"{id}\" has no body; only an island (a rule with entry=) is declared without one", line, col, pos, _filename));
+				var island = new Production(id, _Locate(new EmptyExpression(), line, col, pos));
+				island.SetLocation(line, col, pos, _filename);
+				island.Attributes.AddRange(attrs);
+				_grammar.Productions.Add(island);
+				return;
+			}
 			_Expect('=');
 			var expr = _ReadAlternation();
 			_SkipWs();
@@ -600,6 +637,49 @@ namespace Parsley
 			_grammar.Productions.Add(p);
 		}
 
+		// reads an @external grammar on its own, the way it would be read by itself: its own imports, rules and
+		// directives, none of them merged into this grammar. Only its errors are reported here; reading it by
+		// itself reports the rest.
+		void _External(string alias, string path, int line, int col, long pos)
+		{
+			var baseDir = null != _filename ? Path.GetDirectoryName(Path.GetFullPath(_filename)) : Environment.CurrentDirectory;
+			var full = Path.GetFullPath(Path.Combine(baseDir ?? "", path));
+			GrammarMessage error(string message) => new GrammarMessage(ErrorLevel.Error, message, line, col, pos, _filename);
+			if (_externals.Contains(full, StringComparer.OrdinalIgnoreCase))
+			{
+				_messages.Add(error($"@external {alias} \"{path}\" leads back to a grammar that's already being read, which would embed it in itself"));
+				_grammar.Externals.Add(_Located(new ExternalGrammar(alias, path, null), line, col, pos));
+				return;
+			}
+			string text;
+			try
+			{
+				text = _readFile(full);
+			}
+			catch (Exception ex)
+			{
+				_messages.Add(error($"Could not read @external {alias} \"{path}\": {ex.Message}"));
+				_grammar.Externals.Add(_Located(new ExternalGrammar(alias, path, null), line, col, pos));
+				return;
+			}
+			var messages = new List<GrammarMessage>();
+			var sub = new Grammar { Filename = full };
+			var imported = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { full };
+			_Read(ParseContext.Create(text), full, sub, messages, imported, _readFile, _externals.Concat(new[] { full }).ToList());
+			messages.AddRange(sub.ClassifyTerminals());
+			messages.AddRange(sub.ResolveTerminals());
+			// literals used inline get their implicit terminals, named as analysis names them, so islands can
+			// refer to them: nest="Json.lbrace" for an inline "{"
+			sub.ResolveLiterals();
+			_messages.AddRange(messages.Where(m => ErrorLevel.Error == m.Level));
+			_grammar.Externals.Add(_Located(new ExternalGrammar(alias, path, sub), line, col, pos));
+		}
+		T _Located<T>(T node, int line, int col, long pos) where T : GrammarNode
+		{
+			node.SetLocation(line, col, pos, _filename);
+			return node;
+		}
+
 		void _Import(string path, GrammarNode at)
 		{
 			var baseDir = null != _filename ? Path.GetDirectoryName(Path.GetFullPath(_filename)) : Environment.CurrentDirectory;
@@ -619,9 +699,14 @@ namespace Parsley
 			// imported productions keep their own file name; directives in imports don't override the importer's,
 			// except @using, which adds to them
 			var sub = new Grammar { Filename = full };
-			_Read(ParseContext.Create(text), full, sub, _messages, _imported, _readFile);
+			_Read(ParseContext.Create(text), full, sub, _messages, _imported, _readFile, _externals);
 			_grammar.Productions.AddRange(sub.Productions);
 			_grammar.Terminals.AddRange(sub.Terminals);
+			// like other directives, an import's @external and @lexer don't override the importer's
+			foreach (var x in sub.Externals)
+				if (null == _grammar.GetExternal(x.Alias)) _grammar.Externals.Add(x);
+			foreach (var l in sub.Lexers)
+				if (!_grammar.Lexers.Any(m => m.Alias == l.Alias)) _grammar.Lexers.Add(l);
 			foreach (var d in sub.Directives)
 				if (!_grammar.Directives.ContainsKey(d.Key))
 				{

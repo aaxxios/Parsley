@@ -12,7 +12,7 @@ namespace Parsley.LanguageServer
             ["start"] = "Flag. This rule is the start symbol; otherwise the first non-terminal is.",
             ["collapsed"] = "Flag. The rule (or terminal) gets no node in the parse tree; its children go into its parent's.",
             ["hidden"] = "Flag, on a terminal. The lexer matches it but never reports it (whitespace, comments).",
-            ["terminal"] = "`true` or `false`. Forces the rule to be a terminal or a non-terminal.",
+            ["terminal"] = "`true` or `false`. Forces the rule to be a terminal or a non-terminal. Without it, only a lone literal or pattern is a terminal; `<terminal>` lets a terminal combine them and inline other terminals.",
             ["nowarn"] = "Flag. Suppresses the \"unreachable from the start symbol\" warning.",
             ["expected"] = "String. How the rule or alternation is named in error messages: `expected=\"a statement\"`.",
             ["policy"] = "`greedy`, `lazy` or `first`. Settles ambiguous decisions in this rule or group.",
@@ -25,6 +25,14 @@ namespace Parsley.LanguageServer
             ["assoc"] = "`left` or `right`. How an operator form associates.",
             ["when"] = "Method name, on a terminal. Makes a contextual terminal, read by the parser from another terminal's tokens.",
             ["matched"] = "Method name, on a terminal. Called with each token of this terminal the parser matches.",
+            ["shared"] = "Flag. Other grammars can parse islands with this rule, through `@external` and `entry=`.",
+            ["entry"] = "String, on an island (a rule with no body). The `@external` grammar's shared rule that parses it: `entry=\"Json.Object\"`.",
+            ["after"] = "String, on an island. The terminals the island starts right after: `after=\"addHeadersKeyword\"`.",
+            ["nest"] = "String, on an island. The external grammar's terminal that opens a nested pair, counted against `pop`.",
+            ["pop"] = "String, on an island. The external grammar's terminal that ends the island once it balances every `nest`.",
+            ["popOnError"] = "`true` or `false`, on an island. Whether an error from the external grammar's lexer ends the island. Defaults to true.",
+            ["lexer"] = "Name, on a terminal. Another lexer produces it instead of the grammar's own, where `on` and `when` say: `lexer=Regex`.",
+            ["on"] = "String, on a terminal with `lexer`. The terminals of the grammar's own lexer where the other lexer may take over.",
         };
 
         public static readonly Dictionary<string, string[]> AttributeValues = new Dictionary<string, string[]>
@@ -37,6 +45,8 @@ namespace Parsley.LanguageServer
             ["hidden"] = new[] { "true", "false" },
             ["nowarn"] = new[] { "true", "false" },
             ["operators"] = new[] { "true", "false" },
+            ["shared"] = new[] { "true", "false" },
+            ["popOnError"] = new[] { "true", "false" },
         };
 
         public static readonly Dictionary<string, string> Directives = new Dictionary<string, string>
@@ -47,6 +57,8 @@ namespace Parsley.LanguageServer
             ["evaluator"] = "`@evaluator \"MyEvaluator\";` The synthesized evaluator's class name. Ignored by Parsley.Generator.",
             ["using"] = "`@using \"System.Text\";` A namespace for semantic actions to use.",
             ["maxk"] = "`@maxk 2;` The most tokens a fixed-lookahead decision looks at; 4 if not given.",
+            ["external"] = "`@external Json \"json.xbnf\";` Another grammar, by an alias, whose shared rules parse islands in this one.",
+            ["lexer"] = "`@lexer \"MyLexer\";` or `@lexer Json \"My.JsonLexer\";` The type whose static Tokenize lexes this grammar, or an alias's.",
         };
     }
 }

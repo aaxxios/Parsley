@@ -1,6 +1,6 @@
 # XBNF in Parsley
 
-XBNF is the grammar format Parsley reads. One file holds both halves of a language: the **terminals**, which go to a lexer generator, and the **non-terminals**, which Parsley turns into a parser. A rule can also carry a **semantic action**, C# that evaluates its parse node, and Parsley then synthesizes an evaluator class alongside the parser (see [Semantic actions](#semantic-actions)). Operators can be written in one rule, tightest first, instead of one rule per level of precedence (see [Operator rules](#operator-rules)). This document covers the XBNF that Parsley's reader (`XbnfReader`, used by `Grammar.Parse` and `Grammar.ReadFrom`) accepts.
+XBNF is the grammar format Parsley reads. One file holds both halves of a language: the **terminals**, which go to a lexer generator, and the **non-terminals**, which Parsley turns into a parser. A rule can also carry a **semantic action**, C# that evaluates its parse node, and Parsley then synthesizes an evaluator class alongside the parser (see [Semantic actions](#semantic-actions)). Operators can be written in one rule, tightest first, instead of one rule per level of precedence (see [Operator rules](#operator-rules)). Text in another language can be embedded as an **island**, lexed and parsed by another grammar, and a terminal can come from another lexer (see [Islands and other lexers](#islands-and-other-lexers)). This document covers the XBNF that Parsley's reader (`XbnfReader`, used by `Grammar.Parse` and `Grammar.ReadFrom`) accepts.
 
 ```xbnf
 // based on the spec at json.org
@@ -30,9 +30,11 @@ A file is a sequence of **rules** and **directives**, in any order, each ending 
 
 ```xbnf
 @directive "argument";
+@directive Alias "argument";                  // @external and @lexer only
 Name= expression;
 Name<attribute, attribute=value>= expression;
 Name<type="double">= expression => { /* C# */ };
+Name<entry="Alias.Rule", after="t">;          // an island: no body
 ```
 
 - **Comments** are `// to end of line` or `/* block */`. They can go anywhere whitespace can.
@@ -44,8 +46,8 @@ The syntax of XBNF itself, written in XBNF:
 
 ```xbnf
 File<start>= { Directive | Rule };
-Directive= "@" name ( literal | number ) ";";
-Rule= name [ Attributes ] "=" Expression [ "=>" Action ] ";";
+Directive= "@" name [ name ] ( literal | number ) ";";   // the second name only for @external and @lexer
+Rule= name [ Attributes ] ( "=" Expression [ "=>" Action ] | ) ";";   // no body only for an island
 Action= "{" … "}";                           // C#, read up to its matching brace
 Expression= Sequence { "|" Sequence };
 Sequence= { Primary [ Attributes ] };        // an empty sequence matches nothing
@@ -87,11 +89,12 @@ Sequence binds tighter than alternation, so `a b | c` means `( a b ) | c`.
 
 Every rule is one or the other, decided after the whole grammar, imports included, has been read:
 
-- **By default, a rule is a terminal only if it references no symbols.** Its right side is made only of literals and patterns, possibly combined with operators: `true= "true";`, `sign= "+" | "-";`, `ws= ' +';`.
-- **Any rule that references another rule is a non-terminal**, even if everything it references is a terminal. So `Boolean= true | false;` is a non-terminal.
-- **`<terminal>` forces a terminal.** Such a rule may reference other terminals, and their regexes are inlined. It's an error if it references a non-terminal or itself.
-- **`<terminal=false>` forces a non-terminal**, even for a rule with no references.
-- **A rule marked `start` is never made a terminal automatically**, only with `<terminal>`. If every rule in the file would be a terminal, the first one is kept as a non-terminal so the grammar has something to parse.
+- **By default, a rule is a terminal only if its right side is a single literal or a single pattern**: `true= "true";`, `ws= ' +';`. Attributes don't change that: `lbrace<collapsed>= "{";` is a terminal.
+- **Anything else is a non-terminal** unless it's marked `<terminal>`: a rule that references another rule, even if everything it references is a terminal, so `Boolean= true | false;` is a non-terminal; and a rule that combines literals and patterns, so `sign= "+" | "-";` is a non-terminal whose `"+"` and `"-"` are implicit terminals.
+- **`<terminal>` forces a terminal.** Such a rule may combine literals and patterns with any of the operators, and reference other terminals, whose regexes are inlined: `sign<terminal>= "+" | "-";`. It's an error if it references a non-terminal or itself.
+- **`<terminal=false>` forces a non-terminal**, even for a lone literal or pattern.
+- **A rule marked `start` or `shared` is never made a terminal automatically**, only with `<terminal>`. If every rule in the file would be a terminal, the first one is kept as a non-terminal so the grammar has something to parse.
+- **Islands and contextual terminals are terminals by their attributes**: a rule with `entry` and no body, and a rule with `when` that is exactly one terminal.
 
 ### The regex each terminal gets
 
@@ -150,6 +153,7 @@ Values can be:
 | `parsed` | method name | A method the parser calls with the finished parse node as this rule ends. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
 | `operators` | flag | The rule's alternatives are operators, listed tightest first, and it's parsed by precedence climbing. See [Operator rules](#operator-rules). |
 | `assoc` | `left`, `right` | On a production that is an operator form of an operator rule: how the form associates. See [Operator rules](#operator-rules). |
+| `shared` | flag | Other grammars can parse islands with this rule: the parser gets a `TryParseXxx` entry point for it. A shared rule is never made a terminal automatically, and can't be collapsed. See [Islands and other lexers](#islands-and-other-lexers). |
 
 ### On terminal rules
 
@@ -159,8 +163,14 @@ Values can be:
 | `collapsed` | flag | The parser checks it as usual but leaves it out of the parse tree (punctuation). |
 | `sync` | flag | A strong restart point for error recovery anywhere in the grammar, typically `;` or `}`. |
 | `terminal` | `true` / `false` | Forces terminal or non-terminal (see above). |
-| `when` | method name | Makes a contextual terminal, read by the parser from another terminal's tokens. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
+| `when` | method name | Makes a contextual terminal, read by the parser from another terminal's tokens. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). With `lexer`, it's the lexer controller's instead: see [Terminals from other lexers](#terminals-from-other-lexers). |
 | `matched` | method name | A method the parser calls with each token of this terminal it matches. See [Parse-time hooks](#parse-time-hooks-and-contextual-terminals). |
+| `lexer` | name | Another lexer produces this terminal, where `on` and `when` say. See [Terminals from other lexers](#terminals-from-other-lexers). |
+| `on` | string | With `lexer`: the terminals of the grammar's own lexer where the other lexer may take over. |
+| `entry` | string | Makes an island, a rule with no body: the `@external` grammar's shared rule that parses it, as `Alias.Rule`. See [Islands](#islands). |
+| `after` | string | On an island: the terminals it starts right after. |
+| `nest`, `pop` | string | On an island: the external grammar's terminals that open a nested pair and end the island once balanced. |
+| `popOnError` | `true` / `false` | On an island: whether an error from the external grammar's lexer ends it. `true` if not given. |
 | `expected`, `blockEnd` | string | Accepted for compatibility with older grammars. They currently have no effect. |
 
 ### On groups and expressions
@@ -190,8 +200,10 @@ Block= "{" { Stmt }<sync="semi"> "}";
 | `@maxk 2;` | The most tokens a decision with fixed lookahead looks at; 4 if not given. A decision that needs more is predicted by ALL(\*) at parse time, or settled by its `policy`. A lower limit gives smaller predictors at the cost of more ALL(\*); a higher one, the reverse. It's part of the grammar so the same grammar always synthesizes the same parser. |
 | `@evaluator "MyEvaluator";` | The class name of the synthesized evaluator, used as written, with `@` added in front of a C# keyword. By default it's the file name in PascalCase plus `Evaluator`, so `json.xbnf` gives `JsonEvaluator`. Only matters when the grammar has [semantic actions](#semantic-actions); without any, it's ignored with a warning. |
 | `@using "System.Text";` | Adds `using System.Text;` to the top of the synthesized file, so [semantic actions](#semantic-actions) can use the namespace's types without qualifying them. Give it once per namespace; it can appear any number of times. The argument must be a namespace name, such as `System.Text` or `My.@class`: not `static` or an alias. A namespace the file already imports, or one given twice, is written once, without a message. Usings from an `@import`ed file are added to the importer's. Only matters when the grammar has semantic actions; without any, it's ignored with a warning and the file is unchanged. |
+| `@external Json "json.xbnf";` | Another grammar, known here by an alias, whose shared rules parse [islands](#islands) in this one. The path is relative to this file. The grammar is read on its own, as if it were being synthesized by itself: none of its rules or directives are merged into this one, and only its errors are reported here. A grammar can't embed itself, directly or through others. |
+| `@lexer "BamcLexer";`<br>`@lexer Json "Foo.JsonLexer";` | The C# type whose static `Tokenize` lexes this grammar, or one of its aliases: an `@external` grammar, or a lexer that terminals name with `lexer=`. See [Naming the lexers](#naming-the-lexers). |
 
-Other directives are kept, with a warning that they're unknown. Every directive except `@using` takes one value, and if one is given more than once, the last wins.
+Other directives are kept, with a warning that they're unknown. Every directive except `@using`, `@external` and `@lexer` takes one value, and if one is given more than once, the last wins. `@external` and `@lexer` take an alias first (optional for `@lexer`), and an `@import`ed file's are added unless the importer has one for that alias.
 
 ## Semantic actions
 
@@ -410,6 +422,141 @@ The parser may look several tokens ahead before it gets to them, and the hooks t
 
 The interpreter, `GrammarInterpreter`, takes a `ParseHooks` object with delegates in place of the methods.
 
+## Islands and other lexers
+
+Some text is in more than one language. A `.bamc` script's `add-headers` takes a JSON object, whose strings are lexed differently from bamc's and whose braces nest, which no single lexer pattern can match. A JavaScript `/` is division or the start of a regular expression, depending on the token before it. Both need the lexer to change partway through, and Parsley handles both the same way: a **lexer controller** in the runtime decides every switch as it lexes, from the tokens it has produced so far, and the parser just reads tokens.
+
+- An **island** is text in another language, lexed and parsed by another grammar. The outer grammar sees it as one token.
+- A **terminal from another lexer** is one token lexed by a different lexer, where the grammar's own lexer would get it wrong.
+
+Because every switch is decided at lex time, a token is always lexed by the right lexer when it enters the parser's lookahead, however far the parser looks ahead, and nothing is ever lexed twice for the parser. The lexers themselves needn't know any of this.
+
+### Islands
+
+```xbnf
+// bamc.xbnf
+@external Json "json.xbnf";
+
+AddHeaders= addHeadersKeyword Headers;
+Headers<entry="Json.Object", after="addHeadersKeyword", nest="Json.lbrace", pop="Json.rbrace">;
+```
+
+```xbnf
+// json.xbnf, changed for embedding: Object is shared, and whitespace leaves out line breaks
+Json<start>= Object | Array;
+Object<shared>= "{" [ Field { "," Field } ] "}";
+...
+whitespace<hidden>= '[\r\t ]+';
+```
+
+- **`@external Json "json.xbnf";`** declares the other grammar and gives it an alias. It's read on its own, as it would be synthesized by itself, and it knows nothing of being embedded: everything about the island is said in the outer grammar.
+- **An island is a rule with no body**, marked with `entry`: the external grammar's alias and one of its productions, which must be marked `shared`. It's a terminal of the outer grammar, which no lexer produces: the controller does.
+- **`after`** names the terminals the island starts right after, by name or literal text, separated by spaces or commas. It's required. The controller starts the island after every one of those tokens, wherever it appears, so a warning says so if anything else can follow one of them in the grammar.
+- **The island ends** at the first of these:
+  - a `pop` token that balances every `nest` token before it. Both name the external grammar's terminals: `Json.rbrace`, or just `rbrace`, or a literal text. Without `nest`, the first `pop` ends it. Counting tokens rather than characters is exact: a `}` inside a JSON string is part of a string token, so it doesn't count.
+  - a token the island's lexer can't match, unless `popOnError=false`. The island ends before it.
+  - the end of the input.
+- **When it ends**, the outer grammar's lexer carries on from the end of the island's last token. So text the island's lexer skipped as whitespace after that is lexed again by the outer lexer, and a line break that ends a JSON island is still bamc's `newline`.
+
+`popOnError` is on by default because it keeps a broken island from swallowing the rest of the input. In bamc, a line break is an error to JSON's lexer, so an unterminated object ends at the end of its line: the island reports the missing `}`, and bamc goes on with the next line. Turn it off for an island whose grammar recovers well on its own and whose outer grammar has few places to recover.
+
+**The tree.** The island's token becomes a node of the island's symbol, here `Headers`, holding one child: the root of the tree the external grammar parsed, with the external grammar's symbol ids. Its problems are the outer parser's problems too, located in the whole text.
+
+```
+AddHeaders
+  addHeadersKeyword "add-headers"
+  Headers
+    Object          <- json.xbnf's ids from here down
+      Field
+        string ""DNT""
+        string ""1""
+```
+
+The token itself carries the island's text, from its first token to its last, and its `Tag` holds an `IslandParse` with the tree and the problems. A parser reading these tokens never sees inside an island, however far ahead it looks. In a semantic action, evaluate the island's tree with the external grammar's evaluator: its static `Evaluate` starts at whatever node it's given, a shared production's included.
+
+### Shared productions and subordinate grammars
+
+A production marked `shared` can parse an island for another grammar. The parser gets a static entry point for each, `TryParseObject(tokens, out result, out errors)`, which parses exactly that production and expects the end of the input after it, and its analysis treats the end of the input as able to follow it. A shared production is never made a terminal automatically, and can't be collapsed, since the island needs its node.
+
+A grammar with shared productions and none marked `start` is **subordinate**: it's only parsed through its shared productions. It gets no `TryParse` or `Parse` of its own, every shared production is a root for the unreachable-production check, and none of the start rule's warnings apply. A grammar with a `start` and shared productions is both standalone and embeddable. Nothing marks a grammar as only subordinate.
+
+### Terminals from other lexers
+
+```xbnf
+@lexer Regex "ES5RegexLexer";
+
+regular_expression_literal<lexer=Regex, on="slash div_assign", when="RegexCanStart">= '/…/[a-z]*';
+```
+
+- **`lexer`** names another lexer, by an alias. That lexer produces this terminal instead of the grammar's own.
+- **`on`** (required) names the terminals of the grammar's own lexer where the other lexer may take over.
+- **`when`** (optional) names a static method the controller asks first:
+
+  ```csharp
+  private static partial bool RegexCanStart(Token token, Token previous);
+  ```
+
+  `token` is the `on` token as the grammar's lexer produced it, and `previous` the token before it, in the lexers' own ids. It's static because it runs as the text is lexed, before any parser has seen it, so it can't depend on parser state: deciding by the token before is what keeps the answer the same however far the parser looks ahead.
+
+When the grammar's lexer produces an `on` token and `when` agrees, the controller lexes from that token's start with the other lexer. If what it lexes is this terminal, that's the token, and the grammar's lexer carries on after it; otherwise the original token stands.
+
+When the rules for a switch are more than a token can tell, as JavaScript's are once `)` and `}` need to know what they closed, write your own lexer wrapper instead, as `Es5Test/ES5Tokenizer.cs` does, and name it with `@lexer`. The controller runs a wrapper like any other lexer.
+
+### Naming the lexers
+
+The controller calls lexers by a static method with this shape, the one Luthor lexers have:
+
+```csharp
+public static IEnumerable<Token> Tokenize(TextReader reader, long position, int line, int column, int tabWidth);
+```
+
+It reports each token's id counting the grammar's terminals from 0 in the order the parser numbers them, leaves out hidden terminals, and reports text it can't match as a token with id -1. A lexer from another generator needs only a small adapter with this shape.
+
+`@lexer` names the type whose `Tokenize` lexes for the grammar itself, or for an alias. A type it names is used as written. Without one:
+
+| Lexer for | Type used |
+| --- | --- |
+| the grammar itself | the file name plus `Lexer`: `bamc.xbnf` gives `BamcLexer` |
+| an `@external` alias | the external grammar's own `@lexer`, else the alias plus `Lexer`, either in the external grammar's `@namespace` |
+| a `lexer=` alias | the alias plus `Lexer` |
+
+When the outer grammar and the external grammar both name a lexer for it, the outer grammar's wins: the external grammar stays unaware of being embedded. The external grammar's parser is its `@class`, or its file name plus `Parser`, in its `@namespace`.
+
+The source generator works differently: see [With the source generator](#with-the-source-generator).
+
+### What gets synthesized
+
+A grammar with islands or terminals from other lexers is **compound**. Its parser has:
+
+| Member | What it is |
+| --- | --- |
+| `static LexerMode CreateLexerMode(TokenizeFunc tokenize)` | What the controller needs to lex this grammar with the given lexer: its islands, with their external grammars' lexer modes, and its terminals from other lexers. Grammars with shared productions have one too, so other grammars can embed them. |
+| `static IEnumerable<Token> Tokenize(TextReader reader, …)`<br>`static IEnumerable<Token> Tokenize(string text, …)` | The grammar's tokens, through a `LexerController` over its own lexer |
+| `static ParseNode Parse(TextReader reader)`<br>`static ParseNode Parse(string text)` | Lexes and parses |
+
+```csharp
+var tree = BamcParser.Parse(reader);
+```
+
+With the command line tool, synthesize each external grammar too, as you would by itself: its parser has the shared productions' entry points and the `CreateLexerMode` the outer parser calls, and it needs its own engine's base class (`-b`) if that differs from the outer grammar's. The tool writes the grammar's own lexer's terminals with `-l`, leaving out islands and terminals from other lexers. Each `lexer=` alias gets a file of its own beside it: `-l es5.lex` also writes `es5.Regex.lex`. Lexer ids count each lexer's terminals from 0 in that file's order, which is the order the parser numbers them.
+
+### With the source generator
+
+One `[Parser("bamc.xbnf")]` class gets everything: bamc's parser and lexer, and for each `@external` grammar, a class nested in it named after the alias, holding that grammar's parser and lexer (and evaluator, if it has semantic actions), with its symbol constants. So `BamcParser.Json.Object` is json.xbnf's `Object` id, for looking at an island's tree. A lexer `@lexer` names is used instead of generating one; a `lexer=` alias gets a lexer generated from its terminals, named after it (`RegexLexer`), unless `@lexer` names one. As always with the generator, `@class`, `@namespace` and `@evaluator` are ignored. `Tokenize`, `Parse` and `TryParse` lex through the controller, and a grammar with shared productions has `TryParseXxx` and `CreateLexerMode` too. `BamcGenTest` is an example.
+
+### The lexer controller
+
+`LexerController` (in the runtime) is an `IEnumerable<Token>` over text in a `TextReader` or a string, given a `LexerMode`:
+
+- **It owns the text.** It reads the reader into a buffer of its own, and gives each lexer a reader over that buffer from where it's to start, telling it the position, line and column there. It keeps only what a lexer might still restart from, and the text of an island being read, so a large document isn't held in memory.
+- **It switches by restarting.** At every switch, the lexer that takes over starts fresh at the end of the last token produced, so it doesn't matter how far any lexer read ahead. An island's token is produced when the island's grammar has parsed it.
+- **It finds errors by id.** A lexer reports text it can't match as a token with id -1, holding the text it skipped, as Luthor lexers do. That's what ends an island with `popOnError`.
+- **It counts lines and columns** as Luthor lexers do: `\n` ends a line, a tab moves to the next tab stop, other control characters take no width, and a surrogate pair is one column.
+
+It relies on lexers reporting each token's `Value` as exactly the text it matched. A token a wrapper makes up, with an empty value, is fine: it never moves the point a lexer restarts from back.
+
+A lexer that keeps state between tokens, as `ES5Tokenizer` does with its brackets, starts fresh when it's restarted after an island. `Token.Tag` is there for such a lexer to carry its state on each token, `null` unless it does, and `LexerMode.Resume`, if given, restarts the lexer from the last token's `Tag`. Nothing in XBNF sets these up yet.
+
 ## How rules become a parser
 
 None of this needs to be written in the grammar, but it explains the messages Parsley gives and the code it produces.
@@ -458,6 +605,7 @@ Left recursion is rewritten automatically:
 | `type` or `state` that isn't a string, such as `type=5` | Error |
 | The evaluator and the parser named the same | Error when synthesizing |
 | A non-terminal unreachable from the start symbol | Warning, unless `nowarn` |
+| `lexer` or `on` on a rule that isn't a terminal | Error |
 | [Operator rules](#operator-rules): | |
 | An operator rule that's collapsed | Error |
 | An operator rule with no atom | Error |
@@ -471,6 +619,18 @@ Left recursion is rewritten automatically:
 | `entering` or `parsed` on a form's production | Warning: it's ignored |
 | An operator rule with no operator forms | Warning |
 | A form's production with no action, when its operator rule has one | Message: the operator rule's action evaluates it |
+| [Islands and other lexers](#islands-and-other-lexers): | |
+| An `@external` file that can't be read, or that leads back to a grammar being read | Error |
+| An island's `entry` that isn't an `@external` alias and one of its productions, or names a production that isn't `shared` | Error |
+| An island with no `after`, or one naming a terminal that's hidden, contextual or an island | Error |
+| `nest` or `pop` naming a terminal the external grammar's lexer never reports | Error |
+| `nest` without `pop` | Warning |
+| A rule with no body that isn't an island, or an island with a body | Error |
+| An island no production uses, or an `@external` no island uses | Warning |
+| A terminal `after` names that something other than the island can follow | Warning: there, the island starts anyway |
+| `lexer` without `on`, `on` naming a terminal the grammar's lexer never reports, or `lexer` naming an `@external` alias | Error |
+| A shared rule that's collapsed, or `shared` on a terminal | Error |
+| `@lexer` with an alias nothing uses | Warning |
 
 Messages carry the file, line and column of the rule or expression they're about.
 
@@ -479,7 +639,7 @@ Messages carry the file, line and column of the rule or expression they're about
 The synthesized parser numbers symbols in this order:
 
 1. non-terminals, in rule order
-2. terminals, in declaration order, including hidden ones, followed by implicit terminals
+2. terminals, in declaration order, including hidden ones, followed by implicit terminals. Then terminals from other lexers, grouped by lexer; then islands; then contextual terminals. The grammar's own lexer produces only the first group, so its ids match.
 3. `#EOS` (end of input) and `#ERROR` (unrecognized input)
 
-A lexer reports terminals numbered from 0 in that same terminal order. The parser adds the number of non-terminals as each token arrives. A negative id, or one past the last terminal, is treated as `#ERROR`.
+A lexer reports terminals numbered from 0 in that same terminal order, and text it can't match as -1. The parser adds the number of non-terminals as each token arrives. A negative id, or one past the last terminal, is treated as `#ERROR`. A Luthor lexer has a constant for each terminal's id, `ERROR` (-1) and `TerminalCount`.

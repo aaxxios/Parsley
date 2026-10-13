@@ -329,7 +329,12 @@ namespace Parsley.LanguageServer
             if (_IsRuleName(t))
             {
                 var defs = _FindDefinitions(doc, t.Text);
-                if (0 < defs.Count) markdown = _RuleHover(defs[0].Doc, defs[0].Token, doc);
+                if (0 < defs.Count)
+                {
+                    markdown = _RuleHover(defs[0].Doc, defs[0].Token, doc);
+                    var kind = _RuleKind(defs[0].Doc, t.Text);
+                    if (null != kind) markdown += "\n\n" + kind;
+                }
                 else markdown = $"`{t.Text}` isn't defined";
             }
             else if (t.Kind == TokenKind.Identifier && t.Role == IdentifierRole.AttributeName && XbnfKnowledge.Attributes.TryGetValue(t.Text, out var attr))
@@ -342,6 +347,26 @@ namespace Parsley.LanguageServer
                 ["contents"] = new JsonObject { ["kind"] = "markdown", ["value"] = markdown },
                 ["range"] = doc.Range(t.Start, t.End),
             };
+        }
+
+        // what the reader made of a rule: a terminal or not, and what kind. Only a lone literal or pattern is a
+        // terminal unless the rule says otherwise, so this is worth seeing
+        string? _RuleKind(Document d, string name)
+        {
+            var g = d.ReadGrammar(_docs.ReadForImport);
+            if (null == g) return null;
+            var t = g.GetTerminal(name);
+            if (null != t)
+            {
+                if (t.IsIsland) return $"*An island, parsed by {t.Entry}*";
+                if (t.IsContextual) return $"*A contextual terminal, read from {t.ContextualBase} when {t.When} says so*";
+                if (null != t.Lexer) return $"*A terminal from the {t.Lexer} lexer*";
+                return t.IsHidden ? "*A hidden terminal*" : "*A terminal*";
+            }
+            var p = g.GetProduction(name);
+            if (null == p) return null;
+            var what = p.Attributes.IsSet("shared") ? "A shared non-terminal" : name == g.StartSymbol ? "The start symbol, a non-terminal" : "A non-terminal";
+            return $"*{what}*";
         }
 
         // the rule as written, with its action shortened, and the comment lines right above it

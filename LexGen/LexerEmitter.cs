@@ -45,6 +45,11 @@ namespace LexGen
         /// The indent for a nested class
         /// </summary>
         public string Indent { get; set; } = "";
+        /// <summary>
+        /// The namespace of the lexer runtime the lexer calls, when the runtime isn't written with it. The source
+        /// generator puts it in Parsley.Runtime, with the parser runtime.
+        /// </summary>
+        public string RuntimeNamespace { get; set; } = "Luthor.Runtime";
     }
 
     /// <summary>
@@ -79,9 +84,15 @@ namespace LexGen
         public static string RuntimeSourceIn(string? @namespace)
         {
             var lines = RuntimeSource.Replace("\r\n", "\n").Split('\n').ToList();
+            // the template picks its namespace with #if LUTHOR_RUNTIME_PUBLIC; this one takes its place
             var at = lines.IndexOf("namespace Luthor.Runtime");
+            if (at < 3 || lines[at - 1] != "#else" || lines[at - 3] != "#if LUTHOR_RUNTIME_PUBLIC" || lines[at + 1] != "#endif")
+                throw new InvalidOperationException($"The lexer runtime source {RuntimeFileName} isn't in the expected form");
+            lines.RemoveAt(at + 1);
+            lines.RemoveRange(at - 3, 3);
+            at -= 3;
             var close = lines.FindLastIndex(l => l == "}");
-            if (at < 0 || close < at || lines[at + 1] != "{")
+            if (close < at || lines[at + 1] != "{")
                 throw new InvalidOperationException($"The lexer runtime source {RuntimeFileName} isn't in the expected form");
             if (null != @namespace)
             {
@@ -172,7 +183,7 @@ namespace LexGen
             const string token = "global::Parsley.Runtime.Token";
             var runtime = options.IncludeRuntime && !options.Nested
                 ? "global::" + (null != options.Namespace ? options.Namespace + "." : "") + "LuthorRuntime"
-                : "global::Luthor.Runtime.LuthorRuntime";
+                : $"global::{options.RuntimeNamespace}.LuthorRuntime";
             const string tokens = "global::System.Collections.Generic.IEnumerable<" + token + ">";
             var hiddenRules = rules.Where(p => p.IsHidden).Select(p => _Escape(p.Name)).ToList();
             void tokenize(string inputType, string inputName)
@@ -184,7 +195,8 @@ namespace LexGen
                 {
                     writer.WriteLine($"{ind}            if({string.Join(" || ", hiddenRules.Select(h => $"tok.Symbol == {h}"))}) continue;");
                 }
-                writer.WriteLine($"{ind}            yield return new {token}(tok.Symbol, tok.Text, tok.Line, tok.Column, tok.Position);");
+                // text no rule matches comes back as the catch-all rule after the last, or as -1: either is an error, reported as -1
+                writer.WriteLine($"{ind}            yield return new {token}(0 <= tok.Symbol && tok.Symbol < {rules.Count} ? tok.Symbol : -1, tok.Text, tok.Line, tok.Column, tok.Position);");
                 writer.WriteLine($"{ind}        }}");
                 writer.WriteLine($"{ind}    }}");
             }
@@ -202,7 +214,9 @@ namespace LexGen
                 writer.WriteLine($"{ind}    public const int {_Escape(name)} = {i};");
                 i++;
             }
-            writer.WriteLine($"{ind}    public const int ERROR = {i};");
+            // what an error is reported as, and the number of terminals: ids 0 to TerminalCount - 1
+            writer.WriteLine($"{ind}    public const int ERROR = -1;");
+            writer.WriteLine($"{ind}    public const int TerminalCount = {i};");
             writer.WriteLine($"{ind}}}");
             if (inNamespace)
             {

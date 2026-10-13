@@ -24,7 +24,7 @@ parsley
 Usage: parsley [<grammar-file>] [--lexer <lexer-file>] [--output <code-file>] [--shared] [--base] [--engine <engine>]
 
     <grammar-file>            The path to the XBNF grammar input file. Defaults to <stdin>.
-    -l, --lexer <lexer-file>  The lexer output file to generate.
+    -l, --lexer <lexer-file>  The lexer output file to generate. Terminals from other lexers (lexer=Name) go in files beside it.
     -o, --output <code-file>  The path to the ouput code file. Defaults to <stdout>.
     -s, --shared              Generate the shared runtime: ParsleyRuntime.cs and the parser base class for the grammar's engine.
     -b, --base                Generate only the parser base class for the grammar's engine.
@@ -42,9 +42,9 @@ Usage: parsley [<grammar-file>] [--lexer <lexer-file>] [--output <code-file>] [-
 It can't be combined with `-o`, `-l`, `-s` or `-b`. `GrammarReport.Create(analysis)` produces the same report in code.
 
 - The grammar file is in XBNF, a superset of EBNF with some extra convenience operators and attributes and semantic actions (potentially C# code in the grammar to create an evaluator)
-- The lexer file is generated if specified and contains 1 rule per line, `<name>` `<pattern>` (separated by a space) and hidden terminal names are preceded with `.` as in `.whitespace`,
+- The lexer file is generated if specified and contains 1 rule per line, `<name>` `<pattern>` (separated by a space) and hidden terminal names are preceded with `.` as in `.whitespace`. `parsley-luthor` turns it into a lexer whose `Tokenize` reports each terminal's id in that order, and text it can't match as -1, which is what Parsley expects of any lexer.
 - The output code file is a C# class that derives from the base class for its engine (`LL1ParserBase`, `LLkParserBase` or `AllStarParserBase`) and has a `Parse()` method returning a `ParseNode`. It may also generate an evaluator class with an `Evaluate()` method if semantic actions are present.
-- The shared runtime file is `ParsleyRuntime.cs`, which contains `Token`, `LookAheadEnumerator`, `ParseNode`, `ParseError`, `ParserTables` and the abstract `ParserBase` that holds what every engine shares (tree building, error reporting and recovery). Each engine's base class is its own file: `LL1ParserBase.cs`, `LLkParserBase.cs` or `AllStarParserBase.cs`.
+- The shared runtime file is `ParsleyRuntime.cs`, which contains `Token`, `LookAheadEnumerator`, `ParseNode`, `ParseError`, `ParserTables`, the abstract `ParserBase` that holds what every engine shares (tree building, error reporting and recovery), and the `LexerController` that lexes grammars with islands. Each engine's base class is its own file: `LL1ParserBase.cs`, `LLkParserBase.cs` or `AllStarParserBase.cs`.
 - `-s` writes `ParsleyRuntime.cs` and the engine's base class file. `-b` writes only the base class file, for a project that already has `ParsleyRuntime.cs` from another parser. A project with parsers on different engines needs `-s` once, then `-b` for each engine it adds. Both write next to the grammar file, or in the current directory if the grammar comes from stdin.
 
 ## Engines
@@ -73,6 +73,8 @@ Operators can be written in one rule, tightest first, instead of one rule per le
 
 For languages whose parse depends on what's been parsed so far, such as C, where a name can be a type or a variable, rules can call your C# as they're parsed (`entering`, `parsed`, `matched`), and a contextual terminal (`when`) lets that code decide what a token is. See [Parse-time hooks](XBNF.md#parse-time-hooks-and-contextual-terminals), and `Parsley.Tests/c99` for a C99 grammar that uses them.
 
+For text in more than one language, a grammar can embed another as an island: `@external Json "json.xbnf";` declares it, and a rule with no body, such as `Headers<entry="Json.Object", after="addHeadersKeyword", nest="Json.lbrace", pop="Json.rbrace">;`, says where the island starts and ends. A terminal can also come from another lexer where the token before says so (`lexer=`, `on=`, `when=`), as a JavaScript regular expression does. A lexer controller in the runtime switches lexers as it lexes, so the lexers stay ordinary Luthor (or any) lexers and the parser just reads tokens. See [Islands and other lexers](XBNF.md#islands-and-other-lexers), `BamcTest` for bamc scripts that embed JSON, and `BamcGenTest` for the same through the source generator.
+
 The synthesized class plus `ParsleyRuntime.cs` and its base class file compile on their own (C# 12, .NET 8), with no reference to Parsley:
 
 ```csharp
@@ -88,11 +90,12 @@ catch(Parsley.Runtime.ParseException ex) {
 
 Token ids: the lexer numbers terminals from 0 in the grammar's terminal order (hidden and implicit ones
 included, implicit ones last), and the parser adds `ParserTables.TerminalStart` (the number of non-terminals)
-as each token arrives. A negative id, or one past the last terminal, is reported as unrecognized input.
+as each token arrives. A lexer reports text it can't match as -1; a negative id, or one past the last terminal, is
+reported as unrecognized input.
 
-Terminals: a rule that references no symbols (only `"literals"` and `'patterns'`) is a terminal; `<terminal>`
-forces one (it may then reference other terminals, which are inlined) and `<terminal=false>` forces a
-non-terminal. Each `TerminalDeclaration` keeps its `Definition` expression and a `Regex` for your lexer
+Terminals: a rule whose right side is a lone `"literal"` or `'pattern'` is a terminal; anything else is a
+non-terminal unless `<terminal>` forces it (it may then combine literals and patterns and reference other
+terminals, which are inlined), and `<terminal=false>` forces a non-terminal. Each `TerminalDeclaration` keeps its `Definition` expression and a `Regex` for your lexer
 generator: patterns pass through unvalidated with the quotes removed (`\'` becomes `'`), literals are escaped,
 and other definitions are built from their constructs.
 

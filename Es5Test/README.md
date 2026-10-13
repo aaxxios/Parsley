@@ -18,6 +18,17 @@ var tree = Es5Parser.Parse(ES5Tokenizer.Tokenize(text));
 
 Tokens have to come from `ES5Tokenizer`, not from `ES5Lexer` directly.
 
+## Regular expressions without a wrapper
+
+XBNF can say where another lexer takes over by itself (see [Terminals from other lexers](../XBNF.md#terminals-from-other-lexers)):
+
+```xbnf
+@lexer Regex "ES5RegexLexing.ES5RegexLexer";
+regular_expression_literal<lexer=Regex, on="slash div_assign", when="RegexCanStart">= '...';
+```
+
+With that, the synthesized `Tokenize` runs a lexer controller that asks `RegexCanStart(token, previous)` at each `/` and `/=`, and the parser gets a compound grammar's `Tokenize` and `Parse(string)`. It decides from the token before alone, as many JavaScript tokenizers do, so `if (x) /re/.test(s)` reads as division. `ES5Tokenizer` stays because it does better than that: it tracks whether a `)` closed an `if`, `while`, `for` or `with` condition and whether a `}` closed a block, and it inserts the semicolons the restricted productions need. A wrapper given the controller's `Tokenize(TextReader, position, line, column, tabWidth)` shape (see [Naming the lexers](../XBNF.md#naming-the-lexers)) can be named with `@lexer` and run under the controller like any other lexer.
+
 `build.sh` expects `../bin/parsley.dll` and `../bin/parsley-luthor.dll`, so put this folder at the repo root like `C99Test`. Or set `PARSLEY` and `LUTHOR` to those files.
 
 ## Not checked

@@ -23,6 +23,22 @@ namespace Parsley.LanguageServer
         public string Text { get; }
         public int Version { get; }
         public XbnfScan Scan => _scan ??= XbnfScan.Scan(Text);
+        /// <summary>
+        /// The grammar as the reader reads it, for what only it knows, such as which rules are terminals.
+        /// Read once per version, when first asked for; null if it couldn't be read.
+        /// </summary>
+        public Parsley.Grammar? ReadGrammar(Func<string, string> readFile)
+        {
+            if (!_grammarRead)
+            {
+                _grammarRead = true;
+                try { XbnfReader.TryParse(Text, Path, readFile, out _grammar); }
+                catch (Exception) { _grammar = null; }
+            }
+            return _grammar;
+        }
+        Parsley.Grammar? _grammar;
+        bool _grammarRead;
 
         int[] LineStarts
         {

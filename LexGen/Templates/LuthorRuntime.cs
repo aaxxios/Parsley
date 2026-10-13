@@ -5,8 +5,13 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-// The lexer runtime: public when compiled into Parsley.Runtime.dll (LUTHOR_RUNTIME_PUBLIC), else internal to the project it's generated into
+// The lexer runtime: public and in Parsley.Runtime when compiled into Parsley.Runtime.dll (LUTHOR_RUNTIME_PUBLIC),
+// else internal to the project it's generated into, in Luthor.Runtime unless LexerEmitter.RuntimeSourceIn moves it
+#if LUTHOR_RUNTIME_PUBLIC
+namespace Parsley.Runtime
+#else
 namespace Luthor.Runtime
+#endif
 {
     // A source of code units for the matcher. Implemented by small structs so the JIT
     // specializes Match<T> for each input kind (no interface dispatch in the inner loop).

@@ -7,24 +7,34 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 
+// The lexer runtime: public and in Parsley.Runtime when compiled into Parsley.Runtime.dll (LUTHOR_RUNTIME_PUBLIC),
+// else internal to the project it's generated into, in Luthor.Runtime unless LexerEmitter.RuntimeSourceIn moves it
 // A source of code units for the matcher. Implemented by small structs so the JIT
 // specializes Match<T> for each input kind (no interface dispatch in the inner loop).
+#if LUTHOR_RUNTIME_PUBLIC
+public interface ILuthorUnitSource
+#else
 internal interface ILuthorUnitSource
+#endif
 {
     /// <summary>Code unit at offset from the start of the current token, or -1 at end of input.</summary>
     int Peek(int offset);
 }
 
+#if LUTHOR_RUNTIME_PUBLIC
+public static class LuthorRuntime
+#else
 internal static class LuthorRuntime
+#endif
 {
-    internal const int DefaultTabWidth = 4;
+    public const int DefaultTabWidth = 4;
 
     // Flat table layout (see Luthor's Compiler.cs):
     //   dfa[0]  newline code unit (for ^ and $), then per state:
     //   accept, bol, eol, n, n x (min, max, target)
 
     /// <summary>Longest match at the start of <paramref name="text"/>. Returns (symbol or -1, length in units).</summary>
-    internal static (int Token, int Length) Match<T>(int[] dfa, ref T text, bool atLineStart) where T : struct, ILuthorUnitSource
+    public static (int Token, int Length) Match<T>(int[] dfa, ref T text, bool atLineStart) where T : struct, ILuthorUnitSource
     {
         int state = 1, accept = -1, length = 0, i = 0;
         bool bol = atLineStart;
@@ -64,7 +74,7 @@ internal static class LuthorRuntime
     /// <param name="line">Line reported for the first unit of <paramref name="text"/>.</param>
     /// <param name="column">Column reported for the first unit of <paramref name="text"/>. The input is treated
     /// as starting at the beginning of a line (for ^) only when this is 1.</param>
-    internal static IEnumerable<(long Position, int Line, int Column, int Symbol, string Text)> Tokenize(
+    public static IEnumerable<(long Position, int Line, int Column, int Symbol, string Text)> Tokenize(
         int[] dfa, string text, int tabWidth = DefaultTabWidth, long position = 0, int line = 1, int column = 1)
     {
         if (dfa is null) throw new ArgumentNullException(nameof(dfa));
@@ -108,7 +118,7 @@ internal static class LuthorRuntime
     /// <param name="line">Line reported for the first unit read from <paramref name="reader"/>.</param>
     /// <param name="column">Column reported for the first unit read from <paramref name="reader"/>. The input is
     /// treated as starting at the beginning of a line (for ^) only when this is 1.</param>
-    internal static IEnumerable<(long Position, int Line, int Column, int Symbol, string Text)> Tokenize(
+    public static IEnumerable<(long Position, int Line, int Column, int Symbol, string Text)> Tokenize(
         int[] dfa, TextReader reader, int tabWidth = DefaultTabWidth, long position = 0, int line = 1, int column = 1)
     {
         if (dfa is null) throw new ArgumentNullException(nameof(dfa));
@@ -153,7 +163,11 @@ internal static class LuthorRuntime
 //  - Other control characters (below U+0020) don't advance the column.
 //  - Columns count code points: the low half of a surrogate pair doesn't advance the column,
 //    even when the pair is split across two tokens.
+#if LUTHOR_RUNTIME_PUBLIC
+public struct LineColumnTracker
+#else
 internal struct LineColumnTracker
+#endif
 {
     readonly int _newline;
     readonly int _tabWidth;
@@ -212,7 +226,11 @@ internal struct LineColumnTracker
 // A growable window over a TextReader. Index 0 is the start of the current token.
 // Chars are read on demand; Take() consumes from the front. The buffer only grows
 // when a single token (plus its lookahead/overrun) doesn't fit.
+#if LUTHOR_RUNTIME_PUBLIC
+public sealed class LuthorCharWindow
+#else
 internal sealed class LuthorCharWindow
+#endif
 {
     readonly TextReader _reader;
     char[] _buf;
@@ -269,6 +287,7 @@ internal sealed class LuthorCharWindow
         return s;
     }
 }
+
 static class ES5Lexer
 {
     private static int[] _dfa = {
@@ -739,18 +758,18 @@ static class ES5Lexer
         57, 330, 65, 90, 330, 92, 92, 1349, 95, 95, 330, 97, 122, 330, 170, 8191, 
         330, 8204, 8205, 330, 8304, 12287, 330, 12289, 55295, 330, 57344, 65278, 330
     };
-    public static IEnumerable<Parsley.Runtime.Token> Tokenize(TextReader reader, long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
-        foreach(var tok in LuthorRuntime.Tokenize(_dfa, reader, tabWidth, position, line, column))
+    public static global::System.Collections.Generic.IEnumerable<global::Parsley.Runtime.Token> Tokenize(global::System.IO.TextReader reader, long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
+        foreach(var tok in global::LuthorRuntime.Tokenize(_dfa, reader, tabWidth, position, line, column))
         {
             if(tok.Symbol == whitespace || tok.Symbol == line_comment || tok.Symbol == block_comment) continue;
-            yield return new Parsley.Runtime.Token(tok.Symbol, tok.Text, tok.Line, tok.Column, tok.Position);
+            yield return new global::Parsley.Runtime.Token(0 <= tok.Symbol && tok.Symbol < 90 ? tok.Symbol : -1, tok.Text, tok.Line, tok.Column, tok.Position);
         }
     }
-    public static IEnumerable<Parsley.Runtime.Token> Tokenize(string text, long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
-        foreach(var tok in LuthorRuntime.Tokenize(_dfa, text, tabWidth, position, line, column))
+    public static global::System.Collections.Generic.IEnumerable<global::Parsley.Runtime.Token> Tokenize(string text, long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
+        foreach(var tok in global::LuthorRuntime.Tokenize(_dfa, text, tabWidth, position, line, column))
         {
             if(tok.Symbol == whitespace || tok.Symbol == line_comment || tok.Symbol == block_comment) continue;
-            yield return new Parsley.Runtime.Token(tok.Symbol, tok.Text, tok.Line, tok.Column, tok.Position);
+            yield return new global::Parsley.Runtime.Token(0 <= tok.Symbol && tok.Symbol < 90 ? tok.Symbol : -1, tok.Text, tok.Line, tok.Column, tok.Position);
         }
     }
     public const int @break = 0;
@@ -843,5 +862,6 @@ static class ES5Lexer
     public const int whitespace = 87;
     public const int line_comment = 88;
     public const int block_comment = 89;
-    public const int ERROR = 90;
+    public const int ERROR = -1;
+    public const int TerminalCount = 90;
 }

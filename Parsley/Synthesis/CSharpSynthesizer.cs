@@ -37,6 +37,20 @@ namespace Parsley
 		/// Names the symbol constants must not take, such as the members of a type the classes are nested in
 		/// </summary>
 		public ICollection<string>? ReservedNames { get; set; }
+		/// <summary>
+		/// The access of the classes when <see cref="Nested"/>: "private" unless set, or "internal" for classes
+		/// another nested class has to reach
+		/// </summary>
+		public string? NestedAccess { get; set; }
+		/// <summary>
+		/// The type whose static Tokenize the code calls for a lexer: the grammar's own (null), an @external
+		/// grammar's alias, or a lexer terminals name with lexer=. Null uses <see cref="CSharpSynthesizer.DefaultLexerType"/>.
+		/// </summary>
+		public Func<string?, string>? LexerType { get; set; }
+		/// <summary>
+		/// The parser class of an @external grammar, by alias. Null uses <see cref="CSharpSynthesizer.DefaultExternalParser"/>.
+		/// </summary>
+		public Func<string, string>? ExternalParser { get; set; }
 	}
 
 	/// <summary>
@@ -59,11 +73,29 @@ namespace Parsley
 	public sealed class SynthesizedParser
 	{
 		internal SynthesizedParser(string code, IReadOnlyList<string> usings, string className, string? evaluatorClassName,
-			string? evaluateReturnType, string? evaluateStateParameter, IReadOnlyList<SynthesizedConstant> constants, ParserEngine engine)
+			string? evaluateReturnType, string? evaluateStateParameter, IReadOnlyList<SynthesizedConstant> constants, ParserEngine engine,
+			bool isSubordinate, bool isCompound, bool hasLexerMode, IReadOnlyList<string> sharedEntries)
 		{
 			Code = code; Usings = usings; ClassName = className; EvaluatorClassName = evaluatorClassName;
 			EvaluateReturnType = evaluateReturnType; EvaluateStateParameter = evaluateStateParameter; Constants = constants; Engine = engine;
+			IsSubordinate = isSubordinate; IsCompound = isCompound; HasLexerMode = hasLexerMode; SharedEntries = sharedEntries;
 		}
+		/// <summary>
+		/// The grammar is only parsed through its shared productions, so the parser has no TryParse or Parse
+		/// </summary>
+		public bool IsSubordinate { get; }
+		/// <summary>
+		/// The grammar has islands or terminals from other lexers, so its tokens come from a LexerController
+		/// </summary>
+		public bool IsCompound { get; }
+		/// <summary>
+		/// The parser has a static CreateLexerMode(TokenizeFunc), which a LexerController lexes the grammar with
+		/// </summary>
+		public bool HasLexerMode { get; }
+		/// <summary>
+		/// The parser's static entry points for the shared productions, such as TryParseObject
+		/// </summary>
+		public IReadOnlyList<string> SharedEntries { get; }
 		public string Code { get; }
 		/// <summary>
 		/// The namespaces the code imports. Written at the top of the code unless <see cref="SynthesisOptions.Nested"/>.
@@ -119,6 +151,34 @@ namespace Parsley
 		/// a parser synthesized for that engine derives from. It needs <see cref="RuntimeSource"/>.
 		/// </summary>
 		public static string BaseSource(ParserEngine engine) => _Resource(BaseFileName(engine));
+
+		/// <summary>
+		/// The type a grammar uses for a lexer when nothing else is said: what @lexer names for it; for an
+		/// @external grammar, what that grammar's own @lexer names, else the alias plus "Lexer", in that grammar's
+		/// namespace; for the grammar's own lexer, its file name plus "Lexer"; for one terminals name with
+		/// lexer=, the name plus "Lexer".
+		/// </summary>
+		/// <param name="alias">An @external alias, a lexer=, or null for the grammar's own lexer</param>
+		public static string DefaultLexerType(Grammar g, string? alias)
+		{
+			var named = g.GetLexerType(alias);
+			if (null != named) return named;
+			if (null == alias) return g.NameFromFile("Lexer") ?? (g.StartSymbol + "Lexer");
+			var x = g.GetExternal(alias);
+			if (null == x?.Grammar) return alias + "Lexer";
+			return _Qualify(x.Grammar.GetLexerType(null) ?? alias + "Lexer", x.Grammar.Namespace);
+		}
+		/// <summary>
+		/// The parser class of an @external grammar: its @class, else its file name plus "Parser", in its namespace
+		/// </summary>
+		public static string DefaultExternalParser(Grammar g, string alias)
+		{
+			var x = g.GetExternal(alias)?.Grammar;
+			if (null == x) return alias + "Parser";
+			return _Qualify(x.ClassName ?? (x.StartSymbol + "Parser"), x.Namespace);
+		}
+		// a name in another grammar's namespace, unless it's qualified already
+		static string _Qualify(string name, string? ns) => null == ns || name.Contains(".") || name.StartsWith("global::", StringComparison.Ordinal) ? name : $"global::{ns}.{name}";
 		static string _Resource(string name)
 		{
 			using var s = typeof(CSharpSynthesizer).Assembly.GetManifestResourceStream("Parsley.Runtime." + name)
@@ -227,8 +287,9 @@ namespace Parsley
 					_className, "Parse", "Current", "Errors", "Peek", "Advance", "Consume", "Expect", "Error", "NewNode", "Fold",
 					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "GetHashCode", "ToString", "Equals", "GetType",
 					"Start", "ReadToken", "FromLexer", "EndToken", "AdaptivePredict", "Atn",
-					"Classify", "Classified", "OnMatched", "CurrentUnclassified", "Previous", "Wrap"
+					"Classify", "Classified", "OnMatched", "CurrentUnclassified", "Previous", "Wrap", "CreateLexerMode", "Tokenize", "TryParse"
 				};
+				foreach (var p in _a.Grammar.SharedProductions) reserved.Add("TryParse" + _Ident(p.Name));
 				if (null != _o.ReservedNames) reserved.UnionWith(_o.ReservedNames);
 				// the methods hooks call are members too
 				foreach (var (name, _) in _Hooks()) reserved.Add(name);
@@ -264,7 +325,8 @@ namespace Parsley
 				}
 				foreach (var t in _a.Grammar.Terminals)
 				{
-					if (null != t.When) add(t.When, $"private partial bool {t.When}(Token token, Token previous);");
+					// a contextual terminal's when is asked by the parser; one with lexer= by the lexer controller, which has no parser
+					if (null != t.When) add(t.When, null != t.Lexer ? $"private static partial bool {t.When}(Token token, Token previous);" : $"private partial bool {t.When}(Token token, Token previous);");
 					if (null != t.Matched) add(t.Matched, $"partial void {t.Matched}(Token token);");
 				}
 				foreach (var p in _a.Grammar.Productions)
@@ -363,7 +425,9 @@ namespace Parsley
 			}
 
 			// a nested class is private; the outer type exposes what it needs to
-			string _Access => _o.Nested ? "private" : _o.Public ? "public" : "internal";
+			string _Access => _o.Nested ? _o.NestedAccess ?? "private" : _o.Public ? "public" : "internal";
+			// the grammar's tokens come from a lexer controller, which needs to know about its islands and other lexers
+			bool _HasLexerMode => _a.Grammar.IsCompound || _a.Grammar.SharedProductions.Any();
 
 			List<string> _Usings()
 			{
@@ -390,7 +454,8 @@ namespace Parsley
 				return new SynthesizedParser(code, _Usings(), _className, _evaluatorName,
 					null != _evaluatorName ? start.Type ?? "object" : null,
 					null != _evaluatorName ? (null == start.StateType ? "object? state = null" : $"{start.StateType} state") : null,
-					constants, _engine);
+					constants, _engine, _a.Grammar.IsSubordinate, _a.Grammar.IsCompound, _HasLexerMode,
+					_a.Grammar.SharedProductions.Select(p => "TryParse" + _Ident(p.Name)).ToList());
 			}
 
 			void _Header(string source)
@@ -425,28 +490,44 @@ namespace Parsley
 				_Line("#endregion");
 				_Line();
 				_Line($"public {_className}(IEnumerable<Token> tokens) : base(tokens, s_tables{(_allStar ? ", s_atn" : "")}) {{ }}");
-				_Line();
-				_Line("/// <summary>");
-				_Line($"/// Parses a complete {g.StartSymbol} and returns its tree. Problems are reported in <see cref=\"ParserBase.Errors\"/>.");
-				_Line("/// </summary>");
-				_Open("public static bool TryParse(IEnumerable<Token> tokens,out ParseNode result, out IReadOnlyList<ParseError> errors)");
-				_Line($"var parser = new {_className}(tokens);");
-				// an operator rule's method takes the level it starts at, so it's called rather than passed
-				var startIsOperators = null != g.GetProduction(g.StartSymbol!)!.Operators;
-				_Line(_allStar
-					? $"result = parser.Run(() => parser.{_MethodName(g.StartSymbol!)}(-1));"
-					: startIsOperators ? $"result = parser.Run(() => parser.{_MethodName(g.StartSymbol!)}());"
-					: $"result = parser.Run(parser.{_MethodName(g.StartSymbol!)});");
-                _Line($"errors = parser.Errors;");
-				_Line($"return parser.Errors.Count == 0;");
-                _Close();
+				// a subordinate grammar is only parsed through its shared productions
+				if (!g.IsSubordinate)
+				{
+					_Line();
+					_Line("/// <summary>");
+					_Line($"/// Parses a complete {g.StartSymbol} and returns its tree. Problems are reported in <see cref=\"ParserBase.Errors\"/>.");
+					_Line("/// </summary>");
+					_Open("public static bool TryParse(IEnumerable<Token> tokens,out ParseNode result, out IReadOnlyList<ParseError> errors)");
+					_Line($"var parser = new {_className}(tokens);");
+					// an operator rule's method takes the level it starts at, so it's called rather than passed
+					var startIsOperators = null != g.GetProduction(g.StartSymbol!)!.Operators;
+					_Line(_allStar
+						? $"result = parser.Run(() => parser.{_MethodName(g.StartSymbol!)}(-1));"
+						: startIsOperators ? $"result = parser.Run(() => parser.{_MethodName(g.StartSymbol!)}());"
+						: $"result = parser.Run(parser.{_MethodName(g.StartSymbol!)});");
+					_Line($"errors = parser.Errors;");
+					_Line($"return parser.Errors.Count == 0;");
+					_Close();
 
-                _Open("public static ParseNode Parse(IEnumerable<Token> tokens)");
-				_Open($"if(!TryParse(tokens, out var result, out var errors))");
-				_Line("throw new ParseException(errors);");
-				_Close();
-				_Line("return result;");
-                _Close();
+					_Open("public static ParseNode Parse(IEnumerable<Token> tokens)");
+					_Open($"if(!TryParse(tokens, out var result, out var errors))");
+					_Line("throw new ParseException(errors);");
+					_Close();
+					_Line("return result;");
+					_Close();
+				}
+				_SharedEntries();
+				if (_HasLexerMode)
+				{
+					_Line();
+					_LexerMode();
+				}
+				// with no class around it, the parser lexes through a controller itself
+				if (g.IsCompound && !_o.Nested && !g.IsSubordinate)
+				{
+					_Line();
+					_CompoundEntries();
+				}
 
                 foreach (var p in g.Productions)
 				{
@@ -470,6 +551,150 @@ namespace Parsley
 					_Line();
 					_Evaluator(source);
 				}
+			}
+
+			// for each shared production, a static entry point that parses exactly it: what an island's controller calls
+			void _SharedEntries()
+			{
+				foreach (var p in _a.Grammar.SharedProductions)
+				{
+					_Line();
+					_Line("/// <summary>");
+					_Line($"/// Parses a complete {p.Name}, as an island of another grammar, and returns its tree. Problems are reported in <paramref name=\"errors\"/>.");
+					_Line("/// </summary>");
+					_Open($"public static bool TryParse{_Ident(p.Name)}(IEnumerable<Token> tokens, out ParseNode result, out IReadOnlyList<ParseError> errors)");
+					_Line($"var parser = new {_className}(tokens);");
+					_Line(_allStar
+						? $"result = parser.Run(() => parser.{_MethodName(p.Name)}(-1));"
+						: $"result = parser.Run(() => parser.{_MethodName(p.Name)}());");
+					_Line("errors = parser.Errors;");
+					_Line("return parser.Errors.Count == 0;");
+					_Close();
+				}
+			}
+
+			// the lexer ids of the grammar's own terminals: their parser ids less the first terminal's
+			string _LexerId(string terminal)
+			{
+				var id = _s.GetId(terminal);
+				return $"{_const[id]} - {_const[_s.NonTerminalCount]}";
+			}
+			readonly Dictionary<string, GrammarAnalysis> _externals = new();
+			GrammarAnalysis _External(ExternalGrammar x)
+			{
+				if (!_externals.TryGetValue(x.Alias, out var a))
+				{
+					a = GrammarAnalysis.Analyze(x.Grammar!);
+					_externals.Add(x.Alias, a);
+				}
+				return a;
+			}
+			string _LexerType(string? alias) => null != _o.LexerType ? _o.LexerType(alias) : DefaultLexerType(_a.Grammar, alias);
+			string _ExternalParser(string alias) => null != _o.ExternalParser ? _o.ExternalParser(alias) : DefaultExternalParser(_a.Grammar, alias);
+
+			// what a lexer controller needs to lex this grammar with the lexer it's given: where islands start and
+			// end, and which terminals another lexer produces
+			void _LexerMode()
+			{
+				var g = _a.Grammar;
+				var islands = g.Terminals.Where(t => t.IsIsland).ToList();
+				var switches = g.Terminals.Where(t => null != t.Lexer && !t.IsIsland).ToList();
+				_Line("/// <summary>");
+				_Line("/// How a LexerController lexes this grammar with the given lexer: its islands and the terminals other lexers produce");
+				_Line("/// </summary>");
+				_Open("public static LexerMode CreateLexerMode(TokenizeFunc tokenize)");
+				if (0 == islands.Count && 0 == switches.Count)
+				{
+					_Line("return new LexerMode(tokenize);");
+					_Close();
+					return;
+				}
+				_Line("return new LexerMode(tokenize,");
+				++_indent;
+				if (0 < islands.Count)
+				{
+					_Line("islands:");
+					_Line("[");
+					++_indent;
+					for (var i = 0; i < islands.Count; ++i)
+					{
+						var t = islands[i];
+						var (x, p) = g.ResolveEntry(t);
+						var inner = _External(x!);
+						var parser = _ExternalParser(x!.Alias);
+						string innerId(string attr)
+						{
+							var name = t.Attributes.GetString(attr);
+							if (null == name) return "-1";
+							var term = Grammar.ResolveExternalTerminal(x, name.Trim())!;
+							var id = inner.Symbols.GetId(term.Name) - inner.Symbols.NonTerminalCount;
+							return $"{id} /* {x.Alias}.{term.Name} */";
+						}
+						_Line($"// {_Comment(XbnfWriter.Write(t))}");
+						_Line("new IslandRule(");
+						++_indent;
+						_Line($"terminal: {_LexerId(t.Name)},");
+						_Line($"after: [{string.Join(", ", t.GetNames("after").Select(n => _LexerId(g.FindTerminal(n)!.Name)))}],");
+						_Line($"inner: {parser}.CreateLexerMode({_LexerType(x.Alias)}.Tokenize),");
+						_Line($"parse: {parser}.TryParse{_Ident(p!.Name)},");
+						_Line($"nest: {innerId("nest")},");
+						_Line($"pop: {innerId("pop")},");
+						_Line($"popOnError: {(t.PopOnError ? "true" : "false")})" + (i < islands.Count - 1 ? "," : ""));
+						--_indent;
+					}
+					--_indent;
+					_Line("]" + (0 < switches.Count ? "," : ");"));
+				}
+				if (0 < switches.Count)
+				{
+					_Line("switches:");
+					_Line("[");
+					++_indent;
+					for (var i = 0; i < switches.Count; ++i)
+					{
+						var t = switches[i];
+						// its id in its own lexer: its place among the terminals that lexer produces
+						var lexedAs = g.Terminals.Where(u => u.Lexer == t.Lexer && !u.IsIsland).ToList().IndexOf(t);
+						_Line($"// {_Comment(XbnfWriter.Write(t))}");
+						_Line("new LexerSwitch(");
+						++_indent;
+						_Line($"terminal: {_LexerId(t.Name)},");
+						_Line($"on: [{string.Join(", ", t.GetNames("on").Select(n => _LexerId(g.FindTerminal(n)!.Name)))}],");
+						_Line($"tokenize: {_LexerType(t.Lexer)}.Tokenize,");
+						_Line($"lexedAs: {lexedAs}" + (null != t.When ? "," : ")" + (i < switches.Count - 1 ? "," : "")));
+						if (null != t.When)
+							_Line($"when: {t.When})" + (i < switches.Count - 1 ? "," : ""));
+						--_indent;
+					}
+					--_indent;
+					_Line("]);");
+				}
+				--_indent;
+				_Close();
+			}
+
+			// a compound grammar's parser lexes through a controller, so it has the entry points that take text
+			void _CompoundEntries()
+			{
+				var lexer = _LexerType(null);
+				const string args = "long position = 0, int line = 1, int column = 1, int tabWidth = 4";
+				_Line("/// <summary>");
+				_Line($"/// Lexes text with {lexer}, and with the lexers of its islands and other terminals where they take over");
+				_Line("/// </summary>");
+				_Line($"public static IEnumerable<Token> Tokenize(global::System.IO.TextReader reader, {args}) => new LexerController(CreateLexerMode({lexer}.Tokenize), reader, position, line, column, tabWidth);");
+				_Line("/// <summary>");
+				_Line($"/// Lexes text with {lexer}, and with the lexers of its islands and other terminals where they take over");
+				_Line("/// </summary>");
+				_Line($"public static IEnumerable<Token> Tokenize(string text, {args}) => new LexerController(CreateLexerMode({lexer}.Tokenize), text, position, line, column, tabWidth);");
+				if (_a.Grammar.IsSubordinate) return;
+				_Line("/// <summary>");
+				_Line("/// Lexes and parses what a reader reads, and returns the tree. Throws a ParseException with every problem found if there were any.");
+				_Line("/// </summary>");
+				_Line("public static ParseNode Parse(global::System.IO.TextReader reader) => Parse(Tokenize(reader));");
+				_Line("/// <summary>");
+				_Line("/// Lexes and parses text, and returns the tree. Throws a ParseException with every problem found if there were any.");
+				_Line("/// </summary>");
+				_Line("public static ParseNode Parse(string text) => Parse(Tokenize(text));");
 			}
 
 			string _EngineDescription()
@@ -521,7 +746,15 @@ namespace Parsley
 				_Line("/// <param name=\"node\">The root of the tree</param>");
 				_Line("/// <param name=\"state\">Anything the semantic actions need, available to them as State</param>");
 				_Open($"public static {startType} Evaluate(ParseNode node, {stateParam})");
-				_Line($"return new {_evaluatorName}(state).{_EvaluateName(start.Name)}(node);");
+				if (g.SharedProductions.Any(p => p != start))
+				{
+					// a tree can also be an island's, rooted at one of the shared productions
+					_Line($"var evaluator = new {_evaluatorName}(state);");
+					_Line($"if ({_const[_s.GetId(start.Name)]} == node.SymbolId) return evaluator.{_EvaluateName(start.Name)}(node);");
+					_Line($"return {("object" == startType ? "" : $"({startType})")}evaluator.Evaluate(node);");
+				}
+				else
+					_Line($"return new {_evaluatorName}(state).{_EvaluateName(start.Name)}(node);");
 				_Close();
 
 				_Line();
@@ -1173,7 +1406,14 @@ namespace Parsley
 				_Line("endOfInput: EndOfInput,");
 				_Numbers("rules", atn.Rules, ",");
 				_Numbers("states", atn.SerializeStates(), ",");
-				_Numbers("decisions", _a.AdaptiveDecisions.Select(d => atn.GetDecisionState(d.Node)).ToList(), ");");
+				if (0 < atn.EntryRules.Length)
+				{
+					_Numbers("decisions", _a.AdaptiveDecisions.Select(d => atn.GetDecisionState(d.Node)).ToList(), ",");
+					_Line($"// the shared productions: parses of islands start with them, so the input can end after them");
+					_Line($"entryRules: [{string.Join(", ", atn.EntryRules.Select(r => _const[r]))}]);");
+				}
+				else
+					_Numbers("decisions", _a.AdaptiveDecisions.Select(d => atn.GetDecisionState(d.Node)).ToList(), ");");
 				--_indent;
 			}
 

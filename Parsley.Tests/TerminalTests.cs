@@ -10,11 +10,19 @@ namespace Parsley.Tests
 		static Grammar G(string xbnf) => Grammar.Parse(xbnf);
 		static string Rx(Grammar g, string name) => g.GetTerminal(name)?.Regex ?? "(not a terminal)";
 
-		public static void OnlyRulesWithoutReferencesAreTerminalsByDefault()
+		public static void OnlyLoneLiteralsAndPatternsAreTerminalsByDefault()
 		{
 			var g = Grammar.ReadFrom(Path.Combine(T.Dir, "json.xbnf"));
 			T.Check(null != g.GetTerminal("true") && null != g.GetTerminal("lbracket"), "literal rules are terminals");
 			T.Check(null != g.GetProduction("Boolean"), "Boolean references symbols, so it stays a non-terminal");
+			// literals and patterns combined: a non-terminal of implicit terminals, unless marked terminal
+			var s = G("S= sign num; sign= \"+\" | \"-\"; num= '[0-9]+'; kw<collapsed>= \"k\";");
+			T.Check(null != s.GetProduction("sign") && null == s.GetTerminal("sign"), "an alternation of literals is a non-terminal");
+			T.Check(null != s.GetTerminal("num") && null != s.GetTerminal("kw"), "a lone pattern or literal is a terminal, attributes or not");
+			var a = GrammarAnalysis.Analyze(s);
+			T.Check(null != a.Grammar.GetTerminal("plus") && null != a.Grammar.GetTerminal("minus"), "its literals are implicit terminals");
+			var t = G("S= sign; sign<terminal>= \"+\" | \"-\";");
+			T.Equal("\\+|-", Rx(t, "sign"), "<terminal> makes it one token");
 			T.Equal("\\[", Rx(g, "lbracket"), "literal escaped");
 			T.Equal("\"([^\\n\"\\\\]|\\\\([btrnf\"\\\\/]|(u[0-9A-Fa-f]{4})))*\"", Rx(g, "string"), "pattern passed through without its quotes");
 		}

@@ -1,0 +1,4 @@
+﻿browser "firefox"
+add-headers {"DNT": "1", "Accept":
+visit "https://google.com"
+add-headers {"ok": null}

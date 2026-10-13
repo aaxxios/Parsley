@@ -9,7 +9,7 @@ internal partial class Options
 {
     [CmdArg(0, Description = "The path to the XBNF grammar input file.", ValueName = "grammar-file", Required = false)]
     public TextReader Input { get; set; } = Console.In;
-    [CmdArg(ShortName = 'l', Description = "The lexer output file to generate.", ValueName = "lexer-file", Required = false)]
+    [CmdArg(ShortName = 'l', Description = "The lexer output file to generate. Terminals from other lexers (lexer=Name) go in files beside it, named like grammar.Name.lex.", ValueName = "lexer-file", Required = false)]
     public TextWriter? Lexer = null;
     [CmdArg(ShortName = 'o', Description = "The path to the ouput code file.", ValueName = "code-file", Required = false)]
     public TextWriter Output { get; set; } = Console.Out;
