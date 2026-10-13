@@ -642,4 +642,4 @@ The synthesized parser numbers symbols in this order:
 2. terminals, in declaration order, including hidden ones, followed by implicit terminals. Then terminals from other lexers, grouped by lexer; then islands; then contextual terminals. The grammar's own lexer produces only the first group, so its ids match.
 3. `#EOS` (end of input) and `#ERROR` (unrecognized input)
 
-A lexer reports terminals numbered from 0 in that same terminal order, and text it can't match as -1. The parser adds the number of non-terminals as each token arrives. A negative id, or one past the last terminal, is treated as `#ERROR`. A Luthor lexer has a constant for each terminal's id, `ERROR` (-1) and `TerminalCount`.
+A lexer reports terminals numbered from 0 in that same terminal order, and text it can't match as -1. The parser adds the number of non-terminals as each token arrives. A negative id is treated as `#ERROR`.
