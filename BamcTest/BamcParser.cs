@@ -15,60 +15,68 @@ public partial class BamcParser : LL1ParserBase
 	public const int Script = 0;
 	public const int Line = 1;
 	public const int Command = 2;
-	public const int Browser = 3;
-	public const int Feature = 4;
-	public const int Visit = 5;
-	public const int OpenNewTab = 6;
-	public const int CloseCurrentTab = 7;
-	public const int Click = 8;
-	public const int ClickExp = 9;
-	public const int ClickAtPosition = 10;
-	public const int FillText = 11;
-	public const int FillTextExp = 12;
-	public const int GetText = 13;
-	public const int SelectElement = 14;
-	public const int SelectOption = 15;
-	public const int AddHeader = 16;
-	public const int AddHeaders = 17;
-	public const int AddCookie = 18;
-	public const int SetCustomUserAgent = 19;
-	public const int WaitForSeconds = 20;
-	public const int TakeScreenshot = 21;
-	public const int SaveAsHtml = 22;
-	public const int SaveAsHtmlExp = 23;
-	public const int JavaScript = 24;
-	public const int BrowserKeyword = 25; // "browser"
-	public const int FeatureKeyword = 26; // "feature"
-	public const int VisitKeyword = 27; // "visit"
-	public const int OpenNewTabKeyword = 28; // "open-new-tab"
-	public const int CloseCurrentTabKeyword = 29; // "close-current-tab"
-	public const int ClickKeyword = 30; // "click"
-	public const int ClickExpKeyword = 31; // "click-exp"
-	public const int ClickAtPositionKeyword = 32; // "click-at-position"
-	public const int FillTextKeyword = 33; // "fill-text"
-	public const int FillTextExpKeyword = 34; // "fill-text-exp"
-	public const int GetTextKeyword = 35; // "get-text"
-	public const int SelectElementKeyword = 36; // "select-element"
-	public const int SelectOptionKeyword = 37; // "select-option"
-	public const int AddHeaderKeyword = 38; // "add-header"
-	public const int AddHeadersKeyword = 39; // "add-headers"
-	public const int AddCookieKeyword = 40; // "add-cookie"
-	public const int SetCustomUserAgentKeyword = 41; // "set-custom-useragent"
-	public const int WaitForSecondsKeyword = 42; // "wait-for-seconds"
-	public const int TakeScreenshotKeyword = 43; // "take-screenshot"
-	public const int SaveAsHtmlKeyword = 44; // "save-as-html"
-	public const int SaveAsHtmlExpKeyword = 45; // "save-as-html-exp"
-	public const int JsBlock = 46;
-	public const int String = 47;
-	public const int Number = 48;
-	public const int Json = 49;
-	public const int Comma = 50; // ","
-	public const int Newline = 51;
-	public const int Comment = 52;
-	public const int Whitespace = 53;
-	public const int EndOfInput = 54;
-	public const int ErrorSymbol = 55;
-	public const int SymbolCount = 56;
+	public const int BrowserNames = 3;
+	public const int Browser = 4;
+	public const int Feature = 5;
+	public const int Visit = 6;
+	public const int OpenNewTab = 7;
+	public const int CloseCurrentTab = 8;
+	public const int Click = 9;
+	public const int ClickExp = 10;
+	public const int ClickAtPosition = 11;
+	public const int FillText = 12;
+	public const int FillTextExp = 13;
+	public const int GetText = 14;
+	public const int SelectElement = 15;
+	public const int SelectOption = 16;
+	public const int AddHeader = 17;
+	public const int AddHeaders = 18;
+	public const int AddCookie = 19;
+	public const int SetCustomUserAgent = 20;
+	public const int WaitForSeconds = 21;
+	public const int TakeScreenshot = 22;
+	public const int SaveAsHtml = 23;
+	public const int SaveAsHtmlExp = 24;
+	public const int JavaScript = 25;
+	public const int Brave = 26; // ""brave""
+	public const int Chrome = 27; // ""chrome""
+	public const int Chromium = 28; // ""chromium""
+	public const int Edge = 29; // ""edge""
+	public const int Firefox = 30; // ""firefox""
+	public const int Opera = 31; // ""opera""
+	public const int Safari = 32; // ""safari""
+	public const int BrowserKeyword = 33; // "browser"
+	public const int FeatureKeyword = 34; // "feature"
+	public const int VisitKeyword = 35; // "visit"
+	public const int OpenNewTabKeyword = 36; // "open-new-tab"
+	public const int CloseCurrentTabKeyword = 37; // "close-current-tab"
+	public const int ClickKeyword = 38; // "click"
+	public const int ClickExpKeyword = 39; // "click-exp"
+	public const int ClickAtPositionKeyword = 40; // "click-at-position"
+	public const int FillTextKeyword = 41; // "fill-text"
+	public const int FillTextExpKeyword = 42; // "fill-text-exp"
+	public const int GetTextKeyword = 43; // "get-text"
+	public const int SelectElementKeyword = 44; // "select-element"
+	public const int SelectOptionKeyword = 45; // "select-option"
+	public const int AddHeaderKeyword = 46; // "add-header"
+	public const int AddHeadersKeyword = 47; // "add-headers"
+	public const int AddCookieKeyword = 48; // "add-cookie"
+	public const int SetCustomUserAgentKeyword = 49; // "set-custom-useragent"
+	public const int WaitForSecondsKeyword = 50; // "wait-for-seconds"
+	public const int TakeScreenshotKeyword = 51; // "take-screenshot"
+	public const int SaveAsHtmlKeyword = 52; // "save-as-html"
+	public const int SaveAsHtmlExpKeyword = 53; // "save-as-html-exp"
+	public const int JsBlock = 54;
+	public const int String = 55;
+	public const int Number = 56;
+	public const int Json = 57;
+	public const int Comma = 58; // ","
+	public const int Newline = 59;
+	public const int Comment = 60;
+	public const int Whitespace = 61;
+	public const int EndOfInput = 62;
+	public const int ErrorSymbol = 63;
+	public const int SymbolCount = 64;
 	#endregion
 
 	public BamcParser(IEnumerable<Token> tokens) : base(tokens, s_tables) { }
@@ -198,13 +206,35 @@ public partial class BamcParser : LL1ParserBase
 		Leave();
 	}
 
-	// Browser= browserKeyword string;
+	// BrowserNames<collapsed>= Brave | Chrome | Chromium | Edge | Firefox | Opera | Safari;
+	void ParseBrowserNames(ParseNode parent)
+	{
+		Enter(BrowserNames);
+		switch (Current.SymbolId)
+		{
+			case Brave:
+			case Chrome:
+			case Chromium:
+			case Edge:
+			case Firefox:
+			case Opera:
+			case Safari:
+				Consume(parent);
+				break;
+			default:
+				Error(parent, null, Brave, Chrome, Chromium, Edge, Firefox, Opera, Safari);
+				break;
+		}
+		Leave();
+	}
+
+	// Browser= browserKeyword BrowserNames;
 	ParseNode ParseBrowser()
 	{
 		Enter(Browser);
 		var node = NewNode(Browser);
 		Expect(BrowserKeyword, node);
-		Expect(String, node);
+		ParseBrowserNames(node);
 		Leave();
 		return node;
 	}
@@ -457,9 +487,9 @@ public partial class BamcParser : LL1ParserBase
 
 	#region Tables
 	static readonly ParserTables s_tables = new(
-		terminalStart: BrowserKeyword, // lexer ids count terminals from 0; the parser adds this
-		symbolNames: ["Script", "Line", "Command", "Browser", "Feature", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "browserKeyword", "featureKeyword", "visitKeyword", "openNewTabKeyword", "closeCurrentTabKeyword", "clickKeyword", "clickExpKeyword", "clickAtPositionKeyword", "fillTextKeyword", "fillTextExpKeyword", "getTextKeyword", "selectElementKeyword", "selectOptionKeyword", "addHeaderKeyword", "addHeadersKeyword", "addCookieKeyword", "setCustomUserAgentKeyword", "waitForSecondsKeyword", "takeScreenshotKeyword", "saveAsHtmlKeyword", "saveAsHtmlExpKeyword", "jsBlock", "string", "number", "json", "comma", "newline", "comment", "whitespace", "#EOS", "#ERROR"],
-		displayNames: ["Script", "Line", "Command", "Browser", "Feature", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "\"browser\"", "\"feature\"", "\"visit\"", "\"open-new-tab\"", "\"close-current-tab\"", "\"click\"", "\"click-exp\"", "\"click-at-position\"", "\"fill-text\"", "\"fill-text-exp\"", "\"get-text\"", "\"select-element\"", "\"select-option\"", "\"add-header\"", "\"add-headers\"", "\"add-cookie\"", "\"set-custom-useragent\"", "\"wait-for-seconds\"", "\"take-screenshot\"", "\"save-as-html\"", "\"save-as-html-exp\"", "jsBlock", "string", "number", "json", "\",\"", "newline", "comment", "whitespace", "end of input", "an unrecognized token"],
+		terminalStart: Brave, // lexer ids count terminals from 0; the parser adds this
+		symbolNames: ["Script", "Line", "Command", "BrowserNames", "Browser", "Feature", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "Brave", "Chrome", "Chromium", "Edge", "Firefox", "Opera", "Safari", "browserKeyword", "featureKeyword", "visitKeyword", "openNewTabKeyword", "closeCurrentTabKeyword", "clickKeyword", "clickExpKeyword", "clickAtPositionKeyword", "fillTextKeyword", "fillTextExpKeyword", "getTextKeyword", "selectElementKeyword", "selectOptionKeyword", "addHeaderKeyword", "addHeadersKeyword", "addCookieKeyword", "setCustomUserAgentKeyword", "waitForSecondsKeyword", "takeScreenshotKeyword", "saveAsHtmlKeyword", "saveAsHtmlExpKeyword", "jsBlock", "string", "number", "json", "comma", "newline", "comment", "whitespace", "#EOS", "#ERROR"],
+		displayNames: ["Script", "Line", "Command", "BrowserNames", "Browser", "Feature", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "\"\"brave\"\"", "\"\"chrome\"\"", "\"\"chromium\"\"", "\"\"edge\"\"", "\"\"firefox\"\"", "\"\"opera\"\"", "\"\"safari\"\"", "\"browser\"", "\"feature\"", "\"visit\"", "\"open-new-tab\"", "\"close-current-tab\"", "\"click\"", "\"click-exp\"", "\"click-at-position\"", "\"fill-text\"", "\"fill-text-exp\"", "\"get-text\"", "\"select-element\"", "\"select-option\"", "\"add-header\"", "\"add-headers\"", "\"add-cookie\"", "\"set-custom-useragent\"", "\"wait-for-seconds\"", "\"take-screenshot\"", "\"save-as-html\"", "\"save-as-html-exp\"", "jsBlock", "string", "number", "json", "\",\"", "newline", "comment", "whitespace", "end of input", "an unrecognized token"],
 		collapsedTerminals: [Comma, Newline],
 		// for each non-terminal, where error recovery can stop while parsing it: what can follow it, plus its sync terminals
 		recoverySets:
@@ -467,6 +497,7 @@ public partial class BamcParser : LL1ParserBase
 			[EndOfInput], // Script
 			[Newline, EndOfInput], // Line
 			[Newline, EndOfInput], // Command
+			[Newline, EndOfInput], // BrowserNames
 			[Newline, EndOfInput], // Browser
 			[Newline, EndOfInput], // Feature
 			[Newline, EndOfInput], // Visit

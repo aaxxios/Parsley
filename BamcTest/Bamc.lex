@@ -1,3 +1,10 @@
+Brave \"brave\"
+Chrome \"chrome\"
+Chromium \"chromium\"
+Edge \"edge\"
+Firefox \"firefox\"
+Opera \"opera\"
+Safari \"safari\"
 browserKeyword browser
 featureKeyword feature
 visitKeyword visit

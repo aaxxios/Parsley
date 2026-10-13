@@ -22,7 +22,17 @@ Command<collapsed, expected="a command">=
 // --- setup -----------------------------------------------------------------
 // The real tool also enforces ordering (browser first, features before
 // actions); that's left to a later pass rather than the grammar.
-Browser= browserKeyword string;                  // browser "chrome"
+
+BrowserNames<collapsed>= Brave | Chrome | Chromium | Edge | Firefox | Opera | Safari;
+Brave="\"brave\"";
+Chrome="\"chrome\"";
+Chromium="\"chromium\"";
+Edge="\"edge\"";
+Firefox="\"firefox\"";
+Opera="\"opera\"";
+Safari="\"safari\""; 
+
+Browser= browserKeyword BrowserNames;   // browser "chrome"
 Feature= featureKeyword string [ string ];       // feature "use-http-proxy" "USER:PASS@IP:PORT"
 
 // --- navigation ------------------------------------------------------------
