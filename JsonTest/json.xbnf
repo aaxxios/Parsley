@@ -9,7 +9,6 @@
 @using "System.Globalization";
 
 Json<start, type="object">= Object | Array | Value => {
-    // the child is an Object or Array node
     return Evaluate(node.Children[0]);
 };
 Object<type="Dictionary<string, object?>">= "{" [ Field { "," Field } ] "}" => {
