@@ -62,6 +62,12 @@ With `-e auto` (the default), Parsley picks the lightest engine the grammar allo
 
 All three produce the same tree and the same errors for any grammar they can all parse, and evaluators work the same way on every engine. In an ALL(\*) parser, one-token decisions are still plain `switch` and `if` tests; only the decisions that need more lookahead call `AdaptivePredict`. That simulates the grammar over as much input as it takes. It ignores the calling context first, and caches the result per decision, so after warm-up most predictions are a few dictionary lookups. It retries with the parser's real call stack only when that context-free pass is inconclusive.
 
+When a decision that looks more than one token ahead meets input none of its branches matches, every engine parses
+the branch that matched the most of it: the default one (an empty alternative, skipping an optional, or leaving a
+loop) if it got as far, else the earliest. So the error is reported at the token where the input goes wrong,
+expecting what that branch could take there, not at the start of the decision. Only input that no branch can even
+start with is reported where the decision begins.
+
 A decision that is really ambiguous, where the same input fits two branches all the way through, comes out the way the default policies say: the first alternative wins, and a loop or optional keeps matching. A `<policy>` on the decision settles it when the grammar is analyzed instead, on every engine, so a construct like the dangling `else` can stay LL(1). See [Ambiguity](XBNF.md#ambiguity).
 
 How much lookahead counts as "fixed" is up to the grammar: `@maxk 2;` caps it at 2 tokens, and the default is 4. It's a directive rather than a command line switch so that a grammar always synthesizes the same parser. The analysis only follows the inputs on which a decision's branches still overlap, so even a grammar like C99, which has around 80 keywords and operators, takes a few seconds at k=4.
@@ -101,12 +107,6 @@ non-terminal unless `<terminal>` forces it (it may then combine literals and pat
 terminals, which are inlined), and `<terminal=false>` forces a non-terminal. Each `TerminalDeclaration` keeps its `Definition` expression and a `Regex` for your lexer
 generator: patterns pass through unvalidated with the quotes removed (`\'` becomes `'`), literals are escaped,
 and other definitions are built from their constructs.
-
-## Editing Services
-
-The editing services provide syntax highlighting, navigation, autocomplete, and at a glance complexity markers and analysis for each expression in the grammar for editors like VS Code and Visual Studio 2022 or 2026
-
-![At a glance complexity](complexity.jpg)
 
 ## Build and test
 

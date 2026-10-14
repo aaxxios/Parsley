@@ -1138,14 +1138,18 @@ namespace Parsley
 				{
 					if (0 == d.Depth)
 						_Line($"// no fixed lookahead decides this; ALL(*) looks as far as it has to");
-					// a prediction has matched at least the first token, so a branch that can only start one way has it
-					_DeepDecision(d, node, p, isRoot, $"AdaptivePredict({d.AdaptiveIndex})", i => _Single(d.TokensOf(i)));
+					// a prediction has matched at least the first token, so a branch that can only start one way has it.
+					// The default branch is where input no branch matches goes, unless one got further into it
+					var args = 0 <= d.DefaultBranch ? $"{d.AdaptiveIndex}, {d.DefaultBranch}" : d.AdaptiveIndex.ToString();
+					_DeepDecision(d, node, p, isRoot, $"AdaptivePredict({args})", i => _Single(d.TokensOf(i)));
 					return;
 				}
 				if (1 < d.Depth)
 				{
 					_predictors.Add(d);
-					_DeepDecision(d, node, p, isRoot, _PredictName(d) + "()", i => _CommonPrefix(d.Branches[i]));
+					// as with adaptive prediction, only the first token is certain: on input no branch matches all of,
+					// the predictor returns the branch that matched the most, which checks the rest itself
+					_DeepDecision(d, node, p, isRoot, _PredictName(d) + "()", i => _Single(d.TokensOf(i)));
 					return;
 				}
 				switch (d.Node)
@@ -1404,18 +1408,22 @@ namespace Parsley
 					_ => "0 to go around again, 1 to stop"
 				};
 				_Line($"// {_Comment(d.Production.Name)}: {_Comment(d.Node.ToString())}");
-				_Line($"// looks {d.Depth} tokens ahead and returns {what}, or -1 if nothing matches");
+				_Line($"// looks {d.Depth} tokens ahead and returns {what}. On input none matches, the one that matched the most,");
+				_Line("// so it reports the error where the input goes wrong, or -1 if none matches the first token");
 				_Open($"int {_PredictName(d)}()");
 				var strings = new List<(LookaheadString S, int Branch)>();
 				for (var i = 0; i < d.Branches.Count; ++i)
 					foreach (var x in d.Branches[i])
 						strings.Add((x, i));
-				_Trie(strings, 0);
+				_Trie(strings, 0, d.DefaultBranch);
 				_Line("return -1;");
 				_Close();
 			}
 
-			void _Trie(List<(LookaheadString S, int Branch)> strings, int level)
+			// a switch on the token at the level, for lookahead strings that agree up to it. Below the first level,
+			// one that matches nothing returns the default branch if it's among those that got this far, else the
+			// earliest of them, as adaptive prediction does
+			void _Trie(List<(LookaheadString S, int Branch)> strings, int level, int defaultBranch)
 			{
 				var token = 0 == level ? "Current" : $"Peek({level})";
 				_Open($"switch ({token}.SymbolId)");
@@ -1434,11 +1442,16 @@ namespace Parsley
 				{
 					_Line($"case {_const[gr.Key]}:");
 					++_indent;
-					_Trie(gr.ToList(), level + 1);
-					_Line("break;");
+					// it returns whatever the token after this is
+					_Trie(gr.ToList(), level + 1, defaultBranch);
 					--_indent;
 				}
 				_Close();
+				if (0 < level)
+				{
+					var alive = strings.Select(x => x.Branch).Distinct().ToList();
+					_Line($"return {(alive.Contains(defaultBranch) ? defaultBranch : alive.Min())};");
+				}
 			}
 
 			void _Tables()

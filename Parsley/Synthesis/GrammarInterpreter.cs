@@ -291,7 +291,7 @@ namespace Parsley
 		{
 			if (d.IsAdaptive)
 			{
-				var b = AdaptivePredict(d.AdaptiveIndex);
+				var b = AdaptivePredict(d.AdaptiveIndex, d.DefaultBranch);
 				return -1 < b ? b : d.DefaultBranch;
 			}
 			if (1 == d.Depth)
@@ -305,8 +305,11 @@ namespace Parsley
 						if (x[0] == t) return i;
 				return d.DefaultBranch;
 			}
-			// walk the lookahead one token at a time, as the synthesized trie does
+			// walk the lookahead one token at a time, as the synthesized trie does. Input no branch matches goes to
+			// the default branch, unless it gets past the first token: then to the default branch if it got as far
+			// as any, else the earliest that did
 			var prefix = new List<int>();
+			HashSet<int>? alive = null;
 			for (var level = 0; level < d.Depth; ++level)
 			{
 				var tok = 0 == level ? Current : Peek(level);
@@ -315,8 +318,10 @@ namespace Parsley
 				for (var i = 0; i < d.Branches.Count; ++i)
 					foreach (var x in d.Branches[i])
 						if (x.Count > level && _Prefix(x, prefix)) matches.Add(i);
-				if (0 == matches.Count) return d.DefaultBranch;
+				if (0 == matches.Count)
+					return null == alive || alive.Contains(d.DefaultBranch) ? d.DefaultBranch : alive.Min();
 				if (1 == matches.Count) return matches.First();
+				alive = matches;
 			}
 			return d.DefaultBranch;
 		}

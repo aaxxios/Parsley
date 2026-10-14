@@ -19,11 +19,11 @@
     <Copyright>Copyright (C) 2026 by honey the codewitch</Copyright>
     <Description>Language server for Parsley's XBNF grammars</Description>
     <!-- ahead of Directory.Build.props's version: the lookahead glyphs and analysis on open came after 3.0.0 -->
-    <Version>3.1.0</Version>
-    <PackageVersion>3.1.0</PackageVersion>
-    <AssemblyVersion>3.1.0.0</AssemblyVersion>
-    <FileVersion>3.1.0.0</FileVersion>
-    <InformationalVersion>3.1.0</InformationalVersion>
+    <Version>3.1.1</Version>
+    <PackageVersion>3.1.1</PackageVersion>
+    <AssemblyVersion>3.1.1.0</AssemblyVersion>
+    <FileVersion>3.1.1.0</FileVersion>
+    <InformationalVersion>3.1.1</InformationalVersion>
   </PropertyGroup>
 
   <!-- Parsley: everything but the command line tool -->

@@ -371,6 +371,21 @@ namespace Parsley.Runtime
         }
 
         /// <summary>
+        /// Of the alternatives still alive, the one to parse when the input matches none of them: defaultBranch
+        /// if it's alive, else the earliest
+        /// </summary>
+        internal static int Furthest(ConfigSet alive, int defaultBranch)
+        {
+            var alt = -1;
+            foreach (var c in alive.Items)
+            {
+                if (c.Alt == defaultBranch) return defaultBranch;
+                if (-1 == alt || c.Alt < alt) alt = c.Alt;
+            }
+            return -1 == alt ? defaultBranch : alt;
+        }
+
+        /// <summary>
         /// The alternative every configuration agrees on, or -1
         /// </summary>
         internal static int UniqueAlt(ConfigSet configs)
@@ -494,11 +509,20 @@ namespace Parsley.Runtime
 
         /// <summary>
         /// Chooses a branch of an adaptive decision by looking as far ahead as it takes. Returns the
-        /// branch (for a loop or optional, 0 to go in and 1 not to), or -1 if no branch can match.
+        /// branch (for a loop or optional, 0 to go in and 1 not to).
         /// </summary>
-        protected int AdaptivePredict(int decision)
+        /// <remarks>
+        /// When no branch matches the input, it returns the branch that matched the most of it, so parsing
+        /// that branch reports the error where the input goes wrong, expecting what that branch could take
+        /// there. Of the branches that got as far, it's defaultBranch if that's one of them, else the earliest.
+        /// When no branch matches even the current token, it returns defaultBranch, which is -1 when the
+        /// decision has none: the error is at the current token. Fixed lookahead decisions fall back the same way.
+        /// </remarks>
+        /// <param name="defaultBranch">The branch taken on input no branch matches, or -1</param>
+        protected int AdaptivePredict(int decision, int defaultBranch = -1)
         {
             var dfa = _atn.Dfas[decision];
+            Atn.ConfigSet alive;
             lock (dfa)
             {
                 var s = dfa.Start ??= dfa.Intern(_atn.StartSet(decision, Atn.Stack.Empty, dfa.Pool, false));
@@ -511,18 +535,29 @@ namespace Parsley.Runtime
                         next = 0 == reach.Count ? null : dfa.Intern(reach);
                         s.Edges.Add(t, next);
                     }
-                    // SLL considers every context, so if nothing matches here, nothing matches with the real one
-                    if (null == next) return -1;
+                    if (null == next)
+                    {
+                        // SLL considers every context, so if nothing matches here, nothing matches with the real
+                        // one. Which branch got furthest, though, only the real context can say.
+                        if (0 == i) return defaultBranch;
+                        alive = s.Configs;
+                        break;
+                    }
                     s = next;
                     if (-1 < s.Prediction) return s.Prediction;
-                    if (s.Conflict) break;
+                    if (s.Conflict)
+                    {
+                        alive = s.Configs;
+                        break;
+                    }
                 }
             }
-            return _FullContextPredict(decision);
+            return _FullContextPredict(decision, defaultBranch, alive);
         }
 
-        // the same simulation, with the parser's actual call stack, and not cached since that differs every time
-        int _FullContextPredict(int decision)
+        // the same simulation, with the parser's actual call stack, and not cached since that differs every time.
+        // sllAlive: what SLL, which ignores the call stack, had alive when it stopped, for when this matches nothing
+        int _FullContextPredict(int decision, int defaultBranch, Atn.ConfigSet sllAlive)
         {
             var pool = new Atn.StackPool();
             var stack = Atn.Stack.Empty;
@@ -531,8 +566,9 @@ namespace Parsley.Runtime
             var configs = _atn.StartSet(decision, stack, pool, true);
             for (var i = 0; ; ++i)
             {
-                configs = _atn.Move(configs, _LookAt(i), true);
-                if (0 == configs.Count) return -1;
+                var reach = _atn.Move(configs, _LookAt(i), true);
+                if (0 == reach.Count) return Atn.Furthest(0 == i ? sllAlive : configs, defaultBranch);
+                configs = reach;
                 var alt = Atn.UniqueAlt(configs);
                 if (-1 < alt) return alt;
                 alt = Atn.Ambiguity(configs);

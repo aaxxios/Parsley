@@ -76,7 +76,7 @@ namespace Parsley.Tests
 				if (ParserEngine.LLk == engine)
 					T.Check(h.Source.Contains("resolved greedily"), "the policy is explained in a comment");
 				else
-					T.Check(h.Source.Contains("AdaptivePredict(0)"), "predicted adaptively");
+					T.Check(h.Source.Contains("AdaptivePredict(0, 1)"), "predicted adaptively, skipping the optional on input that matches neither");
 				var tree = h.Parse("if e then if e then s else s").Tree;
 				// the else belongs to the inner if: the outer S has 4 children, the inner one 6
 				var lines = tree.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
@@ -128,6 +128,27 @@ namespace Parsley.Tests
 			var h = _Build("names",
 				"Parse= error class \"+=\" Current \"while\" Errors; Current= \"x\"; Errors= int; error=\"e\"; class=\"c\"; int='[0-9]+';" + Ws);
 			T.Check(h.Accepts("e c += x while 5"), "accepts");
+		}
+
+		public static void FailedPredictionsReportWhereTheInputGoesWrong()
+		{
+			// a^n b^n or a^n b^2n: only the number of b's says which, so no fixed lookahead decides it
+			var h = _Build("anbn", "S= A | B; A= a A b | ; B= a B b b | ; a=\"a\"; b=\"b\";" + Ws);
+			T.Equal(ParserEngine.AllStar, h.Analysis.Engine, "anbn needs ALL(*)");
+			T.Check(h.Accepts("a a b b") && h.Accepts("a a b b b b") && h.Accepts(""), "anbn accepts");
+			// not "Expected "a" or end of input but found "a"" at the first token, which some branch could take
+			T.Equal("Expected \"b\" but found end of input at line 1, column 6", string.Join(" / ", h.Parse("a a b").Errors), "a missing b is reported where it's missing");
+			T.Equal("Expected \"a\" or end of input but found \"b\" at line 1, column 1", string.Join(" / ", h.Parse("b a").Errors), "a first token no branch takes is reported there");
+			// the same for a fixed lookahead, on both engines, which report the same
+			foreach (var engine in new[] { ParserEngine.LLk, ParserEngine.AllStar })
+			{
+				var f = _Build("deepfail", "P= S x | y; S= a b c | a b d | { a } e; a=\"a\"; b=\"b\"; c=\"c\"; d=\"d\"; e=\"e\"; x=\"x\"; y=\"y\";" + Ws, engine);
+				T.Equal("Expected \"b\" but found \"d\" at line 1, column 3", string.Join(" / ", f.Parse("a d e").Errors), $"{engine}: the second token");
+				T.Equal("Expected \"c\" but found \"e\" at line 1, column 5", string.Join(" / ", f.Parse("a b e x").Errors), $"{engine}: the third token");
+				// a loop: the default branch, exiting, when it gets as far as continuing would
+				var l = _Build("deeploop", "S= { a b } a c; a=\"a\"; b=\"b\"; c=\"c\";" + Ws, engine);
+				T.Equal("Expected \"c\" but found \"a\" at line 1, column 3", string.Join(" / ", l.Parse("a a c").Errors), $"{engine}: a loop exits when exiting gets as far");
+			}
 		}
 
 		public static void ConstantsKeepTheirSymbolsNames()
