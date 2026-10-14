@@ -8,7 +8,7 @@
 //   null    -> null
 @using "System.Globalization";
 
-Json<start, type="object">= Object | Array => {
+Json<start, type="object">= Object | Array | Value => {
     // the child is an Object or Array node
     return Evaluate(node.Children[0]);
 };
