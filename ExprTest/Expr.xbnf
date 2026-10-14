@@ -22,9 +22,9 @@ Expr<start,state="Dictionary<string,double>", type="double", operators, expected
     // an atom: a number token, or the Expr between the parentheses, which are collapsed
     var first = node.Children[0];
     switch(first.SymbolId) {
-        case Number:
+        case number:
           return double.Parse(first.Value!, CultureInfo.InvariantCulture);
-        case Identifier:
+        case identifier:
             return State[first.Value!];
         default:
             return EvaluateExpr(first);
@@ -41,15 +41,15 @@ Product<type="double">= Expr ( mul | div | mod ) Expr => {
     var right = EvaluateExpr(node.Children[2]);
     switch (node.Children[1].SymbolId)
     {
-        case Mul: return left * right;
-        case Div: return left / right;
+        case mul: return left * right;
+        case div: return left / right;
         default: return left % right;
     }
 };
 Sum<type="double">= Expr ( add | sub ) Expr => {
     var left = EvaluateExpr(node.Children[0]);
     var right = EvaluateExpr(node.Children[2]);
-    return Add == node.Children[1].SymbolId ? left + right : left - right;
+    return add == node.Children[1].SymbolId ? left + right : left - right;
 };
 identifier = '[A-Z_a-z][0-9A-Z_a-z]*';
 number= '[0-9]+(\.[0-9]+)?';

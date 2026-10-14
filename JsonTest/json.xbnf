@@ -43,11 +43,11 @@ Value<type="object?">= string |
     null	=> {
     var first = node.Children[0];
     switch (first.SymbolId) {
-        case Number:
+        case number:
             return double.Parse(first.Value!, CultureInfo.InvariantCulture);
-        case String:
+        case @string:
             return UnquoteString(first.Value!);
-        case Null:
+        case @null:
             return null;
         default:
             // an Object, Array or Boolean node
@@ -55,7 +55,7 @@ Value<type="object?">= string |
     }
 };
 Boolean<type="bool">= true|false => {
-    return node.Children[0].SymbolId == True;
+    return node.Children[0].SymbolId == @true;
 }; // boolean is non-terminal such that symbol ids can be checked for true and false rather than comparing strings while parsing
 number= '\-?(0|[1-9][0-9]*)(\.[0-9]+)?([Ee][\+\-]?[0-9]+)?';
 string= '"([^\n"\\]|\\([btrnf"\\/]|(u[0-9A-Fa-f]{4})))*"';

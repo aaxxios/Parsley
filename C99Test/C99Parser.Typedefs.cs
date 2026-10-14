@@ -39,7 +39,7 @@ partial class C99Parser
 		private partial bool IsTypedefName(Token token, Token previous)
 		{
 			// a tag or a member name, which typedefs don't hide
-			if (previous.SymbolId is Struct or Union or Enum or Dot or Arrow) return false;
+			if (previous.SymbolId is @struct or @union or @enum or dot or arrow) return false;
 			// right after the specifiers, once a type specifier has been seen, the name is the one being declared
 			if (0 < _typeSeen.Count && _typeSeen[^1] && _EndsSpecifiers(previous.SymbolId)) return false;
 			for (var i = _scopes.Count - 1; i >= 0; --i)
@@ -53,9 +53,9 @@ partial class C99Parser
 		// a token after which, in declaration specifiers, a name can only be a declarator: a specifier or
 		// qualifier keyword, the * of a pointer, the } of a struct or enum body, or a name (a typedef name
 		// arrives here as the identifier the lexer read)
-		static bool _EndsSpecifiers(int id) => id is Void or Char or Short or Int or Long or Float or Double or Signed or Unsigned
-			or Bool or Complex or Const or Restrict or Volatile or Typedef or Extern or Static or Auto or Register or Inline
-			or Star or Rbrace or Identifier;
+		static bool _EndsSpecifiers(int id) => id is @void or @char or @short or @int or @long or @float or @double or signed or unsigned
+			or _Bool or _Complex or @const or restrict or @volatile or typedef or @extern or @static or auto or register or inline
+			or star or rbrace or identifier;
 
 		void _Declare(string? name, bool isType)
 		{
@@ -63,15 +63,15 @@ partial class C99Parser
 		}
 
 		// the name a declarator declares: its identifier, inside any pointers and parentheses
-		static string? _DeclaratorName(ParseNode? declarator)
+		static string? _DeclaratorName(ParseNode? decl)
 		{
-			while (null != declarator)
+			while (null != decl)
 			{
-				var direct = declarator.Children.Find(c => DirectDeclarator == c.SymbolId);
+				var direct = decl.Children.Find(c => direct_declarator == c.SymbolId);
 				if (null == direct || 0 == direct.Children.Count) return null;
 				var first = direct.Children[0];
-				if (Identifier == first.SymbolId) return first.Value;
-				declarator = direct.Children.Find(c => Declarator == c.SymbolId);
+				if (identifier == first.SymbolId) return first.Value;
+				decl = direct.Children.Find(c => declarator == c.SymbolId);
 			}
 			return null;
 		}
@@ -140,16 +140,16 @@ partial class C99Parser
 		}
 		// a name is in scope as soon as its declarator ends, before any initializer or the next declarator
 		partial void OnInitDeclarator(ParseNode node)
-			=> _Declare(_DeclaratorName(node.Children.Find(c => Declarator == c.SymbolId)), 0 < _isTypedef.Count && _isTypedef[^1]);
+			=> _Declare(_DeclaratorName(node.Children.Find(c => declarator == c.SymbolId)), 0 < _isTypedef.Count && _isTypedef[^1]);
 		partial void OnEnumerator(ParseNode node)
-			=> _Declare(node.Children.Find(c => Identifier == c.SymbolId)?.Value, false);
+			=> _Declare(node.Children.Find(c => identifier == c.SymbolId)?.Value, false);
 
 		partial void BeginSpecifiers() => _typeSeen.Add(false);
 		partial void EndSpecifiers(ParseNode node) => _typeSeen.RemoveAt(_typeSeen.Count - 1);
 		partial void OnParameter(ParseNode node)
 		{
 			EndSpecifiers(node);
-			_Declare(_DeclaratorName(node.Children.Find(c => Declarator == c.SymbolId)), false);
+			_Declare(_DeclaratorName(node.Children.Find(c => declarator == c.SymbolId)), false);
 		}
 		partial void OnTypeSpecifier(ParseNode node)
 		{

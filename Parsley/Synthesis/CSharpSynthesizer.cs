@@ -260,15 +260,16 @@ namespace Parsley
 				"sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe " +
 				"ushort using virtual void volatile while").Split(' '));
 			static string _Ident(string name)
-			{
+			{ 
+				// Don't fixup symbol names. It makes them harder to use
 				var sb = new StringBuilder();
-				var upper = true;
+				//var upper = true;
 				foreach (var ch in name)
 				{
-					if (!char.IsLetterOrDigit(ch)) { upper = true; continue; }
+					//if (!char.IsLetterOrDigit(ch)) { upper = true; continue; }
 					if (0 == sb.Length && char.IsDigit(ch)) sb.Append('_');
-					sb.Append(upper ? char.ToUpperInvariant(ch) : ch);
-					upper = false;
+					sb.Append(ch);
+					//upper = false;
 				}
 				var s = 0 == sb.Length ? "Symbol" : sb.ToString();
 				return _keywords.Contains(s) ? "@" + s : s;
