@@ -4,7 +4,7 @@ XBNF is the grammar format Parsley reads. One file holds both halves of a langua
 
 ```xbnf
 // based on the spec at json.org
-Json<start>= Object | Array;
+Json<start>= Object | Array | Value;
 Object= "{" [ Field { "," Field } ] "}";
 Field= string ":" Value;
 Array= "[" [ Value { "," Value } ] "]";
