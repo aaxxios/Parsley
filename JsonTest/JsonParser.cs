@@ -7,6 +7,9 @@ namespace JsonTest;
 // The source generator nests the evaluator inside this class, and a nested class can
 // call its outer class's private static members unqualified, so the semantic actions
 // can use these whatever the generated evaluator ends up being called.
+// If you need to access Evaluator specific members like State, you can create
+// a partial Evaluator class inside this one and work through that.
+[Parsley.Parser("json.xbnf")]
 partial class JsonParser
 {
 

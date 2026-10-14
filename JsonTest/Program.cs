@@ -2,11 +2,6 @@
 using Parsley.Runtime;
 namespace JsonTest
 {
-    [Parsley.Parser("json.xbnf")]
-    partial class JsonParser
-    {
-
-    }
     internal class Program
     {
         static void Main(string[] args)
