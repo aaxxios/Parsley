@@ -1,5 +1,5 @@
 // based on spec @ json.org
-Json<start>= Object | Array;
+Json<start>= Value;
 Object= "{" [ Field { "," Field } ] "}";
 Field= string ":" Value;
 Array= "[" [ Value { "," Value } ] "]";

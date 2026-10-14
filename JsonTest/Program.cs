@@ -9,7 +9,6 @@ namespace JsonTest
             try
             {
                 var tree = JsonParser.Parse("{\"name\": \"John\", \"age\": 30, \"isStudent\": false, \"emails\": [ \"john@mydomain.com\", \"support@widgetco.com\" ] }");
-
                 Console.WriteLine(tree);
                 var json = JsonParser.Evaluate(tree);
                 Console.WriteLine();
