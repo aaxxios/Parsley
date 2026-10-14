@@ -1,15 +1,62 @@
 // based on spec @ json.org
-Json<start>= Object | Array;
-Object= "{" [ Field { "," Field } ] "}";
-Field= string ":" Value;
-Array= "[" [ Value { "," Value } ] "]";
-Value<collapsed>= string |
+// Evaluates to plain CLR objects:
+//   object  -> Dictionary<string, object?>   (duplicate keys throw FormatException)
+//   array   -> List<object?>
+//   number  -> double
+//   string  -> string
+//   true/false -> bool
+//   null    -> null
+@using "System.Globalization";
+
+Json<start, type="object">= Object | Array => {
+    // the child is an Object or Array node
+    return Evaluate(node.Children[0]);
+};
+Object<type="Dictionary<string, object?>">= "{" [ Field { "," Field } ] "}" => {
+    // braces and commas are collapsed, so every child is a Field node
+    var result = new Dictionary<string, object?>();
+    foreach (var child in node.Children) {
+        var field = EvaluateField(child);
+        if (!result.TryAdd(field.Key, field.Value))
+            throw new FormatException($"Duplicate key \"{field.Key}\" in object");
+    }
+    return result;
+};
+Field<type="KeyValuePair<string, object?>">= string ":" Value => {
+    // the colon is collapsed: children are the string token and the Value node
+    return new KeyValuePair<string, object?>(
+        UnquoteString(node.Children[0].Value!),
+        EvaluateValue(node.Children[1]));
+};
+Array<type="List<object?>">= "[" [ Value { "," Value } ] "]" => {
+    // brackets and commas are collapsed, so every child is a Value node
+    var result = new List<object?>(node.Children.Count);
+    foreach (var child in node.Children)
+        result.Add(EvaluateValue(child));
+    return result;
+};
+Value<type="object?">= string |
 	number	|
     Object	|
 	Array	|
     Boolean |
-    null	;
-Boolean= true|false; // boolean is non-terminal such that symbol ids can be checked for true and false rather than comparing strings while parsing
+    null	=> {
+    var first = node.Children[0];
+    switch (first.SymbolId) {
+        case Number:
+            return double.Parse(first.Value!, CultureInfo.InvariantCulture);
+        case String:
+            return UnquoteString(first.Value!);
+        case Null:
+            return null;
+        default:
+            // an Object, Array or Boolean node
+            return Evaluate(first);
+    }
+};
+Boolean<type="bool">= true|false => {
+    return node.Children[0].SymbolId == True;
+}; // boolean is non-terminal such that symbol ids can be checked for true and false rather than comparing strings while parsing
 number= '\-?(0|[1-9][0-9]*)(\.[0-9]+)?([Ee][\+\-]?[0-9]+)?';
 string= '"([^\n"\\]|\\([btrnf"\\/]|(u[0-9A-Fa-f]{4})))*"';
 true= "true";

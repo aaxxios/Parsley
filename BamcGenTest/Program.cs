@@ -1,7 +1,7 @@
 ﻿using Parsley.Runtime;
 namespace BamcGenTest;
 
-// bamc.xbnf embeds json.xbnf, so this one class gets both grammars: BamcParser.Parser and BamcParser.Lexer for
+// bamc.xbnf embeds json-embed.xbnf, so this one class gets both grammars: BamcParser.Parser and BamcParser.Lexer for
 // bamc, and BamcParser.Json.Parser and BamcParser.Json.Lexer for the islands. Tokenize lexes through a
 // LexerController that switches between the two lexers.
 [Parsley.Parser("bamc.xbnf")]
@@ -21,7 +21,7 @@ internal class Program
             if (BamcParser.TryParse(BamcParser.Tokenize(reader), out var tree, out var errors))
             {
                 Console.WriteLine(tree);
-                // an island's node holds the tree json.xbnf parsed, in its symbol ids, which BamcParser.Json has
+                // an island's node holds the tree json-embed.xbnf parsed, in its symbol ids, which BamcParser.Json has
                 foreach (var headers in _Find(tree, BamcParser.Headers))
                 {
                     var obj = headers.Children[0];

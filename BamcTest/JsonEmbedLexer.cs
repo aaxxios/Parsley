@@ -9,7 +9,7 @@ using System.Text;
 
 // The lexer runtime: public and in Parsley.Runtime when compiled into Parsley.Runtime.dll (LUTHOR_RUNTIME_PUBLIC),
 // else internal to the project it's generated into, in Luthor.Runtime unless LexerEmitter.RuntimeSourceIn moves it
-namespace Json
+namespace BamcTest.Json
 {
     // A source of code units for the matcher. Implemented by small structs so the JIT
     // specializes Match<T> for each input kind (no interface dispatch in the inner loop).
@@ -291,18 +291,18 @@ namespace Json
     }
 }
 
-namespace Json
+namespace BamcTest.Json
 {
-    static class JsonLexer
+    static class JsonEmbedLexer
     {
         private static int[] _dfa = {
-            10, -1, -1, -1, 32, 0, 8, 101, 9, 10, 105, 11, 12, 101, 13, 13, 
+            10, -1, -1, -1, 32, 0, 8, 101, 9, 9, 105, 10, 12, 101, 13, 13, 
             105, 14, 31, 101, 32, 32, 105, 33, 33, 101, 34, 34, 118, 35, 43, 101, 
             44, 44, 146, 45, 45, 150, 46, 47, 101, 48, 48, 160, 49, 57, 173, 58, 
             58, 189, 59, 90, 101, 91, 91, 193, 92, 92, 101, 93, 93, 197, 94, 101, 
             101, 102, 102, 201, 103, 109, 101, 110, 110, 208, 111, 115, 101, 116, 116, 215, 
             117, 122, 101, 123, 123, 222, 124, 124, 101, 125, 125, 226, 126, 55295, 101, 55296, 
-            56319, 230, 56320, 65535, 101, 12, -1, -1, 0, 11, -1, -1, 3, 9, 10, 105, 
+            56319, 230, 56320, 65535, 101, 12, -1, -1, 0, 11, -1, -1, 3, 9, 9, 105, 
             13, 13, 105, 32, 32, 105, 12, -1, -1, 8, 0, 9, 237, 11, 33, 237, 
             34, 34, 265, 35, 91, 237, 92, 92, 269, 93, 55295, 237, 55296, 56319, 300, 57344, 
             65535, 237, 10, -1, -1, 0, 12, -1, -1, 2, 48, 48, 160, 49, 57, 173, 
@@ -328,14 +328,14 @@ namespace Json
             97, 102, 237
         };
         public static global::System.Collections.Generic.IEnumerable<global::Parsley.Runtime.Token> Tokenize(global::System.IO.TextReader reader, long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
-            foreach(var tok in global::Json.LuthorRuntime.Tokenize(_dfa, reader, tabWidth, position, line, column))
+            foreach(var tok in global::BamcTest.Json.LuthorRuntime.Tokenize(_dfa, reader, tabWidth, position, line, column))
             {
                 if(tok.Symbol == whitespace) continue;
                 yield return new global::Parsley.Runtime.Token(0 <= tok.Symbol && tok.Symbol < 12 ? tok.Symbol : -1, tok.Text, tok.Line, tok.Column, tok.Position);
             }
         }
         public static global::System.Collections.Generic.IEnumerable<global::Parsley.Runtime.Token> Tokenize(string text, long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
-            foreach(var tok in global::Json.LuthorRuntime.Tokenize(_dfa, text, tabWidth, position, line, column))
+            foreach(var tok in global::BamcTest.Json.LuthorRuntime.Tokenize(_dfa, text, tabWidth, position, line, column))
             {
                 if(tok.Symbol == whitespace) continue;
                 yield return new global::Parsley.Runtime.Token(0 <= tok.Symbol && tok.Symbol < 12 ? tok.Symbol : -1, tok.Text, tok.Line, tok.Column, tok.Position);
