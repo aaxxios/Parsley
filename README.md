@@ -102,6 +102,12 @@ terminals, which are inlined), and `<terminal=false>` forces a non-terminal. Eac
 generator: patterns pass through unvalidated with the quotes removed (`\'` becomes `'`), literals are escaped,
 and other definitions are built from their constructs.
 
+## Editing Services
+
+The editing services provide syntax highlighting, navigation, autocomplete, and at a glance complexity markers and analysis for each expression in the grammar for editors like VS Code and Visual Studio 2022 or 2026
+
+![At a glance complexity](complexity.jpg)
+
 ## Build and test
 
 Open `Parsley.sln` in Visual Studio, or run `dotnet build Parsley.sln`.
