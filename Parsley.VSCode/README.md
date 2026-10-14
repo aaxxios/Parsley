@@ -13,9 +13,16 @@ grammars.
 - **Hover**: a rule as written, with its action shortened to `=> { … }`, the `//` comments right above it, and
   what it is: a terminal, a non-terminal, an island, a contextual terminal or one from another lexer.
   Attributes and directives get a one-line description.
+- **Lookahead glyphs**: once a grammar is analyzed, a small glyph sits at each choice (an alternation, a loop or an optional)
+  that needs more than one token of lookahead, so you can see what pushes the grammar off LL(1). `◇` with
+  k after it, such as `◇²`, is a choice that needs k tokens, so the grammar needs the LL(k) engine. `◆` is one
+  no fixed lookahead decides, so it needs ALL(\*). Hover the glyph for why, with examples of the input it
+  can't tell apart. They're inlay hints, so the theme colors them (`editorInlayHint.typeForeground` for
+  ALL(\*), `editorInlayHint.parameterForeground` for LL(k)), and `editor.inlayHints.enabled` turns them off.
+  An edit to a rule hides its glyphs until the next analysis.
 - **Diagnostics**: syntax errors, undefined names and duplicate rules as you type. The full analysis
-  (conflicts, lookahead, rewritten left recursion and so on) runs when you **save** and stays until the next
-  edit. A problem in an imported file shows on its `@import`.
+  (conflicts, lookahead, rewritten left recursion and so on) runs when you **open** a grammar and when you
+  **save** it, and stays until the next edit. A problem in an imported file shows on its `@import`.
 - **Comment toggling**, bracket matching and auto-closing pairs.
 
 ## Requirements

@@ -11,8 +11,10 @@ using System.Threading.Tasks;
 namespace Parsley.LanguageServer
 {
     /// <summary>
-    /// The XBNF language server: syntax diagnostics as you type, the full grammar analysis when you save, and
-    /// go to definition, find references, completion and hover for rule names
+    /// The XBNF language server: syntax diagnostics as you type, the full grammar analysis when a file opens and when
+    /// you save, a glyph
+    /// at each decision that needs more than one token of lookahead, and go to definition, find references,
+    /// completion and hover for rule names
     /// </summary>
     sealed class XbnfLanguageServer
     {
@@ -24,6 +26,15 @@ namespace Parsley.LanguageServer
         readonly ConcurrentDictionary<string, JsonArray> _analysis = new ConcurrentDictionary<string, JsonArray>(Documents.PathComparer);
         // the latest pending work for each file, so an edit cancels an analysis or live check that's out of date
         readonly ConcurrentDictionary<string, CancellationTokenSource> _pending = new ConcurrentDictionary<string, CancellationTokenSource>(Documents.PathComparer);
+        // the decisions needing more than one token that the last full analysis of each file found
+        readonly ConcurrentDictionary<string, List<DecisionHint>> _hints = new ConcurrentDictionary<string, List<DecisionHint>>(Documents.PathComparer);
+        // what the client said it can do: show inlay hints, and be asked to fetch them again after a save
+        bool _inlayHints;
+        bool _inlayHintRefresh;
+        // a client that draws the glyphs itself, from parsley/decisionHints, and wants parsley/decisionHintsChanged
+        // when they change: the Visual Studio extension, since Visual Studio's language client doesn't show inlay hints
+        bool _customHints;
+        int _requestId;
         bool _shutdown;
 
         public XbnfLanguageServer(JsonRpc rpc) { _rpc = rpc; }
@@ -70,7 +81,7 @@ namespace Parsley.LanguageServer
             handled = true;
             switch (method)
             {
-                case "initialize": return _Initialize();
+                case "initialize": return _Initialize(p);
                 case "initialized": return null;
                 case "shutdown": _shutdown = true; return null;
                 case "textDocument/didOpen": _DidOpen(p!); return null;
@@ -82,6 +93,8 @@ namespace Parsley.LanguageServer
                 case "textDocument/completion": return _Completion(p!);
                 case "textDocument/hover": return _Hover(p!);
                 case "textDocument/documentHighlight": return _Highlights(p!);
+                case "textDocument/inlayHint": return _InlayHints(p!);
+                case "parsley/decisionHints": return _CustomHints(p!);
                 default:
                     // other notifications ($/cancelRequest, settings changes and so on) need nothing
                     handled = method.StartsWith("$/", StringComparison.Ordinal) || method.StartsWith("workspace/", StringComparison.Ordinal);
@@ -89,7 +102,16 @@ namespace Parsley.LanguageServer
             }
         }
 
-        static JsonObject _Initialize() => new JsonObject
+        JsonObject _Initialize(JsonObject? p)
+        {
+            var caps = p?["capabilities"];
+            _inlayHints = null != caps?["textDocument"]?["inlayHint"];
+            _inlayHintRefresh = (bool?)caps?["workspace"]?["inlayHint"]?["refreshSupport"] ?? false;
+            _customHints = p?["initializationOptions"] is JsonObject o && ((bool?)o["decisionHints"] ?? false);
+            return _Capabilities();
+        }
+
+        static JsonObject _Capabilities() => new JsonObject
         {
             ["capabilities"] = new JsonObject
             {
@@ -99,6 +121,7 @@ namespace Parsley.LanguageServer
                 ["referencesProvider"] = true,
                 ["hoverProvider"] = true,
                 ["documentHighlightProvider"] = true,
+                ["inlayHintProvider"] = true,
                 ["completionProvider"] = new JsonObject { ["triggerCharacters"] = new JsonArray("<", ",", "@", "=", " ", "|", "(", "[", "{") },
             },
             ["serverInfo"] = new JsonObject { ["name"] = "Parsley XBNF", ["version"] = typeof(XbnfLanguageServer).Assembly.GetName().Version?.ToString() ?? "1.0" },
@@ -113,7 +136,8 @@ namespace Parsley.LanguageServer
             var path = _Path(p);
             _docs.Open(path, (string?)td["text"] ?? "", (int?)td["version"] ?? 0);
             _analysis.TryRemove(path, out _);
-            _Schedule(path, full: false, delay: 0);
+            // the full analysis straight away, so the glyphs and the analysis's messages are there without a save
+            _Schedule(path, full: true, delay: 0);
         }
 
         void _DidChange(JsonObject p)
@@ -136,6 +160,7 @@ namespace Parsley.LanguageServer
             var path = _Path(p);
             _docs.Close(path);
             _analysis.TryRemove(path, out _);
+            _hints.TryRemove(path, out _);
             if (_pending.TryRemove(path, out var cts)) cts.Cancel();
             _ = _rpc.NotifyAsync("textDocument/publishDiagnostics", new JsonObject { ["uri"] = Documents.ToUri(path), ["diagnostics"] = new JsonArray() });
         }
@@ -163,6 +188,11 @@ namespace Parsley.LanguageServer
                         ["version"] = doc.Version,
                         ["diagnostics"] = diags,
                     });
+                    // the analysis has new hints; an edit makes the client ask anyway, but a save doesn't
+                    if (full && _inlayHints && _inlayHintRefresh)
+                        await _rpc.WriteAsync(new JsonObject { ["id"] = "parsley-" + Interlocked.Increment(ref _requestId), ["method"] = "workspace/inlayHint/refresh" });
+                    if (full && _customHints)
+                        await _rpc.NotifyAsync("parsley/decisionHintsChanged", new JsonObject { ["uri"] = Documents.ToUri(path) });
                 }
                 catch (OperationCanceledException) { }
                 catch (Exception ex) { Console.Error.WriteLine($"xbnf-lsp: checking {path} failed: {ex}"); }
@@ -204,7 +234,18 @@ namespace Parsley.LanguageServer
                         var d = _ToDiagnostic(doc, m);
                         if (seen.Add(d.ToJsonString())) { result.Add(d); analysis.Add(d.DeepClone()); }
                     }
+                    var hints = DecisionHint.From(a, doc);
+                    _hints[doc.Path] = hints;
+                    // a client that can't show inlay hints gets them as hint diagnostics, which editors draw
+                    // faintly, if at all, and keep out of the problem list. ALL(*) decisions have a message already.
+                    if (!_inlayHints && !_customHints)
+                        foreach (var h in hints.Where(h => !h.IsAllStar))
+                        {
+                            var d = _HintDiagnostic(doc, h);
+                            if (null != d && seen.Add(d.ToJsonString())) { result.Add(d); analysis.Add(d.DeepClone()); }
+                        }
                 }
+                else _hints.TryRemove(doc.Path, out _);
                 _analysis[doc.Path] = analysis;
             }
             else if (_analysis.TryGetValue(doc.Path, out var kept))
@@ -233,9 +274,9 @@ namespace Parsley.LanguageServer
                 start = imp?.Start ?? 0;
                 end = imp?.End ?? 0;
             }
-            else if (m.Line > 0)
+            else if (m.Line > 0 || m.Position >= 0)
             {
-                start = doc.ToOffset(m.Line - 1, Math.Max(0, m.Column - 1));
+                start = doc.ToOffset(m);
                 // the word or token there, so it's easy to see
                 var t = doc.Scan.TokenAt(start);
                 end = null != t && t.Start == start ? t.End : Math.Min(doc.Text.Length, start + 1);
@@ -253,6 +294,78 @@ namespace Parsley.LanguageServer
                 ["message"] = message,
             };
         }
+        #endregion
+
+        #region Decision hints
+        JsonNode? _InlayHints(JsonObject p)
+        {
+            var path = _Path(p);
+            var doc = _docs.GetOpen(path);
+            var arr = new JsonArray();
+            if (null == doc || !_hints.TryGetValue(path, out var hints)) return arr;
+            var range = p["range"] as JsonObject;
+            var from = null == range ? 0 : doc.ToOffset((int)range["start"]!["line"]!, (int)range["start"]!["character"]!);
+            var to = null == range ? doc.Text.Length : doc.ToOffset((int)range["end"]!["line"]!, (int)range["end"]!["character"]!);
+            foreach (var h in hints)
+            {
+                var offset = h.OffsetIn(doc);
+                if (offset >= from && offset <= to) arr.Add(h.ToInlayHint(doc, offset));
+            }
+            return arr;
+        }
+
+        // the hints where they are now, for a client that draws them itself: zero-based line and UTF-16 character,
+        // the glyph, whether it's ALL(*), k, and the tooltip as plain text
+        JsonNode? _CustomHints(JsonObject p)
+        {
+            var path = _Path(p);
+            var doc = _docs.GetOpen(path);
+            var arr = new JsonArray();
+            if (null == doc || !_hints.TryGetValue(path, out var hints)) return arr;
+            foreach (var h in hints)
+            {
+                var offset = h.OffsetIn(doc);
+                if (offset < 0) continue;
+                var (line, character) = doc.ToPosition(offset);
+                arr.Add(new JsonObject
+                {
+                    ["line"] = line,
+                    ["character"] = character,
+                    ["label"] = h.Label,
+                    ["allStar"] = h.IsAllStar,
+                    ["depth"] = h.Depth,
+                    ["tooltip"] = _PlainText(h.Tooltip, paragraphs: true),
+                });
+            }
+            return arr;
+        }
+
+        // the hints at the token that starts at the offset
+        IEnumerable<DecisionHint> _HintsAt(Document doc, int offset)
+        {
+            if (!_hints.TryGetValue(doc.Path, out var hints)) return Enumerable.Empty<DecisionHint>();
+            return hints.Where(h => h.OffsetIn(doc) == offset);
+        }
+
+        static JsonObject? _HintDiagnostic(Document doc, DecisionHint h)
+        {
+            var start = h.OffsetIn(doc);
+            if (start < 0) return null;
+            var t = doc.Scan.TokenAt(start);
+            var end = null != t && t.Start == start ? t.End : Math.Min(doc.Text.Length, start + 1);
+            return new JsonObject
+            {
+                ["range"] = doc.Range(start, end),
+                ["severity"] = 4,
+                ["source"] = "Parsley",
+                ["message"] = _PlainText(h.Tooltip),
+            };
+        }
+
+        // a tooltip's markdown as plain text: no bold, italics or code marks, and an escaped * kept
+        static string _PlainText(string markdown, bool paragraphs = false) => markdown
+            .Replace("\\*", "\u0001").Replace("**", "").Replace("*", "").Replace("`", "").Replace("\u0001", "*")
+            .Replace("\n\n", paragraphs ? "\n" : " ");
         #endregion
 
         #region Navigation
@@ -343,6 +456,10 @@ namespace Parsley.LanguageServer
                 markdown = $"**{t.Text}** — {attr}";
             else if (t.Kind == TokenKind.Directive && XbnfKnowledge.Directives.TryGetValue(t.Text.Substring(1), out var dir))
                 markdown = $"**{t.Text}** — {dir}";
+            // a decision that starts here and needs more than one token: what the glyph says, for editors that
+            // don't show it
+            foreach (var h in _HintsAt(doc, t.Start))
+                markdown = (null == markdown ? "" : markdown + "\n\n---\n\n") + h.Tooltip;
             if (null == markdown) return null;
             return new JsonObject
             {

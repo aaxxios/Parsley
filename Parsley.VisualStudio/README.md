@@ -12,9 +12,15 @@ Highlighting and language support for `.xbnf` grammars in Visual Studio 2022 (17
 - **Hover**: a rule as written, with its action shortened to `=> { … }`, the `//` comments right above it, and
   what it is: a terminal, a non-terminal, an island, a contextual terminal or one from another lexer.
   Attributes and directives get a one-line description.
+- **Lookahead glyphs**: once a grammar is analyzed, a small glyph sits at each choice (an alternation, a loop or
+  an optional) that needs more than one token of lookahead, so you can see what pushes the grammar off LL(1).
+  `◇` with k after it, such as `◇²`, is a choice that needs k tokens, so the grammar needs the LL(k) engine.
+  `◆` is one no fixed lookahead decides, so it needs ALL(\*). Hover the glyph, or the start of the choice, for
+  why. Their colors are **XBNF Lookahead Glyph: LL(k)** and **XBNF Lookahead Glyph: ALL(\*)** in Tools >
+  Options > Environment > Fonts and Colors. An edit to a rule hides its glyphs until the next analysis.
 - **Diagnostics**: syntax errors, undefined names and duplicate rules as you type. The full analysis
-  (conflicts, lookahead, rewritten left recursion and so on) runs when you **save**, in the background, and
-  its results stay until the next edit. A problem in an imported file shows on the `@import`.
+  (conflicts, lookahead, rewritten left recursion and so on) runs when you **open** a grammar and when you
+  **save** it, in the background, and its results stay until the next edit. A problem in an imported file shows on the `@import`.
 
 ## How it's put together
 
@@ -24,7 +30,9 @@ Highlighting and language support for `.xbnf` grammars in Visual Studio 2022 (17
 | `Grammars/xbnf.language-configuration.json` | Comment toggling, bracket matching and auto-closing pairs. |
 | `xbnf.pkgdef` | Registers the grammar folder and language configuration with Visual Studio's TextMate support. |
 | `XbnfContentDefinition.cs` | The `xbnf` content type for `.xbnf` files, based on the code-remote type, so both TextMate and the language client apply. |
-| `XbnfLanguageClient.cs` | Starts `Parsley.LanguageServer` from the extension's `server` folder. |
+| `XbnfLanguageClient.cs` | Starts `Parsley.LanguageServer` from the extension's `server` folder, and connects the custom messages the glyphs come through. |
+| `DecisionHintService.cs` | The server's `parsley/decisionHints` request and `parsley/decisionHintsChanged` notification. Visual Studio's language client doesn't show inlay hints, as VS Code's does, so the extension asks for the glyphs itself. |
+| `DecisionGlyphs.cs` | Draws the glyphs in the editor, with their tooltips and their Fonts and Colors entries. |
 | `../Parsley.LanguageServer` | The language server, which links the Parsley sources so its errors are the reader's and the analysis's own. |
 
 Building this project builds the language server and packs its output into the VSIX's `server` folder. Press F5

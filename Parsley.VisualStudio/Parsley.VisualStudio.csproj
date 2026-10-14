@@ -58,6 +58,8 @@
   <ItemGroup>
     <Compile Include="XbnfContentDefinition.cs" />
     <Compile Include="XbnfLanguageClient.cs" />
+    <Compile Include="DecisionHintService.cs" />
+    <Compile Include="DecisionGlyphs.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -82,6 +84,11 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
+    <!-- WPF, for the lookahead glyphs drawn in the editor -->
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
   </ItemGroup>
   <ItemGroup>
     <!-- Visual Studio supplies these at run time -->

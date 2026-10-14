@@ -8,8 +8,10 @@ namespace JsonTest
         {
             try
             {
+                // parse the tree
                 var tree = JsonParser.Parse("{\"name\": \"John\", \"age\": 30, \"isStudent\": false, \"emails\": [ \"john@mydomain.com\", \"support@widgetco.com\" ] }");
                 Console.WriteLine(tree);
+                // run the actios
                 var json = JsonParser.Evaluate(tree);
                 Console.WriteLine();
                 JsonParser.WriteTo(json, Console.Out);

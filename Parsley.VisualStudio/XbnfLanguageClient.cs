@@ -9,21 +9,24 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.LanguageServer.Client;
 using Microsoft.VisualStudio.Threading;
 using Microsoft.VisualStudio.Utilities;
+using StreamJsonRpc;
 
 namespace Parsley.VisualStudio
 {
     /// <summary>
-    /// Starts the XBNF language server (in the extension's server folder) for .xbnf files
+    /// Starts the XBNF language server (in the extension's server folder) for .xbnf files. It also opens the
+    /// custom messages the lookahead glyphs come through, since Visual Studio's language client doesn't show inlay hints.
     /// </summary>
     [ContentType(XbnfContentDefinition.ContentType)]
     [Export(typeof(ILanguageClient))]
-    public sealed class XbnfLanguageClient : ILanguageClient
+    public sealed class XbnfLanguageClient : ILanguageClient, ILanguageClientCustomMessage2
     {
         const string ServerName = "Parsley.LanguageServer";
 
         public string Name => "Parsley XBNF";
         public IEnumerable<string> ConfigurationSections => null;
-        public object InitializationOptions => null;
+        // tells the server this client draws the glyphs itself, so it sends parsley/decisionHintsChanged
+        public object InitializationOptions => new { decisionHints = true };
         public IEnumerable<string> FilesToWatch => null;
         public bool ShowNotificationOnInitializeFailed => true;
 
@@ -62,6 +65,16 @@ namespace Parsley.VisualStudio
         }
 
         public Task OnServerInitializedAsync() => Task.CompletedTask;
+
+        #region Custom messages
+        public object MiddleLayer => null;
+        public object CustomMessageTarget { get; } = new DecisionHintTarget();
+        public Task AttachForCustomMessageAsync(JsonRpc rpc)
+        {
+            DecisionHintService.Attach(rpc);
+            return Task.CompletedTask;
+        }
+        #endregion
 
         // the older overload, still part of the interface
         public Task OnServerInitializeFailedAsync(Exception e) => Task.CompletedTask;

@@ -63,6 +63,16 @@ namespace Parsley.LanguageServer
             return Math.Min(starts[line] + Math.Max(0, character), line + 1 < starts.Length ? starts[line + 1] : Text.Length);
         }
 
+        /// <summary>
+        /// Where something the reader read is: its Position, the offset it read it at, when it has one. Its line and
+        /// column otherwise, which aren't exact on a line with a tab before it, since the reader counts a tab as
+        /// moving to the next multiple of 8 columns.
+        /// </summary>
+        public int ToOffset(Parsley.GrammarNode node) => ToOffset(node.Position, node.Line, node.Column);
+        public int ToOffset(Parsley.GrammarMessage m) => ToOffset(m.Position, m.Line, m.Column);
+        int ToOffset(long position, int line, int column) =>
+            0 <= position && position <= Text.Length ? (int)position : ToOffset(line - 1, Math.Max(0, column - 1));
+
         public (int Line, int Character) ToPosition(int offset)
         {
             var starts = LineStarts;
