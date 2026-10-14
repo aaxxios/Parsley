@@ -9,6 +9,7 @@ namespace JsonTest;
 // can use these whatever the generated evaluator ends up being called.
 partial class JsonParser
 {
+
     static int FromHexChar(char c)
     {
         if (c >= '0' && c <= '9') return c - '0';
@@ -225,4 +226,5 @@ partial class JsonParser
     {
         _WriteValue(value, output, 0, minimized);
     }
+
 }
