@@ -56,7 +56,7 @@ namespace Parsley.Tests
 			var h = _Build("unchecked", "S= a b c | a b d | e f g; a=\"a\"; b=\"b\"; c=\"c\"; d=\"d\"; e=\"e\"; f=\"f\"; g=\"g\";" + Ws, ParserEngine.LLk);
 			T.Check(h.Accepts("e f g") && h.Accepts("a b d"), "accepts");
 			T.Check(!h.Accepts("e x g") && !h.Accepts("e f x"), "rejects tokens the predictor never looked at");
-			T.Check(h.Source.Contains("Expect(F, node);"), "f is expected, not consumed blindly");
+			T.Check(h.Source.Contains("Expect(f, node);"), "f is expected, not consumed blindly");
 		}
 
 		public static void LoopNeedingTwoTokens()
@@ -106,7 +106,7 @@ namespace Parsley.Tests
 				"Block= \"{\" { Stmt }<sync=\"semi\"> \"}\";" +
 				"Stmt<expected=\"a statement\">= a \"=\" n semi | b \"(\" \")\" semi | c semi | d semi;" +
 				"a=\"a\"; b=\"b\"; c=\"c\"; d=\"d\"; n='[0-9]+'; semi= \";\";" + Ws);
-			T.Check(h.Source.Contains("while (Current.SymbolId is not (Rbrace or EndOfInput))"), "tests the small exit side");
+			T.Check(h.Source.Contains("while (Current.SymbolId is not (rbrace or EndOfInput))"), "tests the small exit side");
 			T.Check(h.Accepts("{ a = 1; b(); c; }"), "accepts");
 			var (tree, errors) = h.Parse("{ a = ; c; 7 7; d; }");
 			T.Equal(2, errors.Count, "two separate errors: " + string.Join(" / ", errors));
@@ -128,6 +128,73 @@ namespace Parsley.Tests
 			var h = _Build("names",
 				"Parse= error class \"+=\" Current \"while\" Errors; Current= \"x\"; Errors= int; error=\"e\"; class=\"c\"; int='[0-9]+';" + Ws);
 			T.Check(h.Accepts("e c += x while 5"), "accepts");
+		}
+
+		public static void ConstantsKeepTheirSymbolsNames()
+		{
+			// lowercase and snake_case symbols, keywords, and words C# reads as something else in a pattern or a declaration
+			const string xbnf =
+				"block= open { stmt_list } _; stmt_list= not semi | nint semi | nuint semi | partial semi | struct semi | and semi | or semi | var semi;" +
+				"open=\"{\"; _=\"}\"; not=\"!\"; nint=\"n\"; nuint=\"u\"; partial=\"p\"; struct=\"s\"; and=\"&\"; or=\"|\"; var=\"v\"; semi=\";\";" + Ws;
+			foreach (var engine in new[] { ParserEngine.LL1, ParserEngine.LLk, ParserEngine.AllStar })
+			{
+				var h = _Build("kw", xbnf, engine);
+				foreach (var c in new[] { "block", "stmt_list", "open", "semi", "and", "or", "var" })
+					T.Check(h.Source.Contains($"public const int {c} = "), $"{engine}: {c} is named as written");
+				foreach (var c in new[] { "_", "not", "nint", "nuint", "partial", "struct" })
+					T.Check(h.Source.Contains($"public const int @{c} = "), $"{engine}: {c} gets an @");
+				T.Check(h.Source.Contains("ParseBlock(") && h.Source.Contains("ParseStmtList("), $"{engine}: the methods built from the names are still PascalCase");
+				T.Equal("", string.Join("; ", CSharpSynthesizer.CheckNames(h.Analysis)), $"{engine}: nothing renamed");
+				T.Check(h.Accepts("{ ! ; n ; u ; p ; s ; & ; | ; v ; }") && h.Accepts("{ }"), $"{engine}: accepts");
+				T.Check(!h.Accepts("{ ! }") && !h.Accepts("{ ; }"), $"{engine}: rejects");
+			}
+		}
+
+		public static void ConstantClashesAreRenamedWithAWarning()
+		{
+			// symbols named like a parser member, a static field, a type, a local or parameter the code declares,
+			// a special constant, a method built from another name, an evaluator member, or dynamic, which is a
+			// type in a pattern even written @dynamic
+			const string xbnf = @"
+				@evaluator ""ClashEvaluator"";
+				expr<start, type=""int"">= { node | token | Token | Current | s_tables | s_set2 | dynamic | EndOfInput | ParseExpr | State } done => {
+					var n = 0;
+					foreach (var c in node.Children) if (node2 == c.SymbolId || dynamic2 == c.SymbolId || s_set2 == c.SymbolId) ++n;
+					return n;
+				};
+				node=""a""; token=""b""; Token=""c""; Current=""d""; s_tables=""e""; s_set2=""f""; dynamic=""g""; EndOfInput=""h""; ParseExpr=""i""; State=""j""; done="";"";" + Ws;
+			var renamed = new[] { "node", "token", "Token", "Current", "s_tables", "dynamic", "EndOfInput", "ParseExpr", "State" };
+			foreach (var engine in new[] { ParserEngine.LL1, ParserEngine.LLk, ParserEngine.AllStar })
+			{
+				var h = _Build("clash", xbnf, engine);
+				foreach (var c in renamed)
+					T.Check(h.Source.Contains($"public const int {c}2 = "), $"{engine}: {c} becomes {c}2");
+				T.Check(h.Source.Contains("public const int s_set2 = "), $"{engine}: s_set2 keeps its name");
+				var messages = CSharpSynthesizer.CheckNames(h.Analysis);
+				T.Equal(renamed.Length, messages.Count, $"{engine}: a warning for each renamed constant");
+				T.Check(messages.All(m => ErrorLevel.Warning == m.Level), $"{engine}: they're warnings");
+				var forNode = messages.FirstOrDefault(m => m.Message.Contains("node2"));
+				T.Check(null != forNode && forNode.Message.Contains("parameter or local") && 0 < forNode.Line, $"{engine}: says why, and where the symbol is declared");
+				T.Equal(string.Join("; ", messages), string.Join("; ", CSharpSynthesizer.SynthesizeParser(h.Analysis).Messages), $"{engine}: synthesis gives the same warnings");
+				T.Check(h.Accepts("a g f c b j ;"), $"{engine}: accepts");
+				T.Equal((object)3, h.Parser.Evaluate("ClashEvaluator", h.Lexer.Tokenize("a g f d ;")), $"{engine}: actions use the renamed constants");
+			}
+		}
+
+		public static void ConstantsOfBuiltGrammarsAreIdentifiers()
+		{
+			// a grammar built in code can use names XBNF can't: what can't be in an identifier becomes _, which
+			// can make two names the same
+			var g = new Grammar();
+			g.Terminal("x-y", "a"); g.Terminal("x_y", "b"); g.Terminal("1st", "c");
+			g.Production("S", Ebnf.Seq(Ebnf.Rep("x-y"), "x_y", "1st"));
+			var a = GrammarAnalysis.Analyze(g);
+			GrammarException.ThrowIfErrors(a.Messages);
+			var p = CSharpSynthesizer.SynthesizeParser(a, new SynthesisOptions { ClassName = "BuiltParser" });
+			T.Check(p.Code.Contains("public const int x_y = ") && p.Code.Contains("public const int x_y2 = ") && p.Code.Contains("public const int _1st = "), "made into identifiers, not recased");
+			T.Equal(1, p.Messages.Count, "one renamed");
+			var compiled = CompiledParser.Compile(p.Code, "BuiltParser");
+			T.Equal("", string.Join("\n", compiled.Diagnostics), "compiles without warnings");
 		}
 
 		public static void OptionalNeedingFollowContext()

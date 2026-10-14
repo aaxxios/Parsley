@@ -217,7 +217,7 @@ Expr<start, type="double">= Expr add Term | Expr sub Term | Term => {
         return EvaluateTerm(node.Children[0]);
     var left = EvaluateExpr(node.Children[0]);
     var right = EvaluateTerm(node.Children[2]);
-    return Add == node.Children[1].SymbolId ? left + right : left - right;
+    return add == node.Children[1].SymbolId ? left + right : left - right;
 };
 ```
 
@@ -238,7 +238,7 @@ When the start rule has an action, Parsley synthesizes an evaluator class in the
 | `protected T EvaluateXxx(ParseNode node)` | One for each non-terminal that gets a node in the tree, so not for collapsed rules. `Xxx` is the rule name in PascalCase, and `T` is the rule's `type`, or `object`. The body is the rule's action. |
 | `protected object Evaluate(ParseNode node)` | Calls the right `EvaluateXxx` for the node's symbol. Use it in an action when a child can be one of several non-terminals, as it can below a collapsed rule like `Value<collapsed>= Object \| Array;`. Inside the class, `Evaluate(child)` binds to this overload, not to the static one. |
 | `protected S State` | The `state` passed to `Evaluate`, typed by the start rule's `state` attribute, or `object?`. |
-| `protected const int Xxx` | The same symbol constants the parser has, so actions can test `node.Children[0].SymbolId == Number`. |
+| `protected const int xxx` | The same [symbol constants](#symbol-constants) the parser has, named as the symbols are written, so actions can test `node.Children[0].SymbolId == number`. |
 
 ### Writing an action
 
@@ -604,6 +604,7 @@ Left recursion is rewritten automatically:
 | `state` on a rule other than the start rule | Warning: it's ignored |
 | `type` or `state` that isn't a string, such as `type=5` | Error |
 | The evaluator and the parser named the same | Error when synthesizing |
+| A symbol whose [constant](#symbol-constants) can't have its name, because the synthesized code already uses it | Warning when synthesizing: the constant gets a number after it |
 | A non-terminal unreachable from the start symbol | Warning, unless `nowarn` |
 | `lexer` or `on` on a rule that isn't a terminal | Error |
 | [Operator rules](#operator-rules): | |
@@ -643,3 +644,18 @@ The synthesized parser numbers symbols in this order:
 3. `#EOS` (end of input) and `#ERROR` (unrecognized input)
 
 A lexer reports terminals numbered from 0 in that same terminal order, and text it can't match as -1. The parser adds the number of non-terminals as each token arrives. A negative id is treated as `#ERROR`.
+
+## Symbol constants
+
+The synthesized parser has a public `const int` for each symbol's id, and the evaluator has the same ones, protected. Each is named exactly as the symbol is written in the grammar, without recasing: `typedef_name` is `typedef_name`, `number` is `number`, `Expr` is `Expr`, and an implicit terminal's is its generated name, such as `ifKeyword` or `lparen`. Then come `EndOfInput` and `ErrorSymbol`, for `#EOS` and `#ERROR`, and `SymbolCount`.
+
+- **A C# keyword gets an `@` in front**, as C# requires: `struct` is `@struct`, `string` is `@string`. So do the words C# reads as something else where the constants are used, in patterns like `is (a or b)`, case labels and declarations: `not`, `_`, `nint`, `nuint` and `partial`. Write the `@` when you use them too, as in `previous.SymbolId is @struct or @union`. Other contextual words, such as `var`, `and`, `or` and `value`, are used as written.
+- **A name the synthesized code already uses gets a number after it**, with a warning that says which symbol and why, so `node` becomes `node2`. Rename the symbol to keep its name. Those names are:
+  - the parser's and evaluator's own names and members, such as `Parse`, `Current`, `Errors`, `Error`, `State`, the `ParseXxx`, `EvaluateXxx` and `TryParseXxx` methods built from the rule names, hook methods, and `s_tables`
+  - the parameters and locals the synthesized methods declare around the constants, or that hooks and actions are given: `node`, `parent`, `token`, `previous`, `tokens`, `result`, `errors`, `parser`, `state`, `evaluator`, `only`, `child`, `returnState`, `minLevel`, `tokenize`, `reader`, `text`, `position`, `line`, `column` and `tabWidth`. A constant with one of those names would be hidden by it.
+  - the types the code names without qualifying them, such as `Token`, `ParseNode`, `ParseError`, `IEnumerable` and `System`, and `dynamic`, which C# reads as the type in a pattern even written `@dynamic`
+  - `EndOfInput`, `ErrorSymbol` and `SymbolCount`
+  - with the source generator, the names of the class's own members and the classes it generates in it. See [the generator's readme](Parsley.Generator/README.md#whats-generated).
+- **A grammar built in code can use names XBNF can't.** Anything that can't be in an identifier becomes `_`, and a name starting with a digit gets a `_` in front, so `x-y` is `x_y`. If two symbols end up with the same name, the second gets a number after it, with a warning.
+
+Your own code beside the parser, such as a hook or an action, can hide a constant the same way: a parameter or local named `declarator` hides the `declarator` constant inside that method, so name it something else.

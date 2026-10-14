@@ -49,9 +49,12 @@ namespace Parsley
                 var grammar = Grammar.ReadFrom(options.Input, CliUtility.GetFilename(options.Input));
                 var analysis = GrammarAnalysis.Analyze(grammar, options.Engine);
                 foreach (var m in analysis.Messages) Console.Error.WriteLine(m);
+                // symbol constants that can't have their symbols' names, which only synthesis decides
+                var naming = analysis.HasErrors ? Array.Empty<GrammarMessage>() : CSharpSynthesizer.CheckNames(analysis);
+                foreach (var m in naming) Console.Error.WriteLine(m);
                 if (options.Report)
                 {
-                    if (analysis.Messages.Count > 0)
+                    if (analysis.Messages.Count + naming.Count > 0)
                     {
                         Console.Error.WriteLine();
                     }

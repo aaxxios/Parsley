@@ -377,6 +377,8 @@ namespace Parsley.Generator
                 LexerType = alias => null == alias ? ownLexer ?? LexerName : groupLexers.TryGetValue(alias, out var gl) ? gl : externalLexers[alias].Type,
                 ExternalParser = alias => $"{alias}.{ParserName}",
             });
+            // a symbol constant renamed to stay clear of a member or a name the code uses
+            _AddMessages(parser.Messages, info, diagnostics);
             ct.ThrowIfCancellationRequested();
             var code = new StringBuilder(parser.Code);
             var engines = new HashSet<int> { (int)parser.Engine };

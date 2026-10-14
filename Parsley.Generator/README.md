@@ -32,7 +32,8 @@ metadata). The class, and any type it's nested in, must be `partial`.
 
 Into the partial class:
 
-- The parser's symbol constants (`Expr`, `Number`, `Add`, ..., `EndOfInput`, `ErrorSymbol`, `SymbolCount`), public.
+- The parser's symbol constants, public, named as the symbols are written (`Expr`, `number`, `add`, ..., `EndOfInput`,
+  `ErrorSymbol`, `SymbolCount`). See XBNF.md's [Symbol constants](../XBNF.md#symbol-constants).
 - Public static entry points:
   - `Tokenize(string)` / `Tokenize(TextReader)`, with the lexer's optional position, line, column and tab width (unless `Lexer = false`)
   - `Parse(IEnumerable<Token>)`, `Parse(string)`, `Parse(TextReader)` (the last two unless `Lexer = false`), and `TryParse(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)`
@@ -53,8 +54,10 @@ Into the partial class:
 A lexer `@lexer` names, for the grammar, an `@external` alias or a `lexer=` alias, is used instead of generating one.
 
 The grammar's `@class`, `@namespace` and `@evaluator` directives are ignored: the class decides the names and the
-namespace. `@using` still applies to semantic actions. A constant that would clash with a member of the class, or
-with the generated members, gets a number after it, as the tools do with clashes inside the parser.
+namespace. `@using` still applies to semantic actions. A constant that would clash with a member of the class, with
+the generated members, or with the class an `@external` grammar's constants are in, gets a number after it and a
+warning, as the tools do with clashes inside the parser: json.xbnf's `Json` rule is `BamcParser.Json.Json2`, since
+the class is named `Json` after its alias. See XBNF.md's [Symbol constants](../XBNF.md#symbol-constants).
 
 Grammar hooks (`when`, `matched`, `entering`, `parsed`) are partial methods on the nested parser, so implement them
 in another part of it:

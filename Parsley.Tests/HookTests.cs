@@ -95,7 +95,7 @@ namespace Parsley.Tests
 				File.WriteAllText(Path.Combine(SynthesisTests.OutDir, $"MiniParser.{engine}.cs"), src);
 				T.Check(src.Contains("private partial bool IsTypedefName(Token token, Token previous);") && src.Contains("partial void OnTypedef(ParseNode node);")
 					&& src.Contains("partial void Begin();") && src.Contains("partial void OnIdentifier(Token token);"), $"{engine}: partial methods declared");
-				T.Check(src.Contains("protected override int Classify(Token token, Token previous)") && src.Contains("contextualTerminals: [TypedefName]"), $"{engine}: classification wired up");
+				T.Check(src.Contains("protected override int Classify(Token token, Token previous)") && src.Contains("contextualTerminals: [typedef_name]"), $"{engine}: classification wired up");
 				var p = CompiledParser.Compile(src, "MiniParser", MiniHooks);
 				T.Equal("", string.Join("\n", p.Diagnostics), $"{engine}: compiles cleanly with the user's half");
 				var log = (List<string>)p.GetEvaluator("MiniParser").GetField("Log")!.GetValue(null)!;

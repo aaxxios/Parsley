@@ -39,12 +39,12 @@ public partial class ES5Parser
 	// side expression, which the factored ForStatement doesn't check
 	partial void CheckForIn(ParseNode node)
 	{
-		var inAt = node.Children.FindIndex(c => In == c.SymbolId);
+		var inAt = node.Children.FindIndex(c => @in == c.SymbolId);
 		if (0 > inAt || _Recovered(node)) return;
 		var head = node.Children.GetRange(1, inAt - 1);
 		if (0 == head.Count)
 			_Fail("Expected a variable or left-hand side before in", node.Children[inAt]);
-		else if (Var == head[0].SymbolId)
+		else if (var == head[0].SymbolId)
 		{
 			if (2 < head.Count) _Fail("Only one variable can be declared in a for-in", head[2]);
 		}
@@ -60,7 +60,7 @@ public partial class ES5Parser
 		var kind = node.Children[0].Children[0];
 		var parameters = node.Children.Count - 3; // kind, name, [parameter], body
 		// Identifier2 is the identifier terminal (Identifier is the collapsed rule)
-		if (Identifier2 != kind.SymbolId || ("get" != kind.Value && "set" != kind.Value))
+		if (identifier != kind.SymbolId || ("get" != kind.Value && "set" != kind.Value))
 			_Fail("Expected get or set before an accessor's name", kind);
 		else if (("get" == kind.Value) != (0 == parameters))
 			_Fail("get takes no parameters and set takes one", node.Children[1]);
@@ -74,7 +74,7 @@ public partial class ES5Parser
 		if (_Recovered(node)) return;
 		var first = node;
 		while (!first.IsTerminal && 0 < first.Children.Count) first = first.Children[0];
-		if (Function == first.SymbolId && first.Position == node.Position) _Fail("A function expression can't start a statement; wrap it in parentheses", first);
+		if (function == first.SymbolId && first.Position == node.Position) _Fail("A function expression can't start a statement; wrap it in parentheses", first);
 	}
 }
 
@@ -87,9 +87,9 @@ public partial class ES5Parser
 	partial void CheckSemicolon(ParseNode node)
 	{
 		var last = Previous;
-		if (Semi == last.SymbolId) return;
+		if (semi == last.SymbolId) return;
 		var next = Current;
-		if (Rbrace == next.SymbolId || EndOfInput == next.SymbolId || next.Line > ES5Tokenizer.EndLine(last)) return;
+		if (rbrace == next.SymbolId || EndOfInput == next.SymbolId || next.Line > ES5Tokenizer.EndLine(last)) return;
 		throw new ParseException(new[] { new ParseError($"Expected \";\" but found \"{next.Value}\"", next.Line, next.Column, next.Position) });
 	}
 }

@@ -45,34 +45,34 @@ public partial class BamcParser : LL1ParserBase
 	public const int Firefox = 30; // ""firefox""
 	public const int Opera = 31; // ""opera""
 	public const int Safari = 32; // ""safari""
-	public const int BrowserKeyword = 33; // "browser"
-	public const int FeatureKeyword = 34; // "feature"
-	public const int VisitKeyword = 35; // "visit"
-	public const int OpenNewTabKeyword = 36; // "open-new-tab"
-	public const int CloseCurrentTabKeyword = 37; // "close-current-tab"
-	public const int ClickKeyword = 38; // "click"
-	public const int ClickExpKeyword = 39; // "click-exp"
-	public const int ClickAtPositionKeyword = 40; // "click-at-position"
-	public const int FillTextKeyword = 41; // "fill-text"
-	public const int FillTextExpKeyword = 42; // "fill-text-exp"
-	public const int GetTextKeyword = 43; // "get-text"
-	public const int SelectElementKeyword = 44; // "select-element"
-	public const int SelectOptionKeyword = 45; // "select-option"
-	public const int AddHeaderKeyword = 46; // "add-header"
-	public const int AddHeadersKeyword = 47; // "add-headers"
-	public const int AddCookieKeyword = 48; // "add-cookie"
-	public const int SetCustomUserAgentKeyword = 49; // "set-custom-useragent"
-	public const int WaitForSecondsKeyword = 50; // "wait-for-seconds"
-	public const int TakeScreenshotKeyword = 51; // "take-screenshot"
-	public const int SaveAsHtmlKeyword = 52; // "save-as-html"
-	public const int SaveAsHtmlExpKeyword = 53; // "save-as-html-exp"
-	public const int JsBlock = 54;
-	public const int String = 55;
-	public const int Number = 56;
-	public const int Comma = 57; // ","
-	public const int Newline = 58;
-	public const int Comment = 59;
-	public const int Whitespace = 60;
+	public const int browserKeyword = 33; // "browser"
+	public const int featureKeyword = 34; // "feature"
+	public const int visitKeyword = 35; // "visit"
+	public const int openNewTabKeyword = 36; // "open-new-tab"
+	public const int closeCurrentTabKeyword = 37; // "close-current-tab"
+	public const int clickKeyword = 38; // "click"
+	public const int clickExpKeyword = 39; // "click-exp"
+	public const int clickAtPositionKeyword = 40; // "click-at-position"
+	public const int fillTextKeyword = 41; // "fill-text"
+	public const int fillTextExpKeyword = 42; // "fill-text-exp"
+	public const int getTextKeyword = 43; // "get-text"
+	public const int selectElementKeyword = 44; // "select-element"
+	public const int selectOptionKeyword = 45; // "select-option"
+	public const int addHeaderKeyword = 46; // "add-header"
+	public const int addHeadersKeyword = 47; // "add-headers"
+	public const int addCookieKeyword = 48; // "add-cookie"
+	public const int setCustomUserAgentKeyword = 49; // "set-custom-useragent"
+	public const int waitForSecondsKeyword = 50; // "wait-for-seconds"
+	public const int takeScreenshotKeyword = 51; // "take-screenshot"
+	public const int saveAsHtmlKeyword = 52; // "save-as-html"
+	public const int saveAsHtmlExpKeyword = 53; // "save-as-html-exp"
+	public const int jsBlock = 54;
+	public const int @string = 55;
+	public const int number = 56;
+	public const int comma = 57; // ","
+	public const int newline = 58;
+	public const int comment = 59;
+	public const int whitespace = 60;
 	public const int Headers = 61;
 	public const int EndOfInput = 62;
 	public const int ErrorSymbol = 63;
@@ -111,7 +111,7 @@ public partial class BamcParser : LL1ParserBase
 				// Headers<entry="Json.Object", after="addHeadersKeyword", nest="Json.lbrace", pop="Json.rbrace">;
 				new IslandRule(
 					terminal: Headers - Brave,
-					after: [AddHeadersKeyword - Brave],
+					after: [addHeadersKeyword - Brave],
 					inner: global::BamcTest.Json.JsonEmbedParser.CreateLexerMode(global::BamcTest.Json.JsonEmbedLexer.Tokenize),
 					parse: global::BamcTest.Json.JsonEmbedParser.TryParseObject,
 					nest: 7 /* Json.lbrace */,
@@ -144,7 +144,7 @@ public partial class BamcParser : LL1ParserBase
 		var node = NewNode(Script);
 		ParseLine(node);
 		// { newline Line }
-		while (Current.SymbolId == Newline)
+		while (Current.SymbolId == newline)
 		{
 			Consume(node);
 			ParseLine(node);
@@ -157,7 +157,7 @@ public partial class BamcParser : LL1ParserBase
 	void ParseLine(ParseNode parent)
 	{
 		Enter(Line);
-		if (Current.SymbolId is not (Newline or EndOfInput))
+		if (Current.SymbolId is not (newline or EndOfInput))
 		{
 			ParseCommand(parent);
 		}
@@ -170,74 +170,74 @@ public partial class BamcParser : LL1ParserBase
 		Enter(Command);
 		switch (Current.SymbolId)
 		{
-			case BrowserKeyword:
+			case browserKeyword:
 				parent.Add(ParseBrowser());
 				break;
-			case FeatureKeyword:
+			case featureKeyword:
 				parent.Add(ParseFeature());
 				break;
-			case VisitKeyword:
+			case visitKeyword:
 				parent.Add(ParseVisit());
 				break;
-			case OpenNewTabKeyword:
+			case openNewTabKeyword:
 				parent.Add(ParseOpenNewTab());
 				break;
-			case CloseCurrentTabKeyword:
+			case closeCurrentTabKeyword:
 				parent.Add(ParseCloseCurrentTab());
 				break;
-			case ClickKeyword:
+			case clickKeyword:
 				parent.Add(ParseClick());
 				break;
-			case ClickExpKeyword:
+			case clickExpKeyword:
 				parent.Add(ParseClickExp());
 				break;
-			case ClickAtPositionKeyword:
+			case clickAtPositionKeyword:
 				parent.Add(ParseClickAtPosition());
 				break;
-			case FillTextKeyword:
+			case fillTextKeyword:
 				parent.Add(ParseFillText());
 				break;
-			case FillTextExpKeyword:
+			case fillTextExpKeyword:
 				parent.Add(ParseFillTextExp());
 				break;
-			case GetTextKeyword:
+			case getTextKeyword:
 				parent.Add(ParseGetText());
 				break;
-			case SelectElementKeyword:
+			case selectElementKeyword:
 				parent.Add(ParseSelectElement());
 				break;
-			case SelectOptionKeyword:
+			case selectOptionKeyword:
 				parent.Add(ParseSelectOption());
 				break;
-			case AddHeaderKeyword:
+			case addHeaderKeyword:
 				parent.Add(ParseAddHeader());
 				break;
-			case AddHeadersKeyword:
+			case addHeadersKeyword:
 				parent.Add(ParseAddHeaders());
 				break;
-			case AddCookieKeyword:
+			case addCookieKeyword:
 				parent.Add(ParseAddCookie());
 				break;
-			case SetCustomUserAgentKeyword:
+			case setCustomUserAgentKeyword:
 				parent.Add(ParseSetCustomUserAgent());
 				break;
-			case WaitForSecondsKeyword:
+			case waitForSecondsKeyword:
 				parent.Add(ParseWaitForSeconds());
 				break;
-			case TakeScreenshotKeyword:
+			case takeScreenshotKeyword:
 				parent.Add(ParseTakeScreenshot());
 				break;
-			case SaveAsHtmlKeyword:
+			case saveAsHtmlKeyword:
 				parent.Add(ParseSaveAsHtml());
 				break;
-			case SaveAsHtmlExpKeyword:
+			case saveAsHtmlExpKeyword:
 				parent.Add(ParseSaveAsHtmlExp());
 				break;
-			case JsBlock:
+			case jsBlock:
 				parent.Add(ParseJavaScript());
 				break;
 			default:
-				Error(parent, "a command", BrowserKeyword, FeatureKeyword, VisitKeyword, OpenNewTabKeyword, CloseCurrentTabKeyword, ClickKeyword, ClickExpKeyword, ClickAtPositionKeyword, FillTextKeyword, FillTextExpKeyword, GetTextKeyword, SelectElementKeyword, SelectOptionKeyword, AddHeaderKeyword, AddHeadersKeyword, AddCookieKeyword, SetCustomUserAgentKeyword, WaitForSecondsKeyword, TakeScreenshotKeyword, SaveAsHtmlKeyword, SaveAsHtmlExpKeyword, JsBlock);
+				Error(parent, "a command", browserKeyword, featureKeyword, visitKeyword, openNewTabKeyword, closeCurrentTabKeyword, clickKeyword, clickExpKeyword, clickAtPositionKeyword, fillTextKeyword, fillTextExpKeyword, getTextKeyword, selectElementKeyword, selectOptionKeyword, addHeaderKeyword, addHeadersKeyword, addCookieKeyword, setCustomUserAgentKeyword, waitForSecondsKeyword, takeScreenshotKeyword, saveAsHtmlKeyword, saveAsHtmlExpKeyword, jsBlock);
 				break;
 		}
 		Leave();
@@ -270,7 +270,7 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(Browser);
 		var node = NewNode(Browser);
-		Expect(BrowserKeyword, node);
+		Expect(browserKeyword, node);
 		ParseBrowserNames(node);
 		Leave();
 		return node;
@@ -281,10 +281,10 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(Feature);
 		var node = NewNode(Feature);
-		Expect(FeatureKeyword, node);
-		Expect(String, node);
+		Expect(featureKeyword, node);
+		Expect(@string, node);
 		// [ string ]
-		if (Current.SymbolId == String)
+		if (Current.SymbolId == @string)
 		{
 			Consume(node);
 		}
@@ -297,8 +297,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(Visit);
 		var node = NewNode(Visit);
-		Expect(VisitKeyword, node);
-		Expect(String, node);
+		Expect(visitKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -308,9 +308,9 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(OpenNewTab);
 		var node = NewNode(OpenNewTab);
-		Expect(OpenNewTabKeyword, node);
-		Expect(String, node);
-		Expect(String, node);
+		Expect(openNewTabKeyword, node);
+		Expect(@string, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -320,7 +320,7 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(CloseCurrentTab);
 		var node = NewNode(CloseCurrentTab);
-		Expect(CloseCurrentTabKeyword, node);
+		Expect(closeCurrentTabKeyword, node);
 		Leave();
 		return node;
 	}
@@ -330,8 +330,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(Click);
 		var node = NewNode(Click);
-		Expect(ClickKeyword, node);
-		Expect(String, node);
+		Expect(clickKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -341,8 +341,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(ClickExp);
 		var node = NewNode(ClickExp);
-		Expect(ClickExpKeyword, node);
-		Expect(String, node);
+		Expect(clickExpKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -352,9 +352,9 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(ClickAtPosition);
 		var node = NewNode(ClickAtPosition);
-		Expect(ClickAtPositionKeyword, node);
-		Expect(String, node);
-		Expect(String, node);
+		Expect(clickAtPositionKeyword, node);
+		Expect(@string, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -364,9 +364,9 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(FillText);
 		var node = NewNode(FillText);
-		Expect(FillTextKeyword, node);
-		Expect(String, node);
-		Expect(String, node);
+		Expect(fillTextKeyword, node);
+		Expect(@string, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -376,9 +376,9 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(FillTextExp);
 		var node = NewNode(FillTextExp);
-		Expect(FillTextExpKeyword, node);
-		Expect(String, node);
-		Expect(String, node);
+		Expect(fillTextExpKeyword, node);
+		Expect(@string, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -388,8 +388,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(GetText);
 		var node = NewNode(GetText);
-		Expect(GetTextKeyword, node);
-		Expect(String, node);
+		Expect(getTextKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -399,8 +399,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(SelectElement);
 		var node = NewNode(SelectElement);
-		Expect(SelectElementKeyword, node);
-		Expect(String, node);
+		Expect(selectElementKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -410,9 +410,9 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(SelectOption);
 		var node = NewNode(SelectOption);
-		Expect(SelectOptionKeyword, node);
-		Expect(String, node);
-		Expect(Number, node);
+		Expect(selectOptionKeyword, node);
+		Expect(@string, node);
+		Expect(number, node);
 		Leave();
 		return node;
 	}
@@ -422,9 +422,9 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(AddHeader);
 		var node = NewNode(AddHeader);
-		Expect(AddHeaderKeyword, node);
-		Expect(String, node);
-		Expect(String, node);
+		Expect(addHeaderKeyword, node);
+		Expect(@string, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -434,7 +434,7 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(AddHeaders);
 		var node = NewNode(AddHeaders);
-		Expect(AddHeadersKeyword, node);
+		Expect(addHeadersKeyword, node);
 		Expect(Headers, node);
 		Leave();
 		return node;
@@ -445,14 +445,14 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(AddCookie);
 		var node = NewNode(AddCookie);
-		Expect(AddCookieKeyword, node);
-		Expect(String, node);
+		Expect(addCookieKeyword, node);
+		Expect(@string, node);
 		// [ comma ]
-		if (Current.SymbolId == Comma)
+		if (Current.SymbolId == comma)
 		{
 			Consume(node);
 		}
-		Expect(String, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -462,8 +462,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(SetCustomUserAgent);
 		var node = NewNode(SetCustomUserAgent);
-		Expect(SetCustomUserAgentKeyword, node);
-		Expect(String, node);
+		Expect(setCustomUserAgentKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -473,8 +473,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(WaitForSeconds);
 		var node = NewNode(WaitForSeconds);
-		Expect(WaitForSecondsKeyword, node);
-		Expect(Number, node);
+		Expect(waitForSecondsKeyword, node);
+		Expect(number, node);
 		Leave();
 		return node;
 	}
@@ -484,8 +484,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(TakeScreenshot);
 		var node = NewNode(TakeScreenshot);
-		Expect(TakeScreenshotKeyword, node);
-		Expect(String, node);
+		Expect(takeScreenshotKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -495,8 +495,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(SaveAsHtml);
 		var node = NewNode(SaveAsHtml);
-		Expect(SaveAsHtmlKeyword, node);
-		Expect(String, node);
+		Expect(saveAsHtmlKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -506,8 +506,8 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(SaveAsHtmlExp);
 		var node = NewNode(SaveAsHtmlExp);
-		Expect(SaveAsHtmlExpKeyword, node);
-		Expect(String, node);
+		Expect(saveAsHtmlExpKeyword, node);
+		Expect(@string, node);
 		Leave();
 		return node;
 	}
@@ -517,7 +517,7 @@ public partial class BamcParser : LL1ParserBase
 	{
 		Enter(JavaScript);
 		var node = NewNode(JavaScript);
-		Expect(JsBlock, node);
+		Expect(jsBlock, node);
 		Leave();
 		return node;
 	}
@@ -527,36 +527,36 @@ public partial class BamcParser : LL1ParserBase
 		terminalStart: Brave, // lexer ids count terminals from 0; the parser adds this
 		symbolNames: ["Script", "Line", "Command", "BrowserNames", "Browser", "Feature", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "Brave", "Chrome", "Chromium", "Edge", "Firefox", "Opera", "Safari", "browserKeyword", "featureKeyword", "visitKeyword", "openNewTabKeyword", "closeCurrentTabKeyword", "clickKeyword", "clickExpKeyword", "clickAtPositionKeyword", "fillTextKeyword", "fillTextExpKeyword", "getTextKeyword", "selectElementKeyword", "selectOptionKeyword", "addHeaderKeyword", "addHeadersKeyword", "addCookieKeyword", "setCustomUserAgentKeyword", "waitForSecondsKeyword", "takeScreenshotKeyword", "saveAsHtmlKeyword", "saveAsHtmlExpKeyword", "jsBlock", "string", "number", "comma", "newline", "comment", "whitespace", "Headers", "#EOS", "#ERROR"],
 		displayNames: ["Script", "Line", "Command", "BrowserNames", "Browser", "Feature", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "\"\"brave\"\"", "\"\"chrome\"\"", "\"\"chromium\"\"", "\"\"edge\"\"", "\"\"firefox\"\"", "\"\"opera\"\"", "\"\"safari\"\"", "\"browser\"", "\"feature\"", "\"visit\"", "\"open-new-tab\"", "\"close-current-tab\"", "\"click\"", "\"click-exp\"", "\"click-at-position\"", "\"fill-text\"", "\"fill-text-exp\"", "\"get-text\"", "\"select-element\"", "\"select-option\"", "\"add-header\"", "\"add-headers\"", "\"add-cookie\"", "\"set-custom-useragent\"", "\"wait-for-seconds\"", "\"take-screenshot\"", "\"save-as-html\"", "\"save-as-html-exp\"", "jsBlock", "string", "number", "\",\"", "newline", "comment", "whitespace", "Headers", "end of input", "an unrecognized token"],
-		collapsedTerminals: [Comma, Newline],
+		collapsedTerminals: [comma, newline],
 		// for each non-terminal, where error recovery can stop while parsing it: what can follow it, plus its sync terminals
 		recoverySets:
 		[
 			[EndOfInput], // Script
-			[Newline, EndOfInput], // Line
-			[Newline, EndOfInput], // Command
-			[Newline, EndOfInput], // BrowserNames
-			[Newline, EndOfInput], // Browser
-			[Newline, EndOfInput], // Feature
-			[Newline, EndOfInput], // Visit
-			[Newline, EndOfInput], // OpenNewTab
-			[Newline, EndOfInput], // CloseCurrentTab
-			[Newline, EndOfInput], // Click
-			[Newline, EndOfInput], // ClickExp
-			[Newline, EndOfInput], // ClickAtPosition
-			[Newline, EndOfInput], // FillText
-			[Newline, EndOfInput], // FillTextExp
-			[Newline, EndOfInput], // GetText
-			[Newline, EndOfInput], // SelectElement
-			[Newline, EndOfInput], // SelectOption
-			[Newline, EndOfInput], // AddHeader
-			[Newline, EndOfInput], // AddHeaders
-			[Newline, EndOfInput], // AddCookie
-			[Newline, EndOfInput], // SetCustomUserAgent
-			[Newline, EndOfInput], // WaitForSeconds
-			[Newline, EndOfInput], // TakeScreenshot
-			[Newline, EndOfInput], // SaveAsHtml
-			[Newline, EndOfInput], // SaveAsHtmlExp
-			[Newline, EndOfInput] // JavaScript
+			[newline, EndOfInput], // Line
+			[newline, EndOfInput], // Command
+			[newline, EndOfInput], // BrowserNames
+			[newline, EndOfInput], // Browser
+			[newline, EndOfInput], // Feature
+			[newline, EndOfInput], // Visit
+			[newline, EndOfInput], // OpenNewTab
+			[newline, EndOfInput], // CloseCurrentTab
+			[newline, EndOfInput], // Click
+			[newline, EndOfInput], // ClickExp
+			[newline, EndOfInput], // ClickAtPosition
+			[newline, EndOfInput], // FillText
+			[newline, EndOfInput], // FillTextExp
+			[newline, EndOfInput], // GetText
+			[newline, EndOfInput], // SelectElement
+			[newline, EndOfInput], // SelectOption
+			[newline, EndOfInput], // AddHeader
+			[newline, EndOfInput], // AddHeaders
+			[newline, EndOfInput], // AddCookie
+			[newline, EndOfInput], // SetCustomUserAgent
+			[newline, EndOfInput], // WaitForSeconds
+			[newline, EndOfInput], // TakeScreenshot
+			[newline, EndOfInput], // SaveAsHtml
+			[newline, EndOfInput], // SaveAsHtmlExp
+			[newline, EndOfInput] // JavaScript
 		],
 		syncTerminals: [],
 		endOfInput: EndOfInput,

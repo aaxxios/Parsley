@@ -197,7 +197,9 @@ namespace Parsley.LanguageServer
                     // analysis itself runs to the end before that's noticed
                     var a = GrammarAnalysis.Analyze(grammar);
                     ct.ThrowIfCancellationRequested();
-                    foreach (var m in a.Messages)
+                    // and the symbol constants the synthesizer would have to rename, which only it decides
+                    var naming = a.HasErrors ? Array.Empty<GrammarMessage>() : CSharpSynthesizer.CheckNames(a);
+                    foreach (var m in a.Messages.Concat(naming))
                     {
                         var d = _ToDiagnostic(doc, m);
                         if (seen.Add(d.ToJsonString())) { result.Add(d); analysis.Add(d.DeepClone()); }

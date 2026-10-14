@@ -23,7 +23,7 @@ namespace Parsley.Tests
 			Atom<type=""int"">= Value | lparen Sum rparen;
 			Value<type=""int"">= number | name => {
 				var t = node.Children[0];
-				if (Number == t.SymbolId) return int.Parse(t.Value!);
+				if (number == t.SymbolId) return int.Parse(t.Value!);
 				return State[t.Value!]; // a } in a comment, and ""}"" in a string: '}'
 			};
 			number= '[0-9]+'; name= '[a-z]+'; plus= ""+""; times= ""*""; lparen= ""(""; rparen= "")"";" + Ws;

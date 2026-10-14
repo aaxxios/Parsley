@@ -190,7 +190,7 @@ namespace Parsley.Tests
 				@evaluator ""PickEvaluator"";
 				S<type=""string"">= A x | A y => {
 					var a = EvaluateA(node.Children[0]);
-					return a + (X == node.Children[1].SymbolId ? ""x"" : ""y"");
+					return a + (x == node.Children[1].SymbolId ? ""x"" : ""y"");
 				};
 				A<type=""string"">= a A | b => {
 					if (1 == node.Children.Count) return ""b"";

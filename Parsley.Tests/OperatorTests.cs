@@ -28,18 +28,18 @@ namespace Parsley.Tests
 				=> {
 				var c = node.Children;
 				if (1 == c.Count)
-					return Number == c[0].SymbolId
+					return number == c[0].SymbolId
 						? double.Parse(c[0].Value!, System.Globalization.CultureInfo.InvariantCulture)
 						: EvaluateExpr(c[0]);
 				var left = EvaluateExpr(c[0]);
 				var right = EvaluateExpr(c[2]);
 				switch (c[1].SymbolId)
 				{
-					case Add: return left + right;
-					case Sub: return left - right;
-					case Mul: return left * right;
-					case Div: return left / right;
-					case Mod: return left % right;
+					case add: return left + right;
+					case sub: return left - right;
+					case mul: return left * right;
+					case div: return left / right;
+					case mod: return left % right;
 					default: return Math.Pow(left, right);
 				}
 			};

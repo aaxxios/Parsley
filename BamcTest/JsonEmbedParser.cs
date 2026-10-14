@@ -20,18 +20,18 @@ public partial class JsonEmbedParser : LL1ParserBase
 	public const int Array = 3;
 	public const int Value = 4;
 	public const int Boolean = 5;
-	public const int Number = 6;
-	public const int String = 7;
-	public const int True = 8; // "true"
-	public const int False = 9; // "false"
-	public const int Null = 10; // "null"
-	public const int Lbracket = 11; // "["
-	public const int Rbracket = 12; // "]"
-	public const int Lbrace = 13; // "{"
-	public const int Rbrace = 14; // "}"
-	public const int Colon = 15; // ":"
-	public const int Comma = 16; // ","
-	public const int Whitespace = 17;
+	public const int number = 6;
+	public const int @string = 7;
+	public const int @true = 8; // "true"
+	public const int @false = 9; // "false"
+	public const int @null = 10; // "null"
+	public const int lbracket = 11; // "["
+	public const int rbracket = 12; // "]"
+	public const int lbrace = 13; // "{"
+	public const int rbrace = 14; // "}"
+	public const int colon = 15; // ":"
+	public const int comma = 16; // ","
+	public const int whitespace = 17;
 	public const int EndOfInput = 18;
 	public const int ErrorSymbol = 19;
 	public const int SymbolCount = 20;
@@ -82,7 +82,7 @@ public partial class JsonEmbedParser : LL1ParserBase
 	{
 		Enter(Json);
 		var node = NewNode(Json);
-		if (Current.SymbolId == Lbrace)
+		if (Current.SymbolId == lbrace)
 		{
 			node.Add(ParseObject());
 		}
@@ -99,19 +99,19 @@ public partial class JsonEmbedParser : LL1ParserBase
 	{
 		Enter(Object);
 		var node = NewNode(Object);
-		Expect(Lbrace, node);
+		Expect(lbrace, node);
 		// [ Field { "," Field } ]
-		if (Current.SymbolId == String)
+		if (Current.SymbolId == @string)
 		{
 			node.Add(ParseField());
 			// { "," Field }
-			while (Current.SymbolId == Comma)
+			while (Current.SymbolId == comma)
 			{
 				Consume(node);
 				node.Add(ParseField());
 			}
 		}
-		Expect(Rbrace, node);
+		Expect(rbrace, node);
 		Leave();
 		return node;
 	}
@@ -121,8 +121,8 @@ public partial class JsonEmbedParser : LL1ParserBase
 	{
 		Enter(Field);
 		var node = NewNode(Field);
-		Expect(String, node);
-		Expect(Colon, node);
+		Expect(@string, node);
+		Expect(colon, node);
 		ParseValue(node);
 		Leave();
 		return node;
@@ -133,19 +133,19 @@ public partial class JsonEmbedParser : LL1ParserBase
 	{
 		Enter(Array);
 		var node = NewNode(Array);
-		Expect(Lbracket, node);
+		Expect(lbracket, node);
 		// [ Value { "," Value } ]
-		if (Current.SymbolId is not (Rbracket or EndOfInput))
+		if (Current.SymbolId is not (rbracket or EndOfInput))
 		{
 			ParseValue(node);
 			// { "," Value }
-			while (Current.SymbolId == Comma)
+			while (Current.SymbolId == comma)
 			{
 				Consume(node);
 				ParseValue(node);
 			}
 		}
-		Expect(Rbracket, node);
+		Expect(rbracket, node);
 		Leave();
 		return node;
 	}
@@ -156,23 +156,23 @@ public partial class JsonEmbedParser : LL1ParserBase
 		Enter(Value);
 		switch (Current.SymbolId)
 		{
-			case String:
-			case Number:
-			case Null:
+			case @string:
+			case number:
+			case @null:
 				Consume(parent);
 				break;
-			case Lbrace:
+			case lbrace:
 				parent.Add(ParseObject());
 				break;
-			case Lbracket:
+			case lbracket:
 				parent.Add(ParseArray());
 				break;
-			case True:
-			case False:
+			case @true:
+			case @false:
 				parent.Add(ParseBoolean());
 				break;
 			default:
-				Error(parent, null, Number, String, True, False, Null, Lbracket, Lbrace);
+				Error(parent, null, number, @string, @true, @false, @null, lbracket, lbrace);
 				break;
 		}
 		Leave();
@@ -183,13 +183,13 @@ public partial class JsonEmbedParser : LL1ParserBase
 	{
 		Enter(Boolean);
 		var node = NewNode(Boolean);
-		if (Current.SymbolId == True)
+		if (Current.SymbolId == @true)
 		{
 			Consume(node);
 		}
 		else
 		{
-			Expect(False, node);
+			Expect(@false, node);
 		}
 		Leave();
 		return node;
@@ -197,19 +197,19 @@ public partial class JsonEmbedParser : LL1ParserBase
 
 	#region Tables
 	static readonly ParserTables s_tables = new(
-		terminalStart: Number, // lexer ids count terminals from 0; the parser adds this
+		terminalStart: number, // lexer ids count terminals from 0; the parser adds this
 		symbolNames: ["Json", "Object", "Field", "Array", "Value", "Boolean", "number", "string", "true", "false", "null", "lbracket", "rbracket", "lbrace", "rbrace", "colon", "comma", "whitespace", "#EOS", "#ERROR"],
 		displayNames: ["Json", "Object", "Field", "Array", "Value", "Boolean", "number", "string", "\"true\"", "\"false\"", "\"null\"", "\"[\"", "\"]\"", "\"{\"", "\"}\"", "\":\"", "\",\"", "whitespace", "end of input", "an unrecognized token"],
-		collapsedTerminals: [Lbracket, Rbracket, Lbrace, Rbrace, Colon, Comma],
+		collapsedTerminals: [lbracket, rbracket, lbrace, rbrace, colon, comma],
 		// for each non-terminal, where error recovery can stop while parsing it: what can follow it, plus its sync terminals
 		recoverySets:
 		[
 			[EndOfInput], // Json
-			[Rbracket, Rbrace, Comma, EndOfInput], // Object
-			[Rbrace, Comma], // Field
-			[Rbracket, Rbrace, Comma, EndOfInput], // Array
-			[Rbracket, Rbrace, Comma], // Value
-			[Rbracket, Rbrace, Comma] // Boolean
+			[rbracket, rbrace, comma, EndOfInput], // Object
+			[rbrace, comma], // Field
+			[rbracket, rbrace, comma, EndOfInput], // Array
+			[rbracket, rbrace, comma], // Value
+			[rbracket, rbrace, comma] // Boolean
 		],
 		syncTerminals: [],
 		endOfInput: EndOfInput,

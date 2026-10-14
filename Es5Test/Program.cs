@@ -5,7 +5,7 @@ using Parsley.Runtime;
 
 // the tokenizer hands the parser lexer ids, and its id for a regular expression literal has to be the
 // grammar's, counted from the first terminal (break)
-if (ES5Tokenizer.RegularExpressionLiteral != ES5Parser.RegularExpressionLiteral - ES5Parser.Break)
+if (ES5Tokenizer.RegularExpressionLiteral != ES5Parser.regular_expression_literal - ES5Parser.@break)
 	throw new InvalidOperationException("regular_expression_literal isn't the last terminal in es5.xbnf");
 
 var printTree = args.Contains("-t");

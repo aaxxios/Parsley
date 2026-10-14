@@ -74,8 +74,9 @@ namespace Parsley
 	{
 		internal SynthesizedParser(string code, IReadOnlyList<string> usings, string className, string? evaluatorClassName,
 			string? evaluateReturnType, string? evaluateStateParameter, IReadOnlyList<SynthesizedConstant> constants, ParserEngine engine,
-			bool isSubordinate, bool isCompound, bool hasLexerMode, IReadOnlyList<string> sharedEntries)
+			bool isSubordinate, bool isCompound, bool hasLexerMode, IReadOnlyList<string> sharedEntries, IReadOnlyList<GrammarMessage> messages)
 		{
+			Messages = messages;
 			Code = code; Usings = usings; ClassName = className; EvaluatorClassName = evaluatorClassName;
 			EvaluateReturnType = evaluateReturnType; EvaluateStateParameter = evaluateStateParameter; Constants = constants; Engine = engine;
 			IsSubordinate = isSubordinate; IsCompound = isCompound; HasLexerMode = hasLexerMode; SharedEntries = sharedEntries;
@@ -122,6 +123,11 @@ namespace Parsley
 		/// The engine the parser was synthesized for, which says which base class source it needs
 		/// </summary>
 		public ParserEngine Engine { get; }
+		/// <summary>
+		/// Warnings from synthesis, such as a symbol constant renamed because its symbol's name was taken. The same as
+		/// <see cref="CSharpSynthesizer.CheckNames"/> gives.
+		/// </summary>
+		public IReadOnlyList<GrammarMessage> Messages { get; }
 	}
 
 	/// <summary>
@@ -205,6 +211,18 @@ namespace Parsley
 		}
 
 		/// <summary>
+		/// The warnings synthesizing with these options would give, without synthesizing: a symbol constant that
+		/// can't have its symbol's name, because a member, a type or a local of the synthesized code has it, and
+		/// gets a number after it instead. Throws if the analysis has errors.
+		/// </summary>
+		public static IReadOnlyList<GrammarMessage> CheckNames(GrammarAnalysis analysis, SynthesisOptions? options = null)
+		{
+			if (analysis.HasErrors)
+				throw new GrammarException(analysis.Messages);
+			return new _Emitter(analysis, options ?? new SynthesisOptions()).Messages;
+		}
+
+		/// <summary>
 		/// Synthesizes, and returns the code with what's needed to place it and call it. Throws if the analysis has errors.
 		/// </summary>
 		public static SynthesizedParser SynthesizeParser(GrammarAnalysis analysis, SynthesisOptions? options = null)
@@ -224,6 +242,7 @@ namespace Parsley
 			readonly string _className;
 			readonly string? _evaluatorName; // null when there's no evaluator to synthesize
 			readonly string[] _const;
+			readonly HashSet<string> _constNames; // without any @
 			StringBuilder _sb = new();
 			int _indent;
 			readonly Dictionary<string, string> _sets = new(); // key: sorted ids
@@ -250,6 +269,7 @@ namespace Parsley
 						throw new GrammarException($"The evaluator and the parser are both named \"{_className}\". Use @evaluator or @class to name them apart");
 				}
 				_const = _MakeConstantNames();
+				_constNames = new HashSet<string>(_const.Select(c => c.TrimStart('@')));
 			}
 
 			#region Naming
@@ -259,17 +279,17 @@ namespace Parsley
 				"lock long namespace new null object operator out override params private protected public readonly ref return sbyte " +
 				"sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe " +
 				"ushort using virtual void volatile while").Split(' '));
+			// a name made into a PascalCase identifier, for the names built from a symbol's: ParseXxx, EvaluateXxx and the like
 			static string _Ident(string name)
-			{ 
-				// Don't fixup symbol names. It makes them harder to use
+			{
 				var sb = new StringBuilder();
-				//var upper = true;
+				var upper = true;
 				foreach (var ch in name)
 				{
-					//if (!char.IsLetterOrDigit(ch)) { upper = true; continue; }
+					if (!char.IsLetterOrDigit(ch)) { upper = true; continue; }
 					if (0 == sb.Length && char.IsDigit(ch)) sb.Append('_');
-					sb.Append(ch);
-					//upper = false;
+					sb.Append(upper ? char.ToUpperInvariant(ch) : ch);
+					upper = false;
 				}
 				var s = 0 == sb.Length ? "Symbol" : sb.ToString();
 				return _keywords.Contains(s) ? "@" + s : s;
@@ -281,35 +301,104 @@ namespace Parsley
 				if (!valid) return _Ident(name);
 				return _keywords.Contains(name) ? "@" + name : name;
 			}
+
+			// Symbol constants keep the symbol's name as written, so a grammar's typedef_name is typedef_name in C#.
+			// Words that aren't keywords but that C# reads as something else where the constants are used, in
+			// patterns such as "is (a or b)", in case labels and in declarations, also get an @ in front:
+			// "not" and "_" are pattern syntax, nint and nuint are types, and partial is a modifier
+			static readonly HashSet<string> _contextualKeywords = new HashSet<string>(new[] { "not", "_", "nint", "nuint", "partial" });
+			// the name a symbol constant starts from: the symbol's own, with anything that can't be in an identifier
+			// (only possible for a grammar built in code) made a _, and no @. Not recased.
+			static string _ConstBase(string name)
+			{
+				var sb = new StringBuilder(name.Length + 1);
+				foreach (var ch in name)
+				{
+					if (0 == sb.Length && char.IsDigit(ch)) sb.Append('_');
+					sb.Append(char.IsLetterOrDigit(ch) || '_' == ch ? ch : '_');
+				}
+				return 0 == sb.Length ? "symbol" : sb.ToString();
+			}
+			static string _ConstIdent(string name) => _keywords.Contains(name) || _contextualKeywords.Contains(name) ? "@" + name : name;
+
+			// the messages naming the symbol constants raised, such as a constant renamed to stay clear of a member
+			public List<GrammarMessage> Messages { get; } = new();
 			string[] _MakeConstantNames()
 			{
-				var reserved = new HashSet<string>
+				// each name a constant can't take, with what has it, for the warning when one is renamed
+				var reserved = new Dictionary<string, string>();
+				void reserve(string what, IEnumerable<string> names)
 				{
-					_className, "Parse", "Current", "Errors", "Peek", "Advance", "Consume", "Expect", "Error", "NewNode", "Fold",
-					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "GetHashCode", "ToString", "Equals", "GetType",
-					"Start", "ReadToken", "FromLexer", "EndToken", "AdaptivePredict", "Atn",
-					"Classify", "Classified", "OnMatched", "CurrentUnclassified", "Previous", "Wrap", "CreateLexerMode", "Tokenize", "TryParse"
-				};
-				foreach (var p in _a.Grammar.SharedProductions) reserved.Add("TryParse" + _Ident(p.Name));
-				if (null != _o.ReservedNames) reserved.UnionWith(_o.ReservedNames);
+					foreach (var n in names)
+					{
+						var bare = n.StartsWith("@", StringComparison.Ordinal) ? n.Substring(1) : n;
+						if (!reserved.ContainsKey(bare)) reserved.Add(bare, what);
+					}
+				}
+				reserve("the parser class", new[] { _className });
+				reserve("a member of the parser", new[]
+				{
+					"Parse", "Current", "Errors", "Peek", "Advance", "Consume", "Expect", "Error", "NewNode", "Fold",
+					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "Start", "ReadToken", "FromLexer", "EndToken",
+					"AdaptivePredict", "Atn", "Classify", "Classified", "OnMatched", "CurrentUnclassified", "Previous", "Wrap",
+					"CreateLexerMode", "Tokenize", "TryParse", "s_tables", "s_atn",
+					"GetHashCode", "ToString", "Equals", "GetType", "MemberwiseClone", "ReferenceEquals", "Finalize"
+				});
+				reserve("a member of the parser", _a.Grammar.SharedProductions.Select(p => "TryParse" + _Ident(p.Name)));
+				reserve("a member of the parser", _a.Grammar.Productions.Select(p => _MethodName(p.Name)));
+				reserve("a member of the parser", _a.Decisions.Select(_PredictName));
 				// the methods hooks call are members too
-				foreach (var (name, _) in _Hooks()) reserved.Add(name);
-				foreach (var p in _a.Grammar.Productions) reserved.Add("Parse" + _Ident(p.Name));
+				reserve("a hook method", _Hooks().Select(h => h.Name));
 				// the evaluator uses the same constant names, so they mustn't clash with its members either
 				if (null != _evaluatorName)
 				{
-					reserved.UnionWith(new[] { _evaluatorName, "Evaluate", "State" });
-					foreach (var p in _a.Grammar.Productions) reserved.Add(_EvaluateName(p.Name));
+					reserve("the evaluator class", new[] { _evaluatorName });
+					reserve("a member of the evaluator", new[] { "Evaluate", "State", "_PassThrough" });
+					reserve("a member of the evaluator", _a.Grammar.Productions.Select(p => _EvaluateName(p.Name)));
 				}
-				var used = new HashSet<string>(reserved);
+				// parameters and locals the code declares where it uses the constants, or that hooks and semantic actions
+				// are given, would hide a constant of the same name
+				reserve("a parameter or local in the synthesized code", new[]
+				{
+					"node", "parent", "returnState", "minLevel", "token", "previous", "tokens", "result", "errors", "parser",
+					"state", "evaluator", "only", "child", "tokenize", "reader", "text", "position", "line", "column", "tabWidth"
+				});
+				// types the code names without qualifying them, which a constant of the same name would hide. dynamic
+				// is here because C# reads it as the type in a pattern even written @dynamic
+				reserve("a type the synthesized code uses", new[]
+				{
+					"System", "Parsley", "Runtime", "Token", "ParseNode", "ParseError", "ParseException", "ParserTables", "ParserBase",
+					"LL1ParserBase", "LLkParserBase", "AllStarParserBase", "LexerMode", "LexerController", "LexerSwitch", "IslandRule",
+					"TokenizeFunc", "IEnumerable", "IReadOnlyList", "IDictionary", "InvalidOperationException", "dynamic"
+				});
+				if (null != _o.ReservedNames) reserve("taken in the type the parser is nested in", _o.ReservedNames);
+				var used = new Dictionary<string, string>(reserved);
 				var result = new string[_s.Count];
 				for (var i = 0; i < _s.Count; ++i)
 				{
-					string baseName = i == _s.EndOfInput ? "EndOfInput" : i == _s.Error ? "ErrorSymbol" : _Ident(_s.GetName(i));
+					if (i == _s.EndOfInput || i == _s.Error)
+					{
+						var fixedName = i == _s.EndOfInput ? "EndOfInput" : "ErrorSymbol";
+						used[fixedName] = "the special symbol constant " + fixedName;
+						result[i] = fixedName;
+					}
+				}
+				for (var i = 0; i < _s.Count; ++i)
+				{
+					if (null != result[i]) continue;
+					var symbol = _s.GetName(i);
+					var baseName = _ConstBase(symbol);
 					var name = baseName;
 					var n = 2;
-					while (!used.Add(name)) name = baseName + (n++).ToString();
-					result[i] = name;
+					while (used.ContainsKey(name)) name = baseName + (n++).ToString();
+					used.Add(name, $"the constant for {symbol}");
+					result[i] = _ConstIdent(name);
+					if (name != baseName)
+					{
+						GrammarNode? at = _s.IsNonTerminal(i) ? _s.GetProduction(i) : _s.GetTerminal(i);
+						Messages.Add(new GrammarMessage(ErrorLevel.Warning,
+							$"The symbol constant for {symbol} is named {name}, since {baseName} is {used[baseName]}. Rename the symbol to keep its name", at));
+					}
 				}
 				return result;
 			}
@@ -391,7 +480,8 @@ namespace Parsley
 				baseName ??= "s_set";
 				name = baseName;
 				var n = 2;
-				while (_sets.ContainsValue(name) || "s_set" == name) name = baseName + (n++).ToString();
+				// a symbol constant can be named like one of these too, now that constants keep their symbols' names
+				while (_sets.ContainsValue(name) || "s_set" == name || _constNames.Contains(name)) name = baseName + (n++).ToString();
 				_sets.Add(key, name);
 				_setList.Add((name, sorted, string.Join(", ", sorted.Select(_s.Display))));
 				return name;
@@ -456,7 +546,7 @@ namespace Parsley
 					null != _evaluatorName ? start.Type ?? "object" : null,
 					null != _evaluatorName ? (null == start.StateType ? "object? state = null" : $"{start.StateType} state") : null,
 					constants, _engine, _a.Grammar.IsSubordinate, _a.Grammar.IsCompound, _HasLexerMode,
-					_a.Grammar.SharedProductions.Select(p => "TryParse" + _Ident(p.Name)).ToList());
+					_a.Grammar.SharedProductions.Select(p => "TryParse" + _Ident(p.Name)).ToList(), Messages);
 			}
 
 			void _Header(string source)
