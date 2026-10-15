@@ -438,7 +438,10 @@ namespace Parsley.Generator
                 line("/// <summary>");
                 line($"/// Evaluates a tree of {x.Alias}'s, such as an island's, with its semantic actions");
                 line("/// </summary>");
+                // mapped to the grammar's type or state attribute, which it names
+                if (null != unit.Parser.EvaluateLineDirective) sb.Append(unit.Parser.EvaluateLineDirective).Append("\r\n");
                 line($"public static {unit.Parser.EvaluateReturnType} Evaluate(global::Parsley.Runtime.ParseNode node, {unit.Parser.EvaluateStateParameter}) => {unit.Parser.EvaluatorClassName}.Evaluate(node, state);");
+                if (null != unit.Parser.EvaluateLineDirective) sb.Append("#line default\r\n");
             }
             line();
             sb.Append(unit.Code.Replace("\r\n", "\n").Replace("\n", "\r\n"));
@@ -548,8 +551,9 @@ namespace Parsley.Generator
             line("// add members in another part of this partial class instead.");
             line("// </auto-generated>");
             line("#nullable enable");
-            foreach (var u in parser.Usings)
-                line($"using {u};");
+            // with #line directives mapping those from @using to the grammar
+            foreach (var u in parser.UsingLines)
+                line(u);
             line();
             if (null != info.Namespace) open($"namespace {info.Namespace}");
             for (var i = 0; i < info.Types.Count - 1; ++i)
@@ -639,7 +643,10 @@ namespace Parsley.Generator
                 line("/// </summary>");
                 line("/// <param name=\"node\">The root of the tree</param>");
                 line("/// <param name=\"state\">Anything the semantic actions need, available to them as State</param>");
+                // mapped to the grammar's type or state attribute, which it names
+                if (null != parser.EvaluateLineDirective) sb.Append(parser.EvaluateLineDirective).Append("\r\n");
                 line($"public static {parser.EvaluateReturnType} Evaluate({node} node, {parser.EvaluateStateParameter}) => {parser.EvaluatorClassName}.Evaluate(node, state);");
+                if (null != parser.EvaluateLineDirective) sb.Append("#line default\r\n");
             }
             line();
 

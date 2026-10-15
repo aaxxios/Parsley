@@ -61,7 +61,14 @@ namespace Parsley
                     GrammarReport.Write(analysis, Console.Out);
                     return;
                 }
-                options.Output.Write(CSharpSynthesizer.Synthesize(analysis));
+                // #line directives name the grammar files relative to the code file, so the code is the same on any
+                // machine; to stdout, relative to the current directory, where the output is usually redirected
+                var outFile = (options.Output as StreamWriter)?.BaseStream is FileStream ofs ? ofs.Name : null;
+                var outDir = Path.GetFullPath(null != outFile ? Path.GetDirectoryName(Path.GetFullPath(outFile)) ?? "." : ".");
+                options.Output.Write(CSharpSynthesizer.Synthesize(analysis, new SynthesisOptions
+                {
+                    LinePath = file => Path.GetRelativePath(outDir, Path.GetFullPath(file))
+                }));
                 // -s writes everything shared; -b only the base class, for a project that already has the rest
                 if (options.Shared || options.Base)
                 {

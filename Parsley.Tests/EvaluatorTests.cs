@@ -169,6 +169,42 @@ namespace Parsley.Tests
 			T.Equal("System.Text", b.Usings.Single().Namespace, "builder API");
 		}
 
+		public static void LinePragmasMapToTheGrammar()
+		{
+			// line 1: the @using, line 2: the start rule's attributes, its action's code on lines 3 to 5
+			const string text = "@using \"System.Text\"; @class \"LnParser\"; @evaluator \"LnEvaluator\";\n" +
+				"S<start, type=\"string\", state=\"StringBuilder\">= a a => {\n" +
+				"    State.Append(node.Children[0].Value);\n" +
+				"\n" +
+				"    return State.ToString() + MISSING;\n" +
+				"};\n" +
+				"a= \"a\";";
+			var a = GrammarAnalysis.Analyze(Grammar.Parse(text, "ln.xbnf"));
+			var code = CSharpSynthesizer.Synthesize(a);
+			T.Check(code.Contains("#line 1 \"ln.xbnf\"\nusing System.Text;\n#line default") || code.Contains("#line 1 \"ln.xbnf\"\r\nusing System.Text;\r\n#line default"), "a @using is mapped to its line");
+			T.Check(code.Contains("#line 2 \"ln.xbnf\""), "declarations naming the start rule's type and state are mapped to its attributes");
+			T.Check(code.Contains("#line 3 \"ln.xbnf\""), "an action is mapped from the line after its brace when nothing follows the brace");
+			// the compiler reports an error in the action at its line in the grammar, blank line included
+			var ex = _Throws(() => CompiledParser.Compile(code, "LnParser"));
+			T.Check(null != ex && ex.Message.Contains("ln.xbnf(5,"), "an error in an action is reported at its line in the grammar");
+			// and with the error fixed, it still compiles and runs
+			var fixedCode = CSharpSynthesizer.Synthesize(GrammarAnalysis.Analyze(Grammar.Parse(text.Replace(" + MISSING", ""), "ln.xbnf")));
+			var p = CompiledParser.Compile(fixedCode, "LnParser");
+			T.Equal(0, p.Diagnostics.Count, "mapped code compiles cleanly");
+			// code on the brace's line keeps the brace's line
+			var same = CSharpSynthesizer.Synthesize(GrammarAnalysis.Analyze(Grammar.Parse("S<type=\"int\">= a => { return 1; };\na= \"a\";", "same.xbnf")));
+			T.Check(same.Contains("#line 1 \"same.xbnf\"\n\t\treturn 1;") || same.Contains("#line 1 \"same.xbnf\"\r\n\t\treturn 1;"), "code on the brace's line is mapped to it");
+			// LinePath rewrites the path, and a grammar with no file gets no directives
+			var renamed = CSharpSynthesizer.Synthesize(a, new SynthesisOptions { LinePath = f => "grammars/" + f });
+			T.Check(renamed.Contains("#line 3 \"grammars/ln.xbnf\"") && !renamed.Contains("#line 3 \"ln.xbnf\""), "LinePath decides the path written");
+			T.Check(!CSharpSynthesizer.Synthesize(GrammarAnalysis.Analyze(Grammar.Parse(text))).Contains("#line"), "no directives without a grammar file");
+		}
+		static Exception? _Throws(Action action)
+		{
+			try { action(); return null; }
+			catch (Exception ex) { return ex; }
+		}
+
 		public static void UsingErrors()
 		{
 			foreach (var bad in new[] { "", "System.", ".Text", "System Text", "static System.Math", "M = System.Math", "1System", "System.Text;" })

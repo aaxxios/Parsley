@@ -51,6 +51,13 @@ namespace Parsley
 		/// The parser class of an @external grammar, by alias. Null uses <see cref="CSharpSynthesizer.DefaultExternalParser"/>.
 		/// </summary>
 		public Func<string, string>? ExternalParser { get; set; }
+		/// <summary>
+		/// The path written in the #line directives that map code copied from the grammar (semantic actions,
+		/// <c>type</c> and <c>state</c> attributes and <c>@using</c>s) back to the grammar file it came from, given
+		/// that file's path as the grammar recorded it. Null writes that path as is. Code from a grammar with no file
+		/// gets no directives.
+		/// </summary>
+		public Func<string, string>? LinePath { get; set; }
 	}
 
 	/// <summary>
@@ -74,9 +81,11 @@ namespace Parsley
 	{
 		internal SynthesizedParser(string code, IReadOnlyList<string> usings, string className, string? evaluatorClassName,
 			string? evaluateReturnType, string? evaluateStateParameter, IReadOnlyList<SynthesizedConstant> constants, ParserEngine engine,
-			bool isSubordinate, bool isCompound, bool hasLexerMode, IReadOnlyList<string> sharedEntries, IReadOnlyList<GrammarMessage> messages)
+			bool isSubordinate, bool isCompound, bool hasLexerMode, IReadOnlyList<string> sharedEntries, IReadOnlyList<GrammarMessage> messages,
+			IReadOnlyList<string> usingLines, string? evaluateLineDirective)
 		{
 			Messages = messages;
+			UsingLines = usingLines; EvaluateLineDirective = evaluateLineDirective;
 			Code = code; Usings = usings; ClassName = className; EvaluatorClassName = evaluatorClassName;
 			EvaluateReturnType = evaluateReturnType; EvaluateStateParameter = evaluateStateParameter; Constants = constants; Engine = engine;
 			IsSubordinate = isSubordinate; IsCompound = isCompound; HasLexerMode = hasLexerMode; SharedEntries = sharedEntries;
@@ -102,6 +111,17 @@ namespace Parsley
 		/// The namespaces the code imports. Written at the top of the code unless <see cref="SynthesisOptions.Nested"/>.
 		/// </summary>
 		public IReadOnlyList<string> Usings { get; }
+		/// <summary>
+		/// The lines that write <see cref="Usings"/>, with #line directives around those from the grammar's <c>@using</c>s,
+		/// which is how they're written at the top of the code unless <see cref="SynthesisOptions.Nested"/>
+		/// </summary>
+		public IReadOnlyList<string> UsingLines { get; }
+		/// <summary>
+		/// The #line directive that maps a declaration naming <see cref="EvaluateReturnType"/> and
+		/// <see cref="EvaluateStateParameter"/> to the start rule's <c>type</c> or <c>state</c> attribute, to go on the line
+		/// before it, with <c>#line default</c> on the line after. Null when there's none.
+		/// </summary>
+		public string? EvaluateLineDirective { get; }
 		public string ClassName { get; }
 		/// <summary>
 		/// The evaluator class, or null when the grammar has no semantic actions
@@ -457,6 +477,37 @@ namespace Parsley
 				return result;
 			}
 			static string _Comment(string text) => text.Replace("\r", "").Replace("\n", " ");
+
+			// a #line directive that maps the lines after it to a line of the grammar file node came from, so the
+			// compiler's errors and the debugger point at the grammar. Null for a grammar with no file, or a node
+			// with no location. Directives are written unindented.
+			string? _LineDirective(GrammarNode? node) => _LineDirective(node, node?.Line ?? 0);
+			string? _LineDirective(GrammarNode? node, int line)
+			{
+				if (null == node || 0 >= line || string.IsNullOrEmpty(node.Filename)) return null;
+				var path = null != _o.LinePath ? _o.LinePath(node.Filename!) : node.Filename!;
+				// a #line file name is read up to the next quote, with no escapes, so a path with a quote or a
+				// line break can't be written
+				if (string.IsNullOrEmpty(path) || -1 < path.IndexOfAny(new[] { '"', '\r', '\n' })) return null;
+				return $"#line {line} \"{path}\"";
+			}
+			// writes a line copied in part from the grammar, mapped to where node is in it
+			void _MappedLine(GrammarNode? node, string text)
+			{
+				var directive = _LineDirective(node);
+				if (null != directive) _sb.AppendLine(directive);
+				_Line(text);
+				if (null != directive) _sb.AppendLine("#line default");
+			}
+			void _MappedOpen(GrammarNode? node, string text)
+			{
+				_MappedLine(node, text);
+				_Line("{");
+				++_indent;
+			}
+			// where a declaration naming the start production's type and state type comes from: its type attribute,
+			// or its state attribute when it has no type
+			static GrammarNode? _TypeSource(Production p) => p.Attributes.Find("type") ?? p.Attributes.Find("state");
 			#endregion
 
 			#region Tests on the current token
@@ -520,21 +571,32 @@ namespace Parsley
 			// the grammar's tokens come from a lexer controller, which needs to know about its islands and other lexers
 			bool _HasLexerMode => _a.Grammar.IsCompound || _a.Grammar.SharedProductions.Any();
 
-			List<string> _Usings()
+			List<string> _Usings() => _UsingSources().Select(u => u.Namespace).ToList();
+			// the usings, each with the @using it comes from, if any
+			List<(string Namespace, UsingDirective? Source)> _UsingSources()
 			{
 				var g = _a.Grammar;
-				var usings = new List<string>();
-				if (null != _evaluatorName) usings.Add("System");
-				usings.Add("System.Collections.Generic");
-				usings.Add("Parsley.Runtime");
+				var usings = new List<(string Namespace, UsingDirective? Source)>();
+				if (null != _evaluatorName) usings.Add(("System", null));
+				usings.Add(("System.Collections.Generic", null));
+				usings.Add(("Parsley.Runtime", null));
 				// @using is for semantic actions, so it only applies when there's an evaluator; validation warns
 				// otherwise. One the file already has is skipped.
 				if (null != _evaluatorName)
 					foreach (var u in g.Usings)
-						if (!usings.Contains(u.Namespace))
-							usings.Add(u.Namespace);
+						if (!usings.Any(x => x.Namespace == u.Namespace))
+							usings.Add((u.Namespace, u));
 				return usings;
 			}
+			// the lines that write the usings, each from the grammar mapped to its @using
+			List<string> _UsingLines() => _Capture(() =>
+			{
+				var saved = _indent;
+				_indent = 0;
+				foreach (var (ns, source) in _UsingSources())
+					_MappedLine(source, $"using {ns};");
+				_indent = saved;
+			}).Replace("\r\n", "\n").Split('\n').Where(l => 0 < l.Length).ToList();
 
 			public SynthesizedParser Result(string code)
 			{
@@ -546,7 +608,8 @@ namespace Parsley
 					null != _evaluatorName ? start.Type ?? "object" : null,
 					null != _evaluatorName ? (null == start.StateType ? "object? state = null" : $"{start.StateType} state") : null,
 					constants, _engine, _a.Grammar.IsSubordinate, _a.Grammar.IsCompound, _HasLexerMode,
-					_a.Grammar.SharedProductions.Select(p => "TryParse" + _Ident(p.Name)).ToList(), Messages);
+					_a.Grammar.SharedProductions.Select(p => "TryParse" + _Ident(p.Name)).ToList(), Messages,
+					_UsingLines(), null != _evaluatorName ? _LineDirective(_TypeSource(start)) : null);
 			}
 
 			void _Header(string source)
@@ -557,8 +620,8 @@ namespace Parsley
 				_Line("// add members in another part of this partial class instead.");
 				_Line("// </auto-generated>");
 				_Line("#nullable enable");
-				foreach (var u in _Usings())
-					_Line($"using {u};");
+				foreach (var u in _UsingLines())
+					_Line(u);
 				_Line();
 				var ns = _o.Namespace ?? g.Namespace;
 				if (null != ns)
@@ -827,16 +890,17 @@ namespace Parsley
 				_Line("/// <summary>");
 				_Line("/// The state passed to Evaluate, for the semantic actions to use");
 				_Line("/// </summary>");
-				_Line($"protected {stateType} State {{ get; }}");
+				var stateSource = start.Attributes.Find("state");
+				_MappedLine(stateSource, $"protected {stateType} State {{ get; }}");
 				_Line();
-				_Line($"protected {_evaluatorName}({stateType} state) {{ State = state; }}");
+				_MappedLine(stateSource, $"protected {_evaluatorName}({stateType} state) {{ State = state; }}");
 				_Line();
 				_Line("/// <summary>");
 				_Line($"/// Evaluates a parse tree from <see cref=\"{_className}\"/>, starting at its {g.StartSymbol} root");
 				_Line("/// </summary>");
 				_Line("/// <param name=\"node\">The root of the tree</param>");
 				_Line("/// <param name=\"state\">Anything the semantic actions need, available to them as State</param>");
-				_Open($"public static {startType} Evaluate(ParseNode node, {stateParam})");
+				_MappedOpen(_TypeSource(start), $"public static {startType} Evaluate(ParseNode node, {stateParam})");
 				if (g.SharedProductions.Any(p => p != start))
 				{
 					// a tree can also be an island's, rooted at one of the shared productions
@@ -888,7 +952,7 @@ namespace Parsley
 					_Line();
 					var written = p.Operators?.Text ?? (null != p.OperatorOwner ? p.OperatorOwner.Forms.First(f => f.Production == p).Text + ";" : null) ?? XbnfWriter.Write(p, false);
 					_Line($"// {_Comment(written)}");
-					_Open($"protected {type} {_EvaluateName(p.Name)}(ParseNode node)");
+					_MappedOpen(p.Attributes.Find("type"), $"protected {type} {_EvaluateName(p.Name)}(ParseNode node)");
 					if (null != p.Operators)
 					{
 						// nodes of an operator form with an action of its own go to it; the rest are evaluated here
@@ -930,7 +994,9 @@ namespace Parsley
 			}
 
 			// the action's code, re-indented to sit in its method. code with a string literal that spans
-			// lines goes in exactly as written, because re-indenting it would change the string
+			// lines goes in exactly as written, because re-indenting it would change the string. Either way it's
+			// mapped to its lines in the grammar with #line, which counts from the line of the opening brace, and
+			// every line of the action is written, blank ones included, so they stay in step
 			void _ActionBody(SemanticAction action)
 			{
 				if (action.HasMultilineLiteral)
@@ -938,12 +1004,16 @@ namespace Parsley
 					// a blank line right after the opening brace or right before the closing one can't be
 					// inside a string, so those can go
 					var code = action.Code;
+					var line = action.Line;
 					var nl = code.IndexOf('\n');
-					if (-1 < nl && 0 == code.Substring(0, nl).Trim().Length) code = code.Substring(nl + 1);
+					if (-1 < nl && 0 == code.Substring(0, nl).Trim().Length) { code = code.Substring(nl + 1); ++line; }
 					nl = code.LastIndexOf('\n');
 					if (-1 < nl && 0 == code.Substring(nl + 1).Trim().Length) code = code.Substring(0, nl + 1);
+					var mapped = _LineDirective(action, line);
+					if (null != mapped) _sb.AppendLine(mapped);
 					_sb.Append(code);
 					if (!code.EndsWith("\n")) _sb.AppendLine();
+					if (null != mapped) _sb.AppendLine("#line default");
 					return;
 				}
 				var lines = action.Code.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
@@ -952,6 +1022,8 @@ namespace Parsley
 				lines.RemoveAt(0);
 				while (0 < lines.Count && 0 == lines[lines.Count - 1].Trim().Length)
 					lines.RemoveAt(lines.Count - 1);
+				var directive = _LineDirective(action, 0 < first.Length ? action.Line : action.Line + 1);
+				if (null != directive) _sb.AppendLine(directive);
 				if (0 < first.Length) _Line(first);
 				string? common = null;
 				foreach (var line in lines)
@@ -965,6 +1037,7 @@ namespace Parsley
 				}
 				foreach (var line in lines)
 					_Line(0 == line.Trim().Length ? "" : line.Substring(common!.Length).TrimEnd());
+				if (null != directive) _sb.AppendLine("#line default");
 			}
 			#endregion
 
