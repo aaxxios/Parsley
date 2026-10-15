@@ -24,7 +24,7 @@ https://marketplace.visualstudio.com/items?itemName=honey-the-codewitch.parsley-
 ```
 parsley
 
-Usage: parsley [<grammar-file>] [--lexer <lexer-file>] [--output <code-file>] [--shared] [--base] [--engine <engine>]
+Usage: parsley [<grammar-file>] [--lexer <lexer-file>] [--output <code-file>] [--shared] [--base] [--engine <engine>] [--no-lines]
 
     <grammar-file>            The path to the XBNF grammar input file. Defaults to <stdin>.
     -l, --lexer <lexer-file>  The lexer output file to generate. Terminals from other lexers (lexer=Name) go in files beside it.
@@ -33,6 +33,7 @@ Usage: parsley [<grammar-file>] [--lexer <lexer-file>] [--output <code-file>] [-
     -b, --base                Generate only the parser base class for the grammar's engine.
     -e, --engine <engine>     auto (the default), ll1, llk or allstar.
     -r, --report              Write a report on the grammar instead of a parser.
+    -n, --no-lines            Omit the #line directives that map the generated code back to the grammar.
 ```
 
 `-r` writes a plain text report to stdout instead of a parser. It covers:
@@ -49,6 +50,7 @@ It can't be combined with `-o`, `-l`, `-s` or `-b`. `GrammarReport.Create(analys
 - The output code file is a C# class that derives from the base class for its engine (`LL1ParserBase`, `LLkParserBase` or `AllStarParserBase`) and has a `Parse()` method returning a `ParseNode`. It may also generate an evaluator class with an `Evaluate()` method if semantic actions are present.
 - The shared runtime file is `ParsleyRuntime.cs`, which contains `Token`, `LookAheadEnumerator`, `ParseNode`, `ParseError`, `ParserTables`, the abstract `ParserBase` that holds what every engine shares (tree building, error reporting and recovery), and the `LexerController` that lexes grammars with islands. Each engine's base class is its own file: `LL1ParserBase.cs`, `LLkParserBase.cs` or `AllStarParserBase.cs`.
 - `-s` writes `ParsleyRuntime.cs` and the engine's base class file. `-b` writes only the base class file, for a project that already has `ParsleyRuntime.cs` from another parser. A project with parsers on different engines needs `-s` once, then `-b` for each engine it adds. Both write next to the grammar file, or in the current directory if the grammar comes from stdin.
+- The output code maps the code copied from the grammar (semantic actions, `@using`s, types) back to it with `#line` directives, so compiler errors and the debugger point at the grammar, and the Visual Studio extension can offer C# IntelliSense in semantic actions. Their paths are relative to the output file, or to the current directory when writing to stdout. A grammar read from stdin has no file to point at, so it gets none. `-n` leaves them out, for stepping through the generated C# instead.
 
 ## Engines
 

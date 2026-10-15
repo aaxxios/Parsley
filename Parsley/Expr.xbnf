@@ -1,4 +1,4 @@
-﻿// Arithmetic expressions with the usual precedence, lowest first:
+// Arithmetic expressions with the usual precedence, lowest first:
 //   + -        left associative
 //   * / %      left associative
 //   unary -    so -2 * 3 is (-2) * 3
@@ -9,7 +9,7 @@
 @evaluator "ExprEvaluator";
 
 // Expr is either Expr add Term (left, op, right) or a lone Term
-Expr<start, type="double">= Expr add Term | Expr sub Term | Term => {
+Expr<start, type="double">= Term { add Term | sub Term } => {
     if (1 == node.Children.Count)
         return EvaluateTerm(node.Children[0]);
     var left = EvaluateExpr(node.Children[0]);

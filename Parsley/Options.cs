@@ -1,4 +1,4 @@
-﻿using Cli;
+using Cli;
 
 using System;
 using System.IO;
@@ -21,5 +21,7 @@ internal partial class Options
     public ParserEngine Engine = ParserEngine.Auto;
     [CmdArg(ShortName = 'r', Description = "Write a report on the grammar to <stdout> instead of a parser: the engine it needs and why, its decisions and lookahead, and the size of the synthesized code.", ValueName = "report", Required = false)]
     public bool Report = false;
+    [CmdArg(ShortName = 'n', Description = "Omit the #line directives that map the generated code back to the grammar. Compiler errors and the debugger then point at the generated C#, and C# IntelliSense in semantic actions can't find the code.", Name ="no-lines", ValueName = "no-lines", Required = false)]
+    public bool NoLines = false;
 
 }

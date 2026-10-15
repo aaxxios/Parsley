@@ -32,6 +32,8 @@
     <IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>
     <IncludeDebugSymbolsInVSIXContainer>true</IncludeDebugSymbolsInVSIXContainer>
     <IncludeDebugSymbolsInLocalVSIXDeployment>false</IncludeDebugSymbolsInLocalVSIXDeployment>
+    <!-- everything the extension references, Roslyn included, is Visual Studio's own, so none of it is packed -->
+    <IncludeCopyLocalReferencesInVSIXContainer>false</IncludeCopyLocalReferencesInVSIXContainer>
     <CopyBuildOutputToOutputDirectory>true</CopyBuildOutputToOutputDirectory>
     <CopyOutputSymbolsToOutputDirectory>true</CopyOutputSymbolsToOutputDirectory>
     <StartAction>Program</StartAction>
@@ -60,6 +62,13 @@
     <Compile Include="XbnfLanguageClient.cs" />
     <Compile Include="DecisionHintService.cs" />
     <Compile Include="DecisionGlyphs.cs" />
+    <!-- C# completion and quick info in semantic actions, from Visual Studio's C# workspace -->
+    <Compile Include="ActionCode.cs" />
+    <Compile Include="ActionIntellisense.cs" />
+    <!-- the language server's tokenizer, to find the actions -->
+    <Compile Include="..\Parsley.LanguageServer\XbnfScanner.cs">
+      <Link>XbnfScanner.cs</Link>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -94,10 +103,14 @@
     <!-- Visual Studio supplies these at run time -->
     <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.8.37222" ExcludeAssets="runtime" />
     <PackageReference Include="Microsoft.VisualStudio.LanguageServer.Client" Version="17.8.36" ExcludeAssets="runtime" />
+    <!-- Roslyn, as Visual Studio 17.8 has it: the C# workspace, and completion and quick info over it -->
+    <PackageReference Include="Microsoft.VisualStudio.LanguageServices" Version="4.8.0" ExcludeAssets="runtime" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Features" Version="4.8.0" ExcludeAssets="runtime" />
     <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2142">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" ExcludeAssets="runtime" />
   </ItemGroup>
   <!-- the language server: built first, then packed into the VSIX's server folder -->
   <ItemGroup>

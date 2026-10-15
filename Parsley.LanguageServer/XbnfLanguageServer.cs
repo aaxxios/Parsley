@@ -376,16 +376,31 @@ namespace Parsley.LanguageServer
             var pos = (JsonObject)p["position"]!;
             var offset = doc.ToOffset((int)pos["line"]!, (int)pos["character"]!);
             var t = doc.Scan.TokenAt(offset);
-            // at the end of one token and the start of the next, prefer the identifier
+            // at the end of one token and the start of the next, prefer the identifier, or the literal or pattern
             if (null != t && t.Kind != TokenKind.Identifier && t.End == offset)
             {
                 var after = doc.Scan.TokenAt(offset + 1);
-                if (null != after && after.Kind == TokenKind.Identifier && after.Start == offset) t = after;
+                if (null != after && after.Start == offset && (after.Kind == TokenKind.Identifier || (!_IsQuoted(t) && _IsQuoted(after)))) t = after;
             }
             return (doc, t);
         }
 
         static bool _IsRuleName(Token? t) => null != t && t.Kind == TokenKind.Identifier && (t.Role == IdentifierRole.Definition || t.Role == IdentifierRole.Reference);
+        static bool _IsQuoted(Token? t) => null != t && (t.Kind == TokenKind.Literal || t.Kind == TokenKind.Pattern);
+
+        // the rule a token names: a rule name as written, or for a "literal" or 'pattern' in a rule, the terminal
+        // declared with the same text, which is what the reader resolves it to. Null for anything else, including a
+        // literal with no declaration, since that's an implicit terminal with nowhere to go.
+        string? _SymbolName(Document doc, Token? t)
+        {
+            if (_IsRuleName(t)) return t!.Text;
+            if (!_IsQuoted(t)) return null;
+            return doc.LiteralTargets(_docs.ReadForImport).TryGetValue(t!.Start, out var name) ? name : null;
+        }
+
+        // a "literal" or 'pattern' in a rule that has no declaration of its own
+        bool _IsImplicitLiteral(Document doc, Token? t) =>
+            _IsQuoted(t) && doc.LiteralTargets(_docs.ReadForImport).TryGetValue(t!.Start, out var name) && null == name;
 
         // definitions of a name across the grammar and what it imports; the first wins, as in the reader
         List<(Document Doc, Token Token)> _FindDefinitions(Document doc, string name)
@@ -402,8 +417,9 @@ namespace Parsley.LanguageServer
         JsonNode? _Definition(JsonObject p)
         {
             var (doc, t) = _At(p);
-            if (!_IsRuleName(t)) return null;
-            var defs = _FindDefinitions(doc, t!.Text);
+            var name = _SymbolName(doc, t);
+            if (null == name) return null;
+            var defs = _FindDefinitions(doc, name);
             if (0 == defs.Count) return null;
             var arr = new JsonArray();
             foreach (var (d, def) in defs) arr.Add(_Location(d, def.Start, def.End));
@@ -413,12 +429,14 @@ namespace Parsley.LanguageServer
         JsonNode? _References(JsonObject p)
         {
             var (doc, t) = _At(p);
-            if (!_IsRuleName(t)) return null;
+            var name = _SymbolName(doc, t);
+            if (null == name) return null;
             var includeDeclaration = (bool?)p["context"]?["includeDeclaration"] ?? true;
             var arr = new JsonArray();
+            // the rule's name wherever it's written, and the literals and patterns that resolve to it
             foreach (var d in _docs.Related(doc))
                 foreach (var tok in d.Scan.Tokens)
-                    if (_IsRuleName(tok) && tok.Text == t!.Text && (includeDeclaration || tok.Role != IdentifierRole.Definition))
+                    if ((includeDeclaration || tok.Role != IdentifierRole.Definition) && name == _SymbolName(d, tok))
                         arr.Add(_Location(d, tok.Start, tok.End));
             return arr;
         }
@@ -426,10 +444,11 @@ namespace Parsley.LanguageServer
         JsonNode? _Highlights(JsonObject p)
         {
             var (doc, t) = _At(p);
-            if (!_IsRuleName(t)) return null;
+            var name = _SymbolName(doc, t);
+            if (null == name) return null;
             var arr = new JsonArray();
             foreach (var tok in doc.Scan.Tokens)
-                if (_IsRuleName(tok) && tok.Text == t!.Text)
+                if (name == _SymbolName(doc, tok))
                     arr.Add(new JsonObject { ["range"] = doc.Range(tok.Start, tok.End), ["kind"] = tok.Role == IdentifierRole.Definition ? 3 : 2 });
             return arr;
         }
@@ -441,25 +460,29 @@ namespace Parsley.LanguageServer
             var (doc, t) = _At(p);
             if (null == t) return null;
             string? markdown = null;
-            if (_IsRuleName(t))
+            var name = _SymbolName(doc, t);
+            if (null != name)
             {
-                var defs = _FindDefinitions(doc, t.Text);
+                var defs = _FindDefinitions(doc, name);
                 if (0 < defs.Count)
                 {
                     markdown = _RuleHover(defs[0].Doc, defs[0].Token, doc);
-                    var kind = _RuleKind(defs[0].Doc, t.Text);
+                    var kind = _RuleKind(defs[0].Doc, name);
                     if (null != kind) markdown += "\n\n" + kind;
                 }
-                else markdown = $"`{t.Text}` isn't defined";
+                else markdown = $"`{name}` isn't defined";
             }
+            else if (_IsImplicitLiteral(doc, t))
+                markdown = "*An implicit terminal: nothing declares this text, so it's a terminal of its own. Declare it, as in* `name= " + t.Text + ";`*, to name it or give it attributes.*";
             else if (t.Kind == TokenKind.Identifier && t.Role == IdentifierRole.AttributeName && XbnfKnowledge.Attributes.TryGetValue(t.Text, out var attr))
                 markdown = $"**{t.Text}** — {attr}";
             else if (t.Kind == TokenKind.Directive && XbnfKnowledge.Directives.TryGetValue(t.Text.Substring(1), out var dir))
                 markdown = $"**{t.Text}** — {dir}";
             // a decision that starts here and needs more than one token: what the glyph says, for editors that
-            // don't show it
-            foreach (var h in _HintsAt(doc, t.Start))
-                markdown = (null == markdown ? "" : markdown + "\n\n---\n\n") + h.Tooltip;
+            // don't show it. One that shows the glyph shows this as the glyph's tooltip already.
+            if (!_inlayHints && !_customHints)
+                foreach (var h in _HintsAt(doc, t.Start))
+                    markdown = (null == markdown ? "" : markdown + "\n\n---\n\n") + h.Tooltip;
             if (null == markdown) return null;
             return new JsonObject
             {

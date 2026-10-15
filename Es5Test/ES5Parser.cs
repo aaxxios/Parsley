@@ -1774,7 +1774,8 @@ public partial class ES5Parser : LLkParserBase
 	}
 
 	// Statement: Block | FunctionDeclaration | VariableStatement | EmptyStatement | IfStatement | IterationStatement | ContinueStatement | BreakStatement | ReturnStatement | WithStatement | SwitchStatement | ThrowStatement | TryStatement | DebuggerStatement | LabelledStatement | ExpressionStatement
-	// looks 4 tokens ahead and returns which alternative, or -1 if nothing matches
+	// looks 4 tokens ahead and returns which alternative. On input none matches, the one that matched the most,
+	// so it reports the error where the input goes wrong, or -1 if none matches the first token
 	int PredictStatement1()
 	{
 		switch (Current.SymbolId)
@@ -1833,7 +1834,7 @@ public partial class ES5Parser : LLkParserBase
 					case lparen:
 						return 15;
 				}
-				break;
+				return 1;
 			case identifier:
 				switch (Peek(1).SymbolId)
 				{
@@ -1918,7 +1919,7 @@ public partial class ES5Parser : LLkParserBase
 					case EndOfInput:
 						return 15;
 				}
-				break;
+				return 14;
 			case lbrace:
 				switch (Peek(1).SymbolId)
 				{
@@ -2012,7 +2013,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -2021,9 +2022,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case @continue:
 						switch (Peek(2).SymbolId)
 						{
@@ -2087,7 +2088,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -2096,9 +2097,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case debugger:
 						switch (Peek(2).SymbolId)
 						{
@@ -2162,7 +2163,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -2171,9 +2172,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case delete:
 						switch (Peek(2).SymbolId)
 						{
@@ -2230,7 +2231,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @do:
 						switch (Peek(2).SymbolId)
 						{
@@ -2292,7 +2293,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -2303,7 +2304,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -2313,7 +2314,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -2322,7 +2323,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -2331,9 +2332,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case @for:
 						switch (Peek(2).SymbolId)
 						{
@@ -2381,7 +2382,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case function:
 						switch (Peek(2).SymbolId)
 						{
@@ -2429,7 +2430,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @if:
 						switch (Peek(2).SymbolId)
 						{
@@ -2477,7 +2478,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @new:
 						switch (Peek(2).SymbolId)
 						{
@@ -2528,7 +2529,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @return:
 						switch (Peek(2).SymbolId)
 						{
@@ -2592,7 +2593,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -2601,9 +2602,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case @switch:
 						switch (Peek(2).SymbolId)
 						{
@@ -2651,7 +2652,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @this:
 						switch (Peek(2).SymbolId)
 						{
@@ -2749,7 +2750,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -2758,9 +2759,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case @throw:
 						switch (Peek(2).SymbolId)
 						{
@@ -2817,7 +2818,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @try:
 						switch (Peek(2).SymbolId)
 						{
@@ -2865,7 +2866,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @typeof:
 						switch (Peek(2).SymbolId)
 						{
@@ -2922,7 +2923,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case var:
 						switch (Peek(2).SymbolId)
 						{
@@ -2969,7 +2970,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @void:
 						switch (Peek(2).SymbolId)
 						{
@@ -3026,7 +3027,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @while:
 						switch (Peek(2).SymbolId)
 						{
@@ -3074,7 +3075,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case with:
 						switch (Peek(2).SymbolId)
 						{
@@ -3122,7 +3123,7 @@ public partial class ES5Parser : LLkParserBase
 							case colon:
 								return 15;
 						}
-						break;
+						return 0;
 					case @null:
 						switch (Peek(2).SymbolId)
 						{
@@ -3220,7 +3221,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -3229,9 +3230,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case @true:
 						switch (Peek(2).SymbolId)
 						{
@@ -3329,7 +3330,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -3338,9 +3339,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case @false:
 						switch (Peek(2).SymbolId)
 						{
@@ -3438,7 +3439,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -3447,9 +3448,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case identifier:
 						switch (Peek(2).SymbolId)
 						{
@@ -3547,7 +3548,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -3556,9 +3557,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case numeric_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -3656,7 +3657,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -3665,9 +3666,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case string_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -3765,7 +3766,7 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -3774,9 +3775,9 @@ public partial class ES5Parser : LLkParserBase
 									case lparen:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 					case rbrace:
 						switch (Peek(2).SymbolId)
 						{
@@ -3884,7 +3885,7 @@ public partial class ES5Parser : LLkParserBase
 									case rparen:
 										return 15;
 								}
-								break;
+								return 0;
 							case semi:
 								switch (Peek(3).SymbolId)
 								{
@@ -3932,7 +3933,7 @@ public partial class ES5Parser : LLkParserBase
 									case @else:
 										return 15;
 								}
-								break;
+								return 0;
 							case inc:
 								switch (Peek(3).SymbolId)
 								{
@@ -4015,7 +4016,7 @@ public partial class ES5Parser : LLkParserBase
 									case EndOfInput:
 										return 15;
 								}
-								break;
+								return 0;
 							case dec:
 								switch (Peek(3).SymbolId)
 								{
@@ -4098,17 +4099,18 @@ public partial class ES5Parser : LLkParserBase
 									case EndOfInput:
 										return 15;
 								}
-								break;
+								return 0;
 						}
-						break;
+						return 0;
 				}
-				break;
+				return 0;
 		}
 		return -1;
 	}
 
 	// ContinueStatement: [ Identifier ]<policy="greedy">
-	// looks 4 tokens ahead and returns 0 to take it, 1 to skip it, or -1 if nothing matches
+	// looks 4 tokens ahead and returns 0 to take it, 1 to skip it. On input none matches, the one that matched the most,
+	// so it reports the error where the input goes wrong, or -1 if none matches the first token
 	int PredictContinueStatement1()
 	{
 		switch (Current.SymbolId)
@@ -4263,7 +4265,7 @@ public partial class ES5Parser : LLkParserBase
 							case rparen:
 								return 1;
 						}
-						break;
+						return 1;
 					case inc:
 						switch (Peek(2).SymbolId)
 						{
@@ -4425,7 +4427,7 @@ public partial class ES5Parser : LLkParserBase
 									case colon:
 										return 1;
 								}
-								break;
+								return 1;
 							case lbrace:
 								switch (Peek(3).SymbolId)
 								{
@@ -4483,9 +4485,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case dec:
 						switch (Peek(2).SymbolId)
 						{
@@ -4647,7 +4649,7 @@ public partial class ES5Parser : LLkParserBase
 									case colon:
 										return 1;
 								}
-								break;
+								return 1;
 							case lbrace:
 								switch (Peek(3).SymbolId)
 								{
@@ -4705,17 +4707,18 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 				}
-				break;
+				return 1;
 		}
 		return -1;
 	}
 
 	// BreakStatement: [ Identifier ]<policy="greedy">
-	// looks 4 tokens ahead and returns 0 to take it, 1 to skip it, or -1 if nothing matches
+	// looks 4 tokens ahead and returns 0 to take it, 1 to skip it. On input none matches, the one that matched the most,
+	// so it reports the error where the input goes wrong, or -1 if none matches the first token
 	int PredictBreakStatement1()
 	{
 		switch (Current.SymbolId)
@@ -4870,7 +4873,7 @@ public partial class ES5Parser : LLkParserBase
 							case rparen:
 								return 1;
 						}
-						break;
+						return 1;
 					case inc:
 						switch (Peek(2).SymbolId)
 						{
@@ -5032,7 +5035,7 @@ public partial class ES5Parser : LLkParserBase
 									case colon:
 										return 1;
 								}
-								break;
+								return 1;
 							case lbrace:
 								switch (Peek(3).SymbolId)
 								{
@@ -5090,9 +5093,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case dec:
 						switch (Peek(2).SymbolId)
 						{
@@ -5254,7 +5257,7 @@ public partial class ES5Parser : LLkParserBase
 									case colon:
 										return 1;
 								}
-								break;
+								return 1;
 							case lbrace:
 								switch (Peek(3).SymbolId)
 								{
@@ -5312,17 +5315,18 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 				}
-				break;
+				return 1;
 		}
 		return -1;
 	}
 
 	// ReturnStatement: [ Expression ]<policy="greedy">
-	// looks 4 tokens ahead and returns 0 to take it, 1 to skip it, or -1 if nothing matches
+	// looks 4 tokens ahead and returns 0 to take it, 1 to skip it. On input none matches, the one that matched the most,
+	// so it reports the error where the input goes wrong, or -1 if none matches the first token
 	int PredictReturnStatement1()
 	{
 		switch (Current.SymbolId)
@@ -5452,7 +5456,7 @@ public partial class ES5Parser : LLkParserBase
 					case colon:
 						return 1;
 				}
-				break;
+				return 1;
 			case lbrace:
 				switch (Peek(1).SymbolId)
 				{
@@ -5564,7 +5568,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -5608,7 +5612,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -5652,7 +5656,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -5681,7 +5685,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -5724,7 +5728,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -5733,7 +5737,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -5753,7 +5757,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -5797,7 +5801,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -5877,7 +5881,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -5906,7 +5910,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -5915,7 +5919,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -5944,7 +5948,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -5953,7 +5957,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -5982,7 +5986,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -6062,7 +6066,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -6142,7 +6146,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -6222,7 +6226,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -6303,7 +6307,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -6383,7 +6387,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -6463,9 +6467,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @continue:
 						switch (Peek(2).SymbolId)
 						{
@@ -6546,7 +6550,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -6590,7 +6594,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -6634,7 +6638,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -6663,7 +6667,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -6706,7 +6710,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -6715,7 +6719,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -6735,7 +6739,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -6779,7 +6783,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -6859,7 +6863,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -6888,7 +6892,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -6897,7 +6901,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -6926,7 +6930,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -6935,7 +6939,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -6964,7 +6968,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -7044,7 +7048,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -7124,7 +7128,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -7204,7 +7208,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -7285,7 +7289,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -7365,7 +7369,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -7445,9 +7449,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case debugger:
 						switch (Peek(2).SymbolId)
 						{
@@ -7528,7 +7532,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -7572,7 +7576,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -7616,7 +7620,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -7645,7 +7649,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -7688,7 +7692,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -7697,7 +7701,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -7717,7 +7721,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -7761,7 +7765,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -7841,7 +7845,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -7870,7 +7874,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -7879,7 +7883,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -7908,7 +7912,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -7917,7 +7921,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -7946,7 +7950,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -8026,7 +8030,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -8106,7 +8110,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -8186,7 +8190,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -8267,7 +8271,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -8347,7 +8351,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -8427,9 +8431,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case delete:
 						switch (Peek(2).SymbolId)
 						{
@@ -8501,7 +8505,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -8510,7 +8514,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -8530,7 +8534,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -8610,7 +8614,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -8639,7 +8643,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -8668,7 +8672,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -8748,7 +8752,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -8828,7 +8832,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -8908,7 +8912,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -8988,7 +8992,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -9068,7 +9072,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -9148,9 +9152,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @do:
 						switch (Peek(2).SymbolId)
 						{
@@ -9197,7 +9201,7 @@ public partial class ES5Parser : LLkParserBase
 									case semi:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -9208,7 +9212,7 @@ public partial class ES5Parser : LLkParserBase
 									case semi:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -9218,7 +9222,7 @@ public partial class ES5Parser : LLkParserBase
 									case semi:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -9247,7 +9251,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -9290,7 +9294,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -9299,7 +9303,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -9319,7 +9323,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -9350,7 +9354,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -9401,7 +9405,7 @@ public partial class ES5Parser : LLkParserBase
 									case div_assign:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -9430,7 +9434,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -9439,7 +9443,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -9468,7 +9472,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -9477,7 +9481,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -9506,7 +9510,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -9557,7 +9561,7 @@ public partial class ES5Parser : LLkParserBase
 									case div_assign:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -9608,7 +9612,7 @@ public partial class ES5Parser : LLkParserBase
 									case div_assign:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -9659,7 +9663,7 @@ public partial class ES5Parser : LLkParserBase
 									case div_assign:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -9711,7 +9715,7 @@ public partial class ES5Parser : LLkParserBase
 									case div_assign:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -9762,7 +9766,7 @@ public partial class ES5Parser : LLkParserBase
 									case div_assign:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -9813,9 +9817,9 @@ public partial class ES5Parser : LLkParserBase
 									case div_assign:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @for:
 						switch (Peek(2).SymbolId)
 						{
@@ -9863,7 +9867,7 @@ public partial class ES5Parser : LLkParserBase
 							case lparen:
 								return 1;
 						}
-						break;
+						return 1;
 					case function:
 						switch (Peek(2).SymbolId)
 						{
@@ -9911,7 +9915,7 @@ public partial class ES5Parser : LLkParserBase
 							case lparen:
 								return 1;
 						}
-						break;
+						return 1;
 					case @if:
 						switch (Peek(2).SymbolId)
 						{
@@ -9959,7 +9963,7 @@ public partial class ES5Parser : LLkParserBase
 							case lparen:
 								return 1;
 						}
-						break;
+						return 1;
 					case @new:
 						switch (Peek(2).SymbolId)
 						{
@@ -10008,7 +10012,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -10028,7 +10032,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -10108,7 +10112,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -10188,7 +10192,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -10268,7 +10272,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -10348,7 +10352,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -10428,7 +10432,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -10508,7 +10512,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -10588,9 +10592,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @return:
 						switch (Peek(2).SymbolId)
 						{
@@ -10671,7 +10675,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -10715,7 +10719,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -10759,7 +10763,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -10788,7 +10792,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -10831,7 +10835,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -10840,7 +10844,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -10860,7 +10864,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -10904,7 +10908,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -10984,7 +10988,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -11013,7 +11017,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -11022,7 +11026,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -11051,7 +11055,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -11060,7 +11064,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -11089,7 +11093,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -11169,7 +11173,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -11249,7 +11253,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -11329,7 +11333,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -11410,7 +11414,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -11490,7 +11494,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -11570,9 +11574,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @switch:
 						switch (Peek(2).SymbolId)
 						{
@@ -11620,7 +11624,7 @@ public partial class ES5Parser : LLkParserBase
 							case lparen:
 								return 1;
 						}
-						break;
+						return 1;
 					case @this:
 						switch (Peek(2).SymbolId)
 						{
@@ -11733,7 +11737,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -11777,7 +11781,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -11821,7 +11825,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -11850,7 +11854,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -11893,7 +11897,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -11902,7 +11906,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @in:
 								switch (Peek(3).SymbolId)
 								{
@@ -11931,7 +11935,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case instanceof:
 								switch (Peek(3).SymbolId)
 								{
@@ -11960,7 +11964,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -11980,7 +11984,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -12024,7 +12028,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -12104,7 +12108,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -12133,7 +12137,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -12142,7 +12146,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -12171,7 +12175,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -12180,7 +12184,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -12209,7 +12213,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -12289,7 +12293,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -12369,7 +12373,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -12449,7 +12453,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -12530,7 +12534,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -12610,7 +12614,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -12690,9 +12694,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @throw:
 						switch (Peek(2).SymbolId)
 						{
@@ -12764,7 +12768,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -12773,7 +12777,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -12793,7 +12797,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -12873,7 +12877,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -12902,7 +12906,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -12931,7 +12935,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -13011,7 +13015,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -13091,7 +13095,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -13171,7 +13175,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -13251,7 +13255,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -13331,7 +13335,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -13411,9 +13415,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @try:
 						switch (Peek(2).SymbolId)
 						{
@@ -13461,7 +13465,7 @@ public partial class ES5Parser : LLkParserBase
 							case lbrace:
 								return 1;
 						}
-						break;
+						return 1;
 					case @typeof:
 						switch (Peek(2).SymbolId)
 						{
@@ -13533,7 +13537,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -13542,7 +13546,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -13562,7 +13566,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -13642,7 +13646,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -13671,7 +13675,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -13700,7 +13704,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -13780,7 +13784,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -13860,7 +13864,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -13940,7 +13944,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -14020,7 +14024,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -14100,7 +14104,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -14180,9 +14184,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case var:
 						switch (Peek(2).SymbolId)
 						{
@@ -14271,9 +14275,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @void:
 						switch (Peek(2).SymbolId)
 						{
@@ -14345,7 +14349,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -14354,7 +14358,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -14374,7 +14378,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -14454,7 +14458,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -14483,7 +14487,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -14512,7 +14516,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -14592,7 +14596,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -14672,7 +14676,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -14752,7 +14756,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -14832,7 +14836,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -14912,7 +14916,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -14992,9 +14996,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @while:
 						switch (Peek(2).SymbolId)
 						{
@@ -15042,7 +15046,7 @@ public partial class ES5Parser : LLkParserBase
 							case lparen:
 								return 1;
 						}
-						break;
+						return 1;
 					case with:
 						switch (Peek(2).SymbolId)
 						{
@@ -15090,7 +15094,7 @@ public partial class ES5Parser : LLkParserBase
 							case lparen:
 								return 1;
 						}
-						break;
+						return 1;
 					case @null:
 						switch (Peek(2).SymbolId)
 						{
@@ -15203,7 +15207,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -15247,7 +15251,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -15291,7 +15295,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -15320,7 +15324,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -15363,7 +15367,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -15372,7 +15376,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @in:
 								switch (Peek(3).SymbolId)
 								{
@@ -15401,7 +15405,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case instanceof:
 								switch (Peek(3).SymbolId)
 								{
@@ -15430,7 +15434,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -15450,7 +15454,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -15494,7 +15498,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -15574,7 +15578,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -15603,7 +15607,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -15612,7 +15616,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -15641,7 +15645,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -15650,7 +15654,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -15679,7 +15683,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -15759,7 +15763,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -15839,7 +15843,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -15919,7 +15923,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -16000,7 +16004,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -16080,7 +16084,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -16160,9 +16164,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @true:
 						switch (Peek(2).SymbolId)
 						{
@@ -16275,7 +16279,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -16319,7 +16323,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -16363,7 +16367,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -16392,7 +16396,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -16435,7 +16439,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -16444,7 +16448,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @in:
 								switch (Peek(3).SymbolId)
 								{
@@ -16473,7 +16477,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case instanceof:
 								switch (Peek(3).SymbolId)
 								{
@@ -16502,7 +16506,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -16522,7 +16526,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -16566,7 +16570,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -16646,7 +16650,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -16675,7 +16679,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -16684,7 +16688,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -16713,7 +16717,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -16722,7 +16726,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -16751,7 +16755,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -16831,7 +16835,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -16911,7 +16915,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -16991,7 +16995,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -17072,7 +17076,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -17152,7 +17156,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -17232,9 +17236,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @false:
 						switch (Peek(2).SymbolId)
 						{
@@ -17347,7 +17351,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -17391,7 +17395,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -17435,7 +17439,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -17464,7 +17468,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -17507,7 +17511,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -17516,7 +17520,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @in:
 								switch (Peek(3).SymbolId)
 								{
@@ -17545,7 +17549,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case instanceof:
 								switch (Peek(3).SymbolId)
 								{
@@ -17574,7 +17578,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -17594,7 +17598,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -17638,7 +17642,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -17718,7 +17722,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -17747,7 +17751,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -17756,7 +17760,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -17785,7 +17789,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -17794,7 +17798,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -17823,7 +17827,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -17903,7 +17907,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -17983,7 +17987,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -18063,7 +18067,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -18144,7 +18148,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -18224,7 +18228,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -18304,9 +18308,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case identifier:
 						switch (Peek(2).SymbolId)
 						{
@@ -18418,7 +18422,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -18462,7 +18466,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -18506,7 +18510,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -18535,7 +18539,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -18578,7 +18582,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -18587,7 +18591,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @in:
 								switch (Peek(3).SymbolId)
 								{
@@ -18616,7 +18620,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case instanceof:
 								switch (Peek(3).SymbolId)
 								{
@@ -18645,7 +18649,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -18665,7 +18669,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -18709,7 +18713,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -18789,7 +18793,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -18818,7 +18822,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -18827,7 +18831,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -18856,7 +18860,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -18865,7 +18869,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -18894,7 +18898,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -18974,7 +18978,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -19054,7 +19058,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -19134,7 +19138,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -19215,7 +19219,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -19295,7 +19299,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -19375,7 +19379,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case colon:
 								switch (Peek(3).SymbolId)
 								{
@@ -19418,9 +19422,9 @@ public partial class ES5Parser : LLkParserBase
 									case semi:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case numeric_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -19533,7 +19537,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -19577,7 +19581,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -19621,7 +19625,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -19650,7 +19654,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -19693,7 +19697,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -19702,7 +19706,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @in:
 								switch (Peek(3).SymbolId)
 								{
@@ -19731,7 +19735,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case instanceof:
 								switch (Peek(3).SymbolId)
 								{
@@ -19760,7 +19764,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -19780,7 +19784,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -19824,7 +19828,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -19904,7 +19908,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -19933,7 +19937,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -19942,7 +19946,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -19971,7 +19975,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -19980,7 +19984,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -20009,7 +20013,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -20089,7 +20093,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -20169,7 +20173,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -20249,7 +20253,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -20330,7 +20334,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -20410,7 +20414,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -20490,9 +20494,9 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case string_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -20605,7 +20609,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @continue:
 								switch (Peek(3).SymbolId)
 								{
@@ -20649,7 +20653,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case debugger:
 								switch (Peek(3).SymbolId)
 								{
@@ -20693,7 +20697,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case delete:
 								switch (Peek(3).SymbolId)
 								{
@@ -20722,7 +20726,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @do:
 								switch (Peek(3).SymbolId)
 								{
@@ -20765,7 +20769,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case function:
 								switch (Peek(3).SymbolId)
 								{
@@ -20774,7 +20778,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @in:
 								switch (Peek(3).SymbolId)
 								{
@@ -20803,7 +20807,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case instanceof:
 								switch (Peek(3).SymbolId)
 								{
@@ -20832,7 +20836,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @new:
 								switch (Peek(3).SymbolId)
 								{
@@ -20852,7 +20856,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @return:
 								switch (Peek(3).SymbolId)
 								{
@@ -20896,7 +20900,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @this:
 								switch (Peek(3).SymbolId)
 								{
@@ -20976,7 +20980,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @throw:
 								switch (Peek(3).SymbolId)
 								{
@@ -21005,7 +21009,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @try:
 								switch (Peek(3).SymbolId)
 								{
@@ -21014,7 +21018,7 @@ public partial class ES5Parser : LLkParserBase
 									case lbrace:
 										return 1;
 								}
-								break;
+								return 1;
 							case @typeof:
 								switch (Peek(3).SymbolId)
 								{
@@ -21043,7 +21047,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case var:
 								switch (Peek(3).SymbolId)
 								{
@@ -21052,7 +21056,7 @@ public partial class ES5Parser : LLkParserBase
 									case identifier:
 										return 1;
 								}
-								break;
+								return 1;
 							case @void:
 								switch (Peek(3).SymbolId)
 								{
@@ -21081,7 +21085,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @null:
 								switch (Peek(3).SymbolId)
 								{
@@ -21161,7 +21165,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @true:
 								switch (Peek(3).SymbolId)
 								{
@@ -21241,7 +21245,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case @false:
 								switch (Peek(3).SymbolId)
 								{
@@ -21321,7 +21325,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case identifier:
 								switch (Peek(3).SymbolId)
 								{
@@ -21402,7 +21406,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case numeric_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -21482,7 +21486,7 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 							case string_literal:
 								switch (Peek(3).SymbolId)
 								{
@@ -21562,17 +21566,18 @@ public partial class ES5Parser : LLkParserBase
 									case regular_expression_literal:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 				}
-				break;
+				return 1;
 		}
 		return -1;
 	}
 
 	// ObjectLiteral: { comma PropertyAssignment }<policy="greedy">
-	// looks 2 tokens ahead and returns 0 to go around again, 1 to stop, or -1 if nothing matches
+	// looks 2 tokens ahead and returns 0 to go around again, 1 to stop. On input none matches, the one that matched the most,
+	// so it reports the error where the input goes wrong, or -1 if none matches the first token
 	int PredictObjectLiteral2()
 	{
 		switch (Current.SymbolId)
@@ -21625,13 +21630,14 @@ public partial class ES5Parser : LLkParserBase
 					case rbrace:
 						return 1;
 				}
-				break;
+				return 1;
 		}
 		return -1;
 	}
 
 	// LeftHandSideExpression: { Arguments | lbracket Expression rbracket | dot IdentifierName }
-	// looks 4 tokens ahead and returns 0 to go around again, 1 to stop, or -1 if nothing matches
+	// looks 4 tokens ahead and returns 0 to go around again, 1 to stop. On input none matches, the one that matched the most,
+	// so it reports the error where the input goes wrong, or -1 if none matches the first token
 	int PredictLeftHandSideExpression1()
 	{
 		switch (Current.SymbolId)
@@ -21814,9 +21820,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @null:
 						switch (Peek(2).SymbolId)
 						{
@@ -21893,9 +21899,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @true:
 						switch (Peek(2).SymbolId)
 						{
@@ -21972,9 +21978,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @false:
 						switch (Peek(2).SymbolId)
 						{
@@ -22051,9 +22057,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case identifier:
 						switch (Peek(2).SymbolId)
 						{
@@ -22130,9 +22136,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case numeric_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -22209,9 +22215,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case string_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -22288,9 +22294,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case regular_expression_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -22367,17 +22373,18 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 				}
-				break;
+				return 1;
 		}
 		return -1;
 	}
 
 	// MemberExpression: { lbracket Expression rbracket | dot IdentifierName }
-	// looks 4 tokens ahead and returns 0 to go around again, 1 to stop, or -1 if nothing matches
+	// looks 4 tokens ahead and returns 0 to go around again, 1 to stop. On input none matches, the one that matched the most,
+	// so it reports the error where the input goes wrong, or -1 if none matches the first token
 	int PredictMemberExpression1()
 	{
 		switch (Current.SymbolId)
@@ -22560,9 +22567,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @null:
 						switch (Peek(2).SymbolId)
 						{
@@ -22639,9 +22646,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @true:
 						switch (Peek(2).SymbolId)
 						{
@@ -22718,9 +22725,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case @false:
 						switch (Peek(2).SymbolId)
 						{
@@ -22797,9 +22804,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case identifier:
 						switch (Peek(2).SymbolId)
 						{
@@ -22876,9 +22883,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case numeric_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -22955,9 +22962,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case string_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -23034,9 +23041,9 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 					case regular_expression_literal:
 						switch (Peek(2).SymbolId)
 						{
@@ -23113,11 +23120,11 @@ public partial class ES5Parser : LLkParserBase
 									case comma:
 										return 1;
 								}
-								break;
+								return 1;
 						}
-						break;
+						return 1;
 				}
-				break;
+				return 1;
 		}
 		return -1;
 	}

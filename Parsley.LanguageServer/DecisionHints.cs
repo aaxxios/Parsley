@@ -106,26 +106,23 @@ namespace Parsley.LanguageServer
             {
                 var examples = string.Join(", ", d.Ambiguities.Take(3).Select(s => "`" + s.ToString(a.Symbols) + "`"));
                 var more = d.AmbiguityCount > 3 ? $" and {d.AmbiguityCount - 3} more" : "";
+                // the heading names the engine, and an ALL(*) decision makes the whole grammar ALL(*), so the engine
+                // isn't said again
                 tooltip = $"**ALL(\\*)**: no fixed lookahead can {choose}. Within {a.MaxK} tokens, it can't tell on {examples}{more}, "
-                    + "so it's predicted adaptively at parse time, and the grammar needs the ALL(\\*) engine.";
+                    + "so it's predicted adaptively at parse time.";
             }
             else
             {
-                tooltip = $"**LL({d.Depth})**: it takes {d.Depth} tokens of lookahead to {choose}, so the grammar needs at least the LL(k) engine.";
+                tooltip = $"**LL({d.Depth})**: it takes {d.Depth} tokens of lookahead to {choose}.";
                 if (null != d.AppliedPolicy)
                     tooltip += $" Where {d.Depth} tokens still aren't enough, `<policy=\"{d.AppliedPolicy}\">` settles it.";
+                // the engine only when it isn't the LL(k) the heading implies
                 if (d.IsAdaptive)
                     tooltip += " The grammar needs ALL(\\*) elsewhere, so this decision is predicted adaptively too.";
+                else if (ParserEngine.AllStar == a.Engine)
+                    tooltip += " The grammar's engine is ALL(\\*).";
             }
-            return tooltip + $"\n\n*{d.Production.Name}, decision {d.Index}. The grammar's engine is {_EngineName(a.Engine)}.*";
+            return tooltip + $"\n\n*{d.Production.Name}, decision {d.Index}*";
         }
-
-        static string _EngineName(ParserEngine e) => e switch
-        {
-            ParserEngine.LL1 => "LL(1)",
-            ParserEngine.LLk => "LL(k)",
-            ParserEngine.AllStar => "ALL(\\*)",
-            _ => e.ToString(),
-        };
     }
 }

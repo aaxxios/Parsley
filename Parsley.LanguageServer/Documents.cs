@@ -40,6 +40,41 @@ namespace Parsley.LanguageServer
         Parsley.Grammar? _grammar;
         bool _grammarRead;
 
+        /// <summary>
+        /// The terminal each "literal" or 'pattern' used in a rule of this document stands for, by the offset of its
+        /// token: the declared terminal it resolves to, as the reader resolves it, or null when it has no declaration
+        /// and so is an implicit terminal of its own. Built once per version, when first asked for; empty if the
+        /// grammar couldn't be read.
+        /// </summary>
+        public IReadOnlyDictionary<int, string?> LiteralTargets(Func<string, string> readFile)
+        {
+            if (null != _literalTargets) return _literalTargets;
+            var result = new Dictionary<int, string?>();
+            var g = ReadGrammar(readFile);
+            if (null != g)
+            {
+                try
+                {
+                    // resolve on a copy, the way the analysis does, so implicit terminals are told from declared ones
+                    var r = g.Clone();
+                    r.ResolveLiterals();
+                    foreach (var p in r.Productions)
+                        foreach (var e in p.Expression.Descendants())
+                        {
+                            if (!(e is Parsley.SymbolRef sr) || (null == sr.Literal && null == sr.Pattern) || null == sr.Name) continue;
+                            // a literal from an @imported file is that file's, at an offset in its own text
+                            if (null != sr.Filename && !Documents.PathComparer.Equals(System.IO.Path.GetFullPath(sr.Filename), Path)) continue;
+                            if (0 >= sr.Line && 0 > sr.Position) continue;
+                            var t = r.GetTerminal(sr.Name);
+                            result[ToOffset(sr)] = null != t && !t.IsImplicit ? t.Name : null;
+                        }
+                }
+                catch (Exception) { result.Clear(); }
+            }
+            return _literalTargets = result;
+        }
+        Dictionary<int, string?>? _literalTargets;
+
         int[] LineStarts
         {
             get
@@ -106,13 +141,57 @@ namespace Parsley.LanguageServer
 
         public static StringComparer PathComparer => s_paths;
 
+        // the URI each path came in as, so what goes back to the client is in the form it uses
+        static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> s_uris = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(s_paths);
+
+        /// <summary>
+        /// A file: URI as a full path, or any other URI as it is. Clients write them differently: VS Code escapes the
+        /// drive's colon (file:///c%3A/Users/...), which System.Uri doesn't read as a drive, and Visual Studio
+        /// doesn't (file:///C:/Users/...), so they're taken apart here rather than by Uri
+        /// </summary>
         public static string ToPath(string uri)
         {
-            var u = new Uri(uri);
-            return u.IsFile ? System.IO.Path.GetFullPath(u.LocalPath) : uri;
+            var local = FileUriToPath(uri, OperatingSystem.IsWindows());
+            if (null == local) return uri;
+            var path = System.IO.Path.GetFullPath(local);
+            s_uris[path] = uri;
+            return path;
         }
 
-        public static string ToUri(string path) => new Uri(path).AbsoluteUri;
+        /// <summary>
+        /// The path in a file: URI, unescaped, in the platform's form, or null for another scheme
+        /// </summary>
+        public static string? FileUriToPath(string uri, bool windows)
+        {
+            if (!uri.StartsWith("file:", StringComparison.OrdinalIgnoreCase)) return null;
+            var rest = uri.Substring(5);
+            // drop a query or fragment, which a file path doesn't have
+            var cut = rest.IndexOfAny(new[] { '?', '#' });
+            if (cut >= 0) rest = rest.Substring(0, cut);
+            string host = "";
+            if (rest.StartsWith("//", StringComparison.Ordinal))
+            {
+                rest = rest.Substring(2);
+                var slash = rest.IndexOf('/');
+                host = Uri.UnescapeDataString(slash < 0 ? rest : rest.Substring(0, slash));
+                rest = slash < 0 ? "/" : rest.Substring(slash);
+            }
+            var path = Uri.UnescapeDataString(rest);
+            if (!windows) return path;
+            // /c:/Users/... is c:/Users/...
+            if (path.Length >= 3 && path[0] == '/' && char.IsLetter(path[1]) && (path[2] == ':' || path[2] == '|'))
+                path = path[1] + ":" + path.Substring(3);
+            path = path.Replace('/', '\\');
+            // file://server/share/... is a UNC path
+            if (0 < host.Length && !string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+                path = @"\\" + host + path;
+            return path;
+        }
+
+        /// <summary>
+        /// The URI for a path: the one the client gave for it, or a file: URI made from it
+        /// </summary>
+        public static string ToUri(string path) => s_uris.TryGetValue(path, out var uri) ? uri : new Uri(path).AbsoluteUri;
 
         public void Open(string path, string text, int version) { lock (_lock) _open[path] = new Document(path, text, version); }
         public void Close(string path) { lock (_lock) _open.Remove(path); }

@@ -543,7 +543,10 @@ namespace Parsley
 				_ValidateAttributes(p.Attributes, p, true, result);
 				foreach (var e in p.Expression.Descendants())
 				{
-					_ValidateAttributes(e.Attributes, e, false, result);
+					if (e is SymbolRef lit && (null != lit.Literal || null != lit.Pattern))
+						_ValidateInlineTerminalAttributes(lit, result);
+					else
+						_ValidateAttributes(e.Attributes, e, false, result);
 					if (e is SymbolRef sr)
 					{
 						if (null == sr.Name)
@@ -561,6 +564,7 @@ namespace Parsley
 			}
 			foreach (var t in Terminals)
 			{
+				_ValidateTerminalDefinitionAttributes(t, result);
 				if (t.IsContextual)
 				{
 					var b = null == t.ContextualBase ? null : GetTerminal(t.ContextualBase);
@@ -631,6 +635,42 @@ namespace Parsley
 		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "shared", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state", "entering", "parsed", "when", "matched", "lexer", "on", "operators", "assoc" };
 		static bool _IsMethodName(string s) => 0 < s.Length && (char.IsLetter(s[0]) || '_' == s[0]) && s.All(ch => char.IsLetterOrDigit(ch) || '_' == ch);
 		static readonly HashSet<string> _expressionAttributes = new HashSet<string> { "policy", "sync", "expected", "assoc" };
+		// a literal or pattern written in a rule: attributes that belong on a terminal's declaration don't apply to it.
+		// It isn't a declaration, and every use of the same text is the same terminal, so one use can't make it hidden
+		// or collapsed or anything else without making them all so. Those are errors, rather than ignored, so a
+		// grammar doesn't silently lex differently from what it says.
+		static void _ValidateInlineTerminalAttributes(SymbolRef sr, IList<GrammarMessage> result)
+		{
+			var text = null != sr.Literal ? "\"" + sr.Literal + "\"" : "'" + sr.Pattern + "'";
+			var expressionOnly = new AttributeList();
+			foreach (var a in sr.Attributes)
+			{
+				if (_expressionAttributes.Contains(a.Name) || !_terminalAttributes.Contains(a.Name))
+				{
+					expressionOnly.Add(a);
+					continue;
+				}
+				result.Add(new GrammarMessage(ErrorLevel.Error, $"{a.Name} goes on a terminal's declaration, and {text} here is a use of it, not a declaration. Every {text} in the grammar is the same terminal, so declare it once with the attribute, as in name<{a}>= {text};, and use it by that name or text", a));
+			}
+			_ValidateAttributes(expressionOnly, sr, false, result);
+		}
+		// attributes written inside a terminal's definition, as in x= "a"<hidden>;. A terminal's definition only
+		// says what text it matches, so they'd apply to nothing; one that belongs on the terminal is an error, so
+		// it isn't mistaken for being on x, and the rest are ignored with a warning
+		static void _ValidateTerminalDefinitionAttributes(TerminalDeclaration t, IList<GrammarMessage> result)
+		{
+			if (null == t.Definition) return;
+			foreach (var e in t.Definition.Descendants())
+				foreach (var a in e.Attributes)
+				{
+					if (_terminalAttributes.Contains(a.Name) && !_expressionAttributes.Contains(a.Name))
+						result.Add(new GrammarMessage(ErrorLevel.Error, $"{a.Name} is inside \"{t.Name}\"'s definition, where it applies to nothing. Put it on the name instead, as in {t.Name}<{a}>= …;", a));
+					else
+						result.Add(new GrammarMessage(ErrorLevel.Warning, $"{a.Name} is inside the definition of the terminal \"{t.Name}\", which only says what text it matches, so it will be ignored", a));
+				}
+		}
+		// the attributes a terminal's declaration takes
+		static readonly HashSet<string> _terminalAttributes = new HashSet<string> { "hidden", "collapsed", "terminal", "type", "when", "matched", "lexer", "on", "after", "entry", "nest", "pop", "popOnError", "shared" };
 		static void _ValidateAttributes(AttributeList attrs, GrammarNode owner, bool isProduction, IList<GrammarMessage> result)
 		{
 			foreach (var a in attrs)

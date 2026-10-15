@@ -21,6 +21,13 @@ Highlighting and language support for `.xbnf` grammars in Visual Studio 2022 (17
 - **Diagnostics**: syntax errors, undefined names and duplicate rules as you type. The full analysis
   (conflicts, lookahead, rewritten left recursion and so on) runs when you **open** a grammar and when you
   **save** it, in the background, and its results stay until the next edit. A problem in an imported file shows on the `@import`.
+- **C# in semantic actions**: completion and quick info, from Visual Studio's own C# support. They work in a
+  grammar whose code is in a project in the open solution, whether the source generator makes it
+  (`[Parsley.Parser("grammar.xbnf")]`) or the command line tool writes it into a file the project compiles. The
+  action's current text is used, so it doesn't wait for the grammar to be regenerated, and an action on a rule
+  that's new since then still sees the evaluator's members (`node`, `State`, the `Evaluate` methods and the symbol
+  constants). The grammar has to have been generated once with at least one action, so there's an evaluator to
+  put the code in.
 
 ## How it's put together
 
@@ -33,6 +40,8 @@ Highlighting and language support for `.xbnf` grammars in Visual Studio 2022 (17
 | `XbnfLanguageClient.cs` | Starts `Parsley.LanguageServer` from the extension's `server` folder, and connects the custom messages the glyphs come through. |
 | `DecisionHintService.cs` | The server's `parsley/decisionHints` request and `parsley/decisionHintsChanged` notification. Visual Studio's language client doesn't show inlay hints, as VS Code's does, so the extension asks for the glyphs itself. |
 | `DecisionGlyphs.cs` | Draws the glyphs in the editor, with their tooltips and their Fonts and Colors entries. |
+| `ActionCode.cs` | Finds the C# generated from a grammar in Visual Studio's workspace, by its `#line` directives, and copies it with an action's current text in place of the generated one. With the source generator, the copy is of the project without it, with its output as ordinary files. The copy is kept until the grammar's rules (not its actions) or the project's other files change. |
+| `ActionIntellisense.cs` | Completion and quick info in actions: Roslyn's, over that copy, mapped back into the grammar. |
 | `../Parsley.LanguageServer` | The language server, which links the Parsley sources so its errors are the reader's and the analysis's own. |
 
 Building this project builds the language server and packs its output into the VSIX's `server` folder. Press F5
@@ -43,6 +52,8 @@ Studio reports that the server didn't start, installing the .NET 8 runtime is th
 
 ## Not done yet
 
-- C# IntelliSense inside semantic actions. They're colored as C#, but nothing more.
+- In semantic actions: signature help, go to definition, and C# errors as you type. Roslyn's signature help
+  isn't public; the others could follow the same path as completion. Compile errors already point into the
+  grammar through the `#line` directives.
 - A VS Code extension. The grammar, language configuration and server are ready for one; it needs a small
   `package.json` and a few lines to start the server.

@@ -124,6 +124,10 @@ A literal or pattern written directly inside a non-terminal, like `"{"` in `Obje
 
 Implicit terminals come last, so they lose ties in a lexer that prefers earlier declarations. To control a literal's priority, declare it explicitly where you want it, for example `ifKeyword= "if";` above your identifier pattern. Inline uses then refer to that declaration.
 
+An inline use is a use, not a declaration, so it can't carry a terminal's attributes: every `"a"` in the grammar is the same terminal, and one use can't make it hidden without making them all so. `"a"<hidden>`, or any other attribute that belongs on a terminal's declaration (`collapsed`, `terminal`, `type`, `lexer`, `when` and the like), is an error. Declare the terminal with the attribute instead, as in `a<hidden>= "a";`. The attributes that go on an expression, such as `expected` and `policy`, are fine on an inline use.
+
+The same goes for a terminal's own definition: in `x= "a"<hidden>;` the attribute is on the literal, not on `x`, so it's an error; write `x<hidden>= "a";`. Other attributes inside a terminal's definition do nothing there and are ignored with a warning.
+
 ## Attributes
 
 Attributes go in `<…>` after a rule's name, or after any expression or group. They are separated by commas, and each is a bare name (meaning `true`) or `name=value`.

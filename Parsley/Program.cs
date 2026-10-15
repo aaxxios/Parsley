@@ -65,9 +65,10 @@ namespace Parsley
                 // machine; to stdout, relative to the current directory, where the output is usually redirected
                 var outFile = (options.Output as StreamWriter)?.BaseStream is FileStream ofs ? ofs.Name : null;
                 var outDir = Path.GetFullPath(null != outFile ? Path.GetDirectoryName(Path.GetFullPath(outFile)) ?? "." : ".");
+                // -n: no #line directives at all; the synthesizer writes none for an empty path
                 options.Output.Write(CSharpSynthesizer.Synthesize(analysis, new SynthesisOptions
                 {
-                    LinePath = file => Path.GetRelativePath(outDir, Path.GetFullPath(file))
+                    LinePath = options.NoLines ? _ => "" : file => Path.GetRelativePath(outDir, Path.GetFullPath(file))
                 }));
                 // -s writes everything shared; -b only the base class, for a project that already has the rest
                 if (options.Shared || options.Base)
