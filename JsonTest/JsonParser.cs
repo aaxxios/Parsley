@@ -165,7 +165,7 @@ partial class JsonParser
         }
         return result.ToString();
     }
-    static void _WriteValue(object? value, TextWriter writer, int depth = 0, bool minimized = false)
+    static void WriteValue(object? value, TextWriter writer, int depth = 0, bool minimized = false)
     {
         if (value == null)
         {
@@ -192,18 +192,18 @@ partial class JsonParser
         }
         else if (value is IDictionary<string, object?>)
         {
-            _WriteObject((IDictionary<string, object?>)value, writer, depth, minimized);
+            WriteObject((IDictionary<string, object?>)value, writer, depth, minimized);
         }
         else if (value is IList<object?>)
         {
-            _WriteArray((IList<object?>)value, writer, depth, minimized);
+            WriteArray((IList<object?>)value, writer, depth, minimized);
         }
         else
         {
             throw new NotSupportedException("The value type cannot be written");
         }
     }
-    static void _WriteArray(IList<object?> result, TextWriter writer, int depth = 0, bool minimized = false)
+    static void WriteArray(IList<object?> result, TextWriter writer, int depth = 0, bool minimized = false)
     {
         var tabs = new string(' ', 4 * depth);
         if (!minimized)
@@ -215,7 +215,7 @@ partial class JsonParser
         {
             if (!minimized)
                 writer.Write(innerTabs);
-            _WriteValue(value, writer, depth + 1, minimized);
+            WriteValue(value, writer, depth + 1, minimized);
             --c;
             if (c > 0)
             {
@@ -234,7 +234,7 @@ partial class JsonParser
         }
         writer.Write("]");
     }
-    static void _WriteObject(IDictionary<string, object?> result, TextWriter writer, int depth = 0, bool minimized = false)
+    static void WriteObject(IDictionary<string, object?> result, TextWriter writer, int depth = 0, bool minimized = false)
     {
         var tabs = new string(' ', 4 * depth);
         if (!minimized)
@@ -248,7 +248,7 @@ partial class JsonParser
             {
                 writer.Write(innerTabs);
             }
-            _WriteValue(field.Key, writer, depth, minimized);
+            WriteValue(field.Key, writer, depth, minimized);
             if (!minimized)
             {
                 writer.Write(": ");
@@ -257,7 +257,7 @@ partial class JsonParser
             {
                 writer.Write(':');
             }
-            _WriteValue(field.Value, writer, depth + 1, minimized);
+            WriteValue(field.Value, writer, depth + 1, minimized);
             --c;
             if (c > 0)
             {
@@ -276,7 +276,7 @@ partial class JsonParser
     }
     public static void WriteTo(object? value, TextWriter output, bool minimized = false)
     {
-        _WriteValue(value, output, 0, minimized);
+        WriteValue(value, output, 0, minimized);
     }
 
 }
