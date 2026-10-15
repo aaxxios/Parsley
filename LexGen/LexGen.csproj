@@ -32,11 +32,11 @@
     <EmbeddedResource Include="Templates\LuthorRuntime.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\Luthor\LICENSE.txt">
+    <None Include="..\LICENSE.txt">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
-    <None Include="..\..\Luthor\README.md">
+    <None Include="..\README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
