@@ -1,4 +1,7 @@
-﻿using System;
+﻿using Parsley.Runtime;
+
+using System;
+using System.Globalization;
 using System.Text;
 
 namespace JsonTest;
@@ -12,7 +15,52 @@ namespace JsonTest;
 [Parsley.Parser("json.xbnf")]
 partial class JsonParser
 {
-
+    partial class Evaluator
+    {
+        Dictionary<string, object?> ProcessObject(ParseNode node)
+        {
+            // braces and commas are collapsed, so every child is a Field node
+            var result = new Dictionary<string, object?>();
+            foreach (var child in node.Children)
+            {
+                var field = EvaluateField(child);
+                if (!result.TryAdd(field.Key, field.Value))
+                    throw new FormatException($"Duplicate key \"{field.Key}\" in object");
+            }
+            return result;
+        }
+        KeyValuePair<string,object?> ProcessField(ParseNode node)
+        {
+            // the colon is collapsed: children are the string token and the Value node
+            return new KeyValuePair<string, object?>(
+                UnquoteString(node.Children[0].Value!),
+                EvaluateValue(node.Children[1]));
+        }
+        List<object?> ProcessArray(ParseNode node)
+        {
+            // brackets and commas are collapsed, so every child is a Value node
+            var result = new List<object?>(node.Children.Count);
+            foreach (var child in node.Children)
+                result.Add(EvaluateValue(child));
+            return result;
+        }
+        object? ProcessValue(ParseNode node)
+        {
+            var first = node.Children[0];
+            switch (first.SymbolId)
+            {
+                case number:
+                    return double.Parse(first.Value!, CultureInfo.InvariantCulture);
+                case @string:
+                    return UnquoteString(first.Value!);
+                case @null:
+                    return null;
+                default:
+                    // an Object, Array or Boolean node
+                    return Evaluate(first);
+            }
+        }
+    }
     static int FromHexChar(char c)
     {
         if (c >= '0' && c <= '9') return c - '0';
@@ -20,6 +68,7 @@ partial class JsonParser
         if (c >= 'a' && c <= 'f') return c - 'a' + 10;
         return -1;
     }
+
 
     /// <summary>
     /// Takes a string token's text, including its surrounding quotes, and returns its value.
