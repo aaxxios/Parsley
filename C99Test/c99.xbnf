@@ -259,7 +259,7 @@ and_assign= "&=";
 xor_assign= "^=";
 or_assign= "|=";
 comma<collapsed>= ",";
-
+typedefKeyword="typedef";
 // Whitespace, comments, and preprocessor lines left in the input (line markers, #pragma)
 whitespace<hidden>= '[ \t\r\n\f\v]+';
 line_comment<hidden>= '//[^\n]*';
