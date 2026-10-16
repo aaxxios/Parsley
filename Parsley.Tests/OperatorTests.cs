@@ -109,7 +109,7 @@ namespace Parsley.Tests
 		static string[] _Errors(string xbnf) => _Messages(xbnf, ErrorLevel.Error);
 		static string[] _Messages(string xbnf, ErrorLevel level)
 		{
-			var msgs = XbnfReader.TryParse(xbnf, null, out var g).ToList();
+			var msgs = XbnfParser.TryParse(xbnf, null, out var g).ToList();
 			if (!msgs.Any(m => m.Level == ErrorLevel.Error))
 				msgs.AddRange(GrammarAnalysis.Analyze(g!).Messages);
 			return msgs.Where(m => m.Level == level).Select(m => m.Message).ToArray();

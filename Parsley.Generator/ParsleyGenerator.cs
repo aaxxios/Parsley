@@ -259,7 +259,7 @@ namespace Parsley.Generator
                     ? text
                     : throw new FileNotFoundException($"{Path.GetFileName(path)} isn't among the project's AdditionalFiles");
 
-                var messages = XbnfReader.TryParse(grammarFile.Text, grammarFile.Path, readImport, out var grammar);
+                var messages = XbnfParser.TryParse(grammarFile.Text, grammarFile.Path, readImport, out var grammar);
                 _AddMessages(messages, info, diagnostics);
                 if (null == grammar || messages.Any(m => m.Level == ErrorLevel.Error)) return failed();
                 ct.ThrowIfCancellationRequested();

@@ -736,7 +736,7 @@ namespace Parsley
 		/// </summary>
 		public static Grammar Parse(string text, string? filename = null)
 		{
-			var msgs = XbnfReader.TryParse(text, filename, out var g);
+			var msgs = XbnfParser.TryParse(text, filename, out var g);
 			GrammarException.ThrowIfErrors(msgs);
 			return g!;
 		}
@@ -745,13 +745,13 @@ namespace Parsley
 		/// </summary>
 		public static Grammar ReadFrom(string filename)
 		{
-			var msgs = XbnfReader.TryReadFrom(filename, out var g);
+			var msgs = XbnfParser.TryReadFrom(filename, out var g);
 			GrammarException.ThrowIfErrors(msgs);
 			return g!;
 		}
 		public static Grammar ReadFrom(TextReader reader, string? filename)
         {
-            var msgs = XbnfReader.TryReadFrom(reader,filename, out var g);
+            var msgs = XbnfParser.TryReadFrom(reader,filename, out var g);
             GrammarException.ThrowIfErrors(msgs);
             return g!;
         }

@@ -53,7 +53,7 @@ namespace Parsley.Tests
 
 		static Grammar _Grammar(string name, string? text = null)
 		{
-			var msgs = XbnfReader.TryParse(text ?? s_files[name], _Path(name), _Read, out var g);
+			var msgs = XbnfParser.TryParse(text ?? s_files[name], _Path(name), _Read, out var g);
 			GrammarException.ThrowIfErrors(msgs);
 			return g!;
 		}
@@ -61,7 +61,7 @@ namespace Parsley.Tests
 		{
 			var all = new Dictionary<string, string>(s_files);
 			if (null != files) foreach (var f in files) all[f.Key] = f.Value;
-			var msgs = XbnfReader.TryParse(text, _Path("test.xbnf"), p => all.TryGetValue(Path.GetFileName(p), out var t) ? t : throw new FileNotFoundException(p), out var g);
+			var msgs = XbnfParser.TryParse(text, _Path("test.xbnf"), p => all.TryGetValue(Path.GetFileName(p), out var t) ? t : throw new FileNotFoundException(p), out var g);
 			if (msgs.Any(m => ErrorLevel.Error == m.Level)) return msgs;
 			return GrammarAnalysis.Analyze(g!).Messages.ToList();
 		}
@@ -193,7 +193,7 @@ namespace Parsley.Tests
 			T.Equal("J.Obj", data.Entry, "its entry");
 			var text = g.ToString();
 			T.Check(text.Contains("@external J \"inner.xbnf\";") && text.Contains("@lexer J \"InnerLexer\";") && text.Contains("Data<entry=\"J.Obj\""), "written back out");
-			var g2 = XbnfReader.TryParse(text, _Path("outer.xbnf"), _Read, out var back);
+			var g2 = XbnfParser.TryParse(text, _Path("outer.xbnf"), _Read, out var back);
 			T.Check(!g2.Any(m => ErrorLevel.Error == m.Level) && (back?.GetTerminal("Data")?.IsIsland ?? false), "and read back");
 		}
 
@@ -357,7 +357,7 @@ namespace Parsley.Tests
 				["a.xbnf"] = @"@namespace ""My.A""; A<shared>= ""a"";",
 				["b.xbnf"] = @"@namespace ""My.B""; @lexer ""BLex""; B<shared>= ""b"";",
 			};
-			var msgs = XbnfReader.TryParse(@"@external Aa ""a.xbnf""; @external Bb ""b.xbnf""; S= ""x"";", _Path("names.xbnf"), p => files[Path.GetFileName(p)], out var n);
+			var msgs = XbnfParser.TryParse(@"@external Aa ""a.xbnf""; @external Bb ""b.xbnf""; S= ""x"";", _Path("names.xbnf"), p => files[Path.GetFileName(p)], out var n);
 			T.Equal("global::My.A.AaLexer", CSharpSynthesizer.DefaultLexerType(n!, "Aa"), "the alias plus Lexer, in the external grammar's namespace");
 			T.Equal("global::My.B.BLex", CSharpSynthesizer.DefaultLexerType(n!, "Bb"), "the external grammar's own @lexer, in its namespace");
 			T.Equal("global::My.A.AParser", CSharpSynthesizer.DefaultExternalParser(n!, "Aa"), "its parser, from its file name");

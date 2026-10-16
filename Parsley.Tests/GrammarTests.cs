@@ -62,7 +62,7 @@ namespace Parsley.Tests
 		}
 		public static void SyntaxErrorsAreReportedAndReadingContinues()
 		{
-			var msgs = XbnfReader.TryParse("S= a b\nT= ( a ;\nU= a; a= \"a\"; b=\"b\";", "x.xbnf", out var g);
+			var msgs = XbnfParser.TryParse("S= a b\nT= ( a ;\nU= a; a= \"a\"; b=\"b\";", "x.xbnf", out var g);
 			var errors = msgs.Where(m => m.Level == ErrorLevel.Error).ToList();
 			T.Check(1 <= errors.Count, "error reported");
 			T.Equal(2, errors[0].Line, "error line");
@@ -70,7 +70,7 @@ namespace Parsley.Tests
 		}
 		public static void VirtualProductionsAreRejected()
 		{
-			var msgs = XbnfReader.TryParse("S<start,virtual> { return x; }", null, out _);
+			var msgs = XbnfParser.TryParse("S<start,virtual> { return x; }", null, out _);
 			T.Check(msgs.Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("not supported")), "virtual rejected");
 		}
 		public static void Imports()

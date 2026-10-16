@@ -56,7 +56,7 @@ namespace Parsley.Tests
 		{
 			static string[] errors(string xbnf)
 			{
-				var msgs = XbnfReader.TryParse(xbnf, null, out var g).ToList();
+				var msgs = XbnfParser.TryParse(xbnf, null, out var g).ToList();
 				if (!msgs.Any(m => m.Level == ErrorLevel.Error))
 					msgs.AddRange(GrammarAnalysis.Analyze(g!).Messages);
 				return msgs.Where(m => m.Level == ErrorLevel.Error).Select(m => m.Message).ToArray();
@@ -146,7 +146,7 @@ namespace Parsley.Tests
 
 		static GrammarMessage[] _Messages(string xbnf, ErrorLevel level)
 		{
-			var msgs = XbnfReader.TryParse(xbnf, null, out var g).ToList();
+			var msgs = XbnfParser.TryParse(xbnf, null, out var g).ToList();
 			if (!msgs.Any(m => m.Level == ErrorLevel.Error))
 				msgs.AddRange(GrammarAnalysis.Analyze(g!).Messages);
 			return msgs.Where(m => m.Level == level).ToArray();

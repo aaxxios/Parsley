@@ -14,7 +14,7 @@ namespace Parsley
 	/// attributed groups: <c>( … )&lt;attrs&gt;</c>, <c>[ … ]&lt;attrs&gt;</c>, <c>{ … }&lt;attrs&gt;</c>, and semantic actions:
 	/// <c>Name= expression =&gt; { C# };</c>
 	/// </summary>
-	public sealed class XbnfReader
+	public sealed class XbnfParser
 	{
 		sealed class SyntaxError : Exception
 		{
@@ -36,7 +36,7 @@ namespace Parsley
 		// the grammars being read through @external, outermost first, to catch one that's its own external
 		readonly IReadOnlyList<string> _externals;
 
-		XbnfReader(ParseContext pc, string? filename, Grammar grammar, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile, IReadOnlyList<string> externals)
+		XbnfParser(ParseContext pc, string? filename, Grammar grammar, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile, IReadOnlyList<string> externals)
 		{
 			_externals = externals;
 			_readFile = readFile;
@@ -92,7 +92,7 @@ namespace Parsley
         static void _Read(ParseContext pc, string? filename, Grammar g, List<GrammarMessage> messages, HashSet<string> imported, Func<string, string> readFile, IReadOnlyList<string>? externals = null)
 		{
 			externals ??= null != filename ? new[] { Path.GetFullPath(filename) } : Array.Empty<string>();
-			var r = new XbnfReader(pc, filename, g, messages, imported, readFile, externals);
+			var r = new XbnfParser(pc, filename, g, messages, imported, readFile, externals);
 			r._ReadAll();
 		}
 

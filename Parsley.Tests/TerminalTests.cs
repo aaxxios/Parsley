@@ -60,9 +60,9 @@ namespace Parsley.Tests
 
 		public static void ForcedTerminalErrors()
 		{
-			var msgs = XbnfReader.TryParse("S= T; T<terminal>= \"a\" S;", null, out _);
+			var msgs = XbnfParser.TryParse("S= T; T<terminal>= \"a\" S;", null, out _);
 			T.Check(msgs.Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("references \"S\", which is not a terminal")), "terminal referencing a non-terminal");
-			msgs = XbnfReader.TryParse("S= T; T<terminal>= \"a\" [ T ];", null, out _);
+			msgs = XbnfParser.TryParse("S= T; T<terminal>= \"a\" [ T ];", null, out _);
 			T.Check(msgs.Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("refers to itself")), "recursive terminal");
 		}
 

@@ -193,7 +193,7 @@ namespace Parsley.Tests
 			T.Equal(2, Grammar.Parse(g.ToString()).MaxK, "survives writing and reading back");
 			foreach (var bad in new[] { "@maxk 0;", "@maxk \"x\";", "@maxk \"-1\";" })
 			{
-				var msgs = XbnfReader.TryParse(bad + body, null, out _);
+				var msgs = XbnfParser.TryParse(bad + body, null, out _);
 				T.Check(msgs.Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("@maxk expects")), bad + " is an error");
 			}
 		}

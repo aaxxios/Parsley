@@ -208,7 +208,7 @@ namespace Parsley.LanguageServer
                 var d = _ToDiagnostic(doc, m);
                 if (seen.Add(d.ToJsonString())) result.Add(d);
             }
-            var messages = XbnfReader.TryParse(doc.Text, doc.Path, _docs.ReadForImport, out var grammar);
+            var messages = XbnfParser.TryParse(doc.Text, doc.Path, _docs.ReadForImport, out var grammar);
             foreach (var m in messages) add(m);
             ct.ThrowIfCancellationRequested();
             if (!full && null != grammar && !messages.Any(m => m.Level == ErrorLevel.Error))

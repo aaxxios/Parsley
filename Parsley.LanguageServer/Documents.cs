@@ -32,7 +32,7 @@ namespace Parsley.LanguageServer
             if (!_grammarRead)
             {
                 _grammarRead = true;
-                try { XbnfReader.TryParse(Text, Path, readFile, out _grammar); }
+                try { XbnfParser.TryParse(Text, Path, readFile, out _grammar); }
                 catch (Exception) { _grammar = null; }
             }
             return _grammar;
