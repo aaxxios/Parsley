@@ -112,7 +112,7 @@ public partial class BamcParser : LL1ParserBase
 				new IslandRule(
 					terminal: Headers - Brave,
 					after: [addHeadersKeyword - Brave],
-					inner: global::BamcTest.Json.JsonEmbedParser.CreateLexerMode(global::BamcTest.Json.JsonEmbedLexer.Tokenize),
+					inner: global::BamcTest.Json.JsonEmbedParser.CreateLexerMode(global::BamcTest.Json.JsonLexer.Tokenize),
 					parse: global::BamcTest.Json.JsonEmbedParser.TryParseObject,
 					nest: 7 /* Json.lbrace */,
 					pop: 8 /* Json.rbrace */,

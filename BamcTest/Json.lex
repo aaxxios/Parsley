@@ -9,4 +9,4 @@ lbrace \{
 rbrace \}
 colon :
 comma ,
-.whitespace [\r\t ]+
+.whitespace [\t ]+

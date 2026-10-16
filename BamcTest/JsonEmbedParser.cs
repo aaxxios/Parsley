@@ -3,6 +3,7 @@
 // add members in another part of this partial class instead.
 // </auto-generated>
 #nullable enable
+using System;
 using System.Collections.Generic;
 using Parsley.Runtime;
 
@@ -77,24 +78,17 @@ public partial class JsonEmbedParser : LL1ParserBase
 		return new LexerMode(tokenize);
 	}
 
-	// Json<start>= Object | Array;
+	// Json<start, type="object">= Value;
 	ParseNode ParseJson()
 	{
 		Enter(Json);
 		var node = NewNode(Json);
-		if (Current.SymbolId == lbrace)
-		{
-			node.Add(ParseObject());
-		}
-		else
-		{
-			node.Add(ParseArray());
-		}
+		node.Add(ParseValue());
 		Leave();
 		return node;
 	}
 
-	// Object<shared>= "{" [ Field { "," Field } ] "}";
+	// Object<shared, type="Dictionary<string, object?>">= "{" [ Field { "," Field } ] "}";
 	ParseNode ParseObject()
 	{
 		Enter(Object);
@@ -116,19 +110,19 @@ public partial class JsonEmbedParser : LL1ParserBase
 		return node;
 	}
 
-	// Field= string ":" Value;
+	// Field<type="KeyValuePair<string, object?>">= string ":" Value;
 	ParseNode ParseField()
 	{
 		Enter(Field);
 		var node = NewNode(Field);
 		Expect(@string, node);
 		Expect(colon, node);
-		ParseValue(node);
+		node.Add(ParseValue());
 		Leave();
 		return node;
 	}
 
-	// Array= "[" [ Value { "," Value } ] "]";
+	// Array<type="List<object?>">= "[" [ Value { "," Value } ] "]";
 	ParseNode ParseArray()
 	{
 		Enter(Array);
@@ -137,12 +131,12 @@ public partial class JsonEmbedParser : LL1ParserBase
 		// [ Value { "," Value } ]
 		if (Current.SymbolId is not (rbracket or EndOfInput))
 		{
-			ParseValue(node);
+			node.Add(ParseValue());
 			// { "," Value }
 			while (Current.SymbolId == comma)
 			{
 				Consume(node);
-				ParseValue(node);
+				node.Add(ParseValue());
 			}
 		}
 		Expect(rbracket, node);
@@ -150,35 +144,37 @@ public partial class JsonEmbedParser : LL1ParserBase
 		return node;
 	}
 
-	// Value<collapsed>= string | number | Object | Array | Boolean | null;
-	void ParseValue(ParseNode parent)
+	// Value<type="object?">= string | number | Object | Array | Boolean | null;
+	ParseNode ParseValue()
 	{
 		Enter(Value);
+		var node = NewNode(Value);
 		switch (Current.SymbolId)
 		{
 			case @string:
 			case number:
 			case @null:
-				Consume(parent);
+				Consume(node);
 				break;
 			case lbrace:
-				parent.Add(ParseObject());
+				node.Add(ParseObject());
 				break;
 			case lbracket:
-				parent.Add(ParseArray());
+				node.Add(ParseArray());
 				break;
 			case @true:
 			case @false:
-				parent.Add(ParseBoolean());
+				node.Add(ParseBoolean());
 				break;
 			default:
-				Error(parent, null, number, @string, @true, @false, @null, lbracket, lbrace);
+				Error(node, null, number, @string, @true, @false, @null, lbracket, lbrace);
 				break;
 		}
 		Leave();
+		return node;
 	}
 
-	// Boolean= true | false;
+	// Boolean<type="bool">= true | false;
 	ParseNode ParseBoolean()
 	{
 		Enter(Boolean);
@@ -208,11 +204,171 @@ public partial class JsonEmbedParser : LL1ParserBase
 			[rbracket, rbrace, comma, EndOfInput], // Object
 			[rbrace, comma], // Field
 			[rbracket, rbrace, comma, EndOfInput], // Array
-			[rbracket, rbrace, comma], // Value
-			[rbracket, rbrace, comma] // Boolean
+			[rbracket, rbrace, comma, EndOfInput], // Value
+			[rbracket, rbrace, comma, EndOfInput] // Boolean
 		],
 		syncTerminals: [],
 		endOfInput: EndOfInput,
 		error: ErrorSymbol);
 	#endregion
+}
+
+/// <summary>
+/// Evaluates Json parse trees from <see cref="JsonEmbedParser"/> with the semantic actions in json-embed.xbnf.
+/// </summary>
+public partial class JsonEmbedEvaluator
+{
+	#region Symbols
+	protected const int Json = 0;
+	protected const int Object = 1;
+	protected const int Field = 2;
+	protected const int Array = 3;
+	protected const int Value = 4;
+	protected const int Boolean = 5;
+	protected const int number = 6;
+	protected const int @string = 7;
+	protected const int @true = 8; // "true"
+	protected const int @false = 9; // "false"
+	protected const int @null = 10; // "null"
+	protected const int lbracket = 11; // "["
+	protected const int rbracket = 12; // "]"
+	protected const int lbrace = 13; // "{"
+	protected const int rbrace = 14; // "}"
+	protected const int colon = 15; // ":"
+	protected const int comma = 16; // ","
+	protected const int whitespace = 17;
+	protected const int EndOfInput = 18;
+	protected const int ErrorSymbol = 19;
+	#endregion
+
+	/// <summary>
+	/// The state passed to Evaluate, for the semantic actions to use
+	/// </summary>
+	protected object? State { get; }
+
+	protected JsonEmbedEvaluator(object? state) { State = state; }
+
+	/// <summary>
+	/// Evaluates a parse tree from <see cref="JsonEmbedParser"/>, starting at its Json root
+	/// </summary>
+	/// <param name="node">The root of the tree</param>
+	/// <param name="state">Anything the semantic actions need, available to them as State</param>
+#line 17 "json-embed.xbnf"
+	public static object Evaluate(ParseNode node, object? state = null)
+#line default
+	{
+		var evaluator = new JsonEmbedEvaluator(state);
+		if (Json == node.SymbolId) return evaluator.EvaluateJson(node);
+		return evaluator.Evaluate(node);
+	}
+
+	/// <summary>
+	/// Evaluates a node of any non-terminal, for when a child can be one of several
+	/// </summary>
+	protected object Evaluate(ParseNode node)
+	{
+		switch (node.SymbolId)
+		{
+			case Json:
+				return EvaluateJson(node);
+			case Object:
+				return EvaluateObject(node);
+			case Field:
+				return EvaluateField(node);
+			case Array:
+				return EvaluateArray(node);
+			case Value:
+				return EvaluateValue(node)!;
+			case Boolean:
+				return EvaluateBoolean(node);
+		}
+		throw new InvalidOperationException($"{node.Symbol} can't be evaluated");
+	}
+
+	// Json<start, type="object">= Value;
+#line 17 "json-embed.xbnf"
+	protected object EvaluateJson(ParseNode node)
+#line default
+	{
+#line 18 "json-embed.xbnf"
+		return Evaluate(node.Children[0]);
+#line default
+	}
+
+	// Object<shared, type="Dictionary<string, object?>">= "{" [ Field { "," Field } ] "}";
+#line 20 "json-embed.xbnf"
+	protected Dictionary<string, object?> EvaluateObject(ParseNode node)
+#line default
+	{
+#line 21 "json-embed.xbnf"
+		// braces and commas are collapsed, so every child is a Field node
+		var result = new Dictionary<string, object?>();
+		foreach (var child in node.Children)
+		{
+		    var field = EvaluateField(child);
+		    if (!result.TryAdd(field.Key, field.Value))
+		        throw new FormatException($"Duplicate key \"{field.Key}\" in object");
+		}
+		return result;
+#line default
+	}
+
+	// Field<type="KeyValuePair<string, object?>">= string ":" Value;
+#line 31 "json-embed.xbnf"
+	protected KeyValuePair<string, object?> EvaluateField(ParseNode node)
+#line default
+	{
+#line 32 "json-embed.xbnf"
+		// the colon is collapsed: children are the string token and the Value node
+		return new KeyValuePair<string, object?>(
+		    UnquoteString(node.Children[0].Value!),
+		    EvaluateValue(node.Children[1]));
+#line default
+	}
+
+	// Array<type="List<object?>">= "[" [ Value { "," Value } ] "]";
+#line 37 "json-embed.xbnf"
+	protected List<object?> EvaluateArray(ParseNode node)
+#line default
+	{
+#line 38 "json-embed.xbnf"
+		// brackets and commas are collapsed, so every child is a Value node
+		var result = new List<object?>(node.Children.Count);
+		foreach (var child in node.Children)
+		    result.Add(EvaluateValue(child));
+		return result;
+#line default
+	}
+
+	// Value<type="object?">= string | number | Object | Array | Boolean | null;
+#line 44 "json-embed.xbnf"
+	protected object? EvaluateValue(ParseNode node)
+#line default
+	{
+#line 50 "json-embed.xbnf"
+		var first = node.Children[0];
+		switch (first.SymbolId)
+		{
+		    case number:
+		        return double.Parse(first.Value!, System.Globalization.CultureInfo.InvariantCulture);
+		    case @string:
+		        return UnquoteString(first.Value!);
+		    case @null:
+		        return null;
+		    default:
+		        // an Object, Array or Boolean node
+		        return Evaluate(first);
+		}
+#line default
+	}
+
+	// Boolean<type="bool">= true | false;
+#line 64 "json-embed.xbnf"
+	protected bool EvaluateBoolean(ParseNode node)
+#line default
+	{
+#line 65 "json-embed.xbnf"
+		return node.Children[0].SymbolId == @true;
+#line default
+	}
 }
