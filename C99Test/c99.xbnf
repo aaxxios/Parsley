@@ -37,13 +37,13 @@ declaration<entering="BeginDeclaration", parsed="EndDeclaration">= declaration_s
 declaration_specifiers<collapsed>= { storage_class_specifier | type_specifier | type_qualifier | function_specifier }+;
 init_declarator_list<collapsed>= init_declarator { "," init_declarator };
 init_declarator<parsed="OnInitDeclarator">= declarator [ "=" initializer ];
-storage_class_specifier<collapsed, terminal=false>= "typedef" | "extern" | "static" | "auto" | "register";
+storage_class_specifier<collapsed>= "typedef" | "extern" | "static" | "auto" | "register";
 type_specifier<collapsed, parsed="OnTypeSpecifier">= "void" | "char" | "short" | "int" | "long" | "float" | "double"
 	| "signed" | "unsigned" | "_Bool" | "_Complex"
 	| struct_or_union_specifier | enum_specifier | typedef_name;
 struct_or_union_specifier= struct_or_union
 	( identifier [ lbrace struct_declaration_list rbrace ] | lbrace struct_declaration_list rbrace );
-struct_or_union<collapsed, terminal=false>= "struct" | "union";
+struct_or_union<collapsed>= "struct" | "union";
 struct_declaration_list<collapsed>= { struct_declaration }+;
 struct_declaration<entering="BeginSpecifiers", parsed="EndSpecifiers">= specifier_qualifier_list struct_declarator_list ";";
 specifier_qualifier_list<collapsed>= { type_specifier | type_qualifier }+;
@@ -54,7 +54,7 @@ enum_specifier= "enum"
 enumerator_list<collapsed>= enumerator { "," enumerator };
 enumerator<parsed="OnEnumerator">= enumeration_constant [ "=" constant_expression ];
 enumeration_constant<collapsed>= identifier;
-type_qualifier<collapsed, terminal=false>= "const" | "restrict" | "volatile";
+type_qualifier<collapsed>= "const" | "restrict" | "volatile";
 function_specifier<collapsed, terminal=false>= "inline";
 declarator= [ pointer ] direct_declarator;
 // the standard's left recursion, as a loop: the name (or a parenthesized declarator), then any number

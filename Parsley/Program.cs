@@ -63,7 +63,7 @@ namespace Parsley
                 }
                 // #line directives name the grammar files relative to the code file, so the code is the same on any
                 // machine; to stdout, relative to the current directory, where the output is usually redirected
-                var outFile = (options.Output as StreamWriter)?.BaseStream is FileStream ofs ? ofs.Name : null;
+                var outFile = CliUtility.GetFilename(options.Output);
                 var outDir = Path.GetFullPath(null != outFile ? Path.GetDirectoryName(Path.GetFullPath(outFile)) ?? "." : ".");
                 // -n: no #line directives at all; the synthesizer writes none for an empty path
                 options.Output.Write(CSharpSynthesizer.Synthesize(analysis, new SynthesisOptions
@@ -106,7 +106,7 @@ namespace Parsley
                     var groups = analysis.Grammar.LexerGroups;
                     if (0 < groups.Count)
                     {
-                        var lexFile = (options.Lexer as StreamWriter)?.BaseStream is FileStream fs ? fs.Name : null;
+                        var lexFile = CliUtility.GetFilename(options.Lexer);
                         if (null == lexFile)
                             throw new ArgumentException("The grammar has terminals from other lexers, which are written to files beside the lexer file, so --lexer must name a file.");
                         foreach (var alias in groups)
