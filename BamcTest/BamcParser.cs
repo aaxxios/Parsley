@@ -108,14 +108,14 @@ public partial class BamcParser : LL1ParserBase
 		return new LexerMode(tokenize,
 			islands:
 			[
-				// Headers<entry="Json.Object", after="addHeadersKeyword", nest="Json.lbrace", pop="Json.rbrace">;
+				// Headers<entry="JsonEmbed.Object", after="addHeadersKeyword", nest="JsonEmbed.lbrace", pop="JsonEmbed.rbrace">;
 				new IslandRule(
 					terminal: Headers - Brave,
 					after: [addHeadersKeyword - Brave],
-					inner: global::BamcTest.Json.JsonEmbedParser.CreateLexerMode(global::BamcTest.Json.JsonLexer.Tokenize),
-					parse: global::BamcTest.Json.JsonEmbedParser.TryParseObject,
-					nest: 7 /* Json.lbrace */,
-					pop: 8 /* Json.rbrace */,
+					inner: JsonEmbedParser.CreateLexerMode(JsonEmbedLexer.Tokenize),
+					parse: JsonEmbedParser.TryParseObject,
+					nest: 7 /* JsonEmbed.lbrace */,
+					pop: 8 /* JsonEmbed.rbrace */,
 					popOnError: true)
 			]);
 	}

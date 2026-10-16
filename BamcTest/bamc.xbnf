@@ -9,7 +9,7 @@
 // add-headers takes a JSON object, which bamc's lexer can't lex (its strings
 // differ, and braces nest). It's an island: json.xbnf lexes and parses it,
 // and bamc sees one Headers token.
-@external Json "json-embed.xbnf";
+@external JsonEmbed "json-embed.xbnf";
 Script<start>= Line { newline Line };
 Line<collapsed>= [ Command ];
 
@@ -60,7 +60,7 @@ AddHeaders= addHeadersKeyword Headers;           // add-headers {"a": "b", ...}
 // The island starts right after add-headers and ends at the } that closes the
 // object's first {. A line break inside it is an error to JSON's lexer, which
 // also ends it, so a broken object can't swallow the lines after it.
-Headers<entry="Json.Object", after="addHeadersKeyword", nest="Json.lbrace", pop="Json.rbrace">;
+Headers<entry="JsonEmbed.Object", after="addHeadersKeyword", nest="JsonEmbed.lbrace", pop="JsonEmbed.rbrace">;
 AddCookie= addCookieKeyword string [ comma ] string;  // one test uses a comma
 SetCustomUserAgent= setCustomUserAgentKeyword string;
 

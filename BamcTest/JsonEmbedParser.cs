@@ -7,8 +7,6 @@ using System;
 using System.Collections.Generic;
 using Parsley.Runtime;
 
-namespace BamcTest.Json;
-
 /// <summary>
 /// Parses Json with one token of lookahead (LL(1)). Synthesized from json-embed.xbnf.
 /// </summary>
@@ -253,7 +251,7 @@ public partial class JsonEmbedEvaluator
 	/// </summary>
 	/// <param name="node">The root of the tree</param>
 	/// <param name="state">Anything the semantic actions need, available to them as State</param>
-#line 17 "json-embed.xbnf"
+#line 16 "json-embed.xbnf"
 	public static object Evaluate(ParseNode node, object? state = null)
 #line default
 	{
@@ -286,21 +284,21 @@ public partial class JsonEmbedEvaluator
 	}
 
 	// Json<start, type="object">= Value;
-#line 17 "json-embed.xbnf"
+#line 16 "json-embed.xbnf"
 	protected object EvaluateJson(ParseNode node)
 #line default
 	{
-#line 18 "json-embed.xbnf"
+#line 17 "json-embed.xbnf"
 		return Evaluate(node.Children[0]);
 #line default
 	}
 
 	// Object<shared, type="Dictionary<string, object?>">= "{" [ Field { "," Field } ] "}";
-#line 20 "json-embed.xbnf"
+#line 19 "json-embed.xbnf"
 	protected Dictionary<string, object?> EvaluateObject(ParseNode node)
 #line default
 	{
-#line 21 "json-embed.xbnf"
+#line 20 "json-embed.xbnf"
 		// braces and commas are collapsed, so every child is a Field node
 		var result = new Dictionary<string, object?>();
 		foreach (var child in node.Children)
@@ -314,11 +312,11 @@ public partial class JsonEmbedEvaluator
 	}
 
 	// Field<type="KeyValuePair<string, object?>">= string ":" Value;
-#line 31 "json-embed.xbnf"
+#line 30 "json-embed.xbnf"
 	protected KeyValuePair<string, object?> EvaluateField(ParseNode node)
 #line default
 	{
-#line 32 "json-embed.xbnf"
+#line 31 "json-embed.xbnf"
 		// the colon is collapsed: children are the string token and the Value node
 		return new KeyValuePair<string, object?>(
 		    UnquoteString(node.Children[0].Value!),
@@ -327,11 +325,11 @@ public partial class JsonEmbedEvaluator
 	}
 
 	// Array<type="List<object?>">= "[" [ Value { "," Value } ] "]";
-#line 37 "json-embed.xbnf"
+#line 36 "json-embed.xbnf"
 	protected List<object?> EvaluateArray(ParseNode node)
 #line default
 	{
-#line 38 "json-embed.xbnf"
+#line 37 "json-embed.xbnf"
 		// brackets and commas are collapsed, so every child is a Value node
 		var result = new List<object?>(node.Children.Count);
 		foreach (var child in node.Children)
@@ -341,11 +339,11 @@ public partial class JsonEmbedEvaluator
 	}
 
 	// Value<type="object?">= string | number | Object | Array | Boolean | null;
-#line 44 "json-embed.xbnf"
+#line 43 "json-embed.xbnf"
 	protected object? EvaluateValue(ParseNode node)
 #line default
 	{
-#line 50 "json-embed.xbnf"
+#line 49 "json-embed.xbnf"
 		var first = node.Children[0];
 		switch (first.SymbolId)
 		{
@@ -363,11 +361,11 @@ public partial class JsonEmbedEvaluator
 	}
 
 	// Boolean<type="bool">= true | false;
-#line 64 "json-embed.xbnf"
+#line 63 "json-embed.xbnf"
 	protected bool EvaluateBoolean(ParseNode node)
 #line default
 	{
-#line 65 "json-embed.xbnf"
+#line 64 "json-embed.xbnf"
 		return node.Children[0].SymbolId == @true;
 #line default
 	}

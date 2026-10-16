@@ -9,7 +9,7 @@ namespace BamcGenTest;
 [Parsley.Parser("bamc.xbnf")]
 internal partial class BamcParser
 {
-    partial class Json
+    partial class JsonEmbed
     {
         partial class Evaluator
         {
@@ -250,7 +250,7 @@ internal class Program
                 foreach (var headers in _Find(tree, BamcParser.Headers))
                 {
                     var obj = headers.Children[0];
-                    Console.WriteLine($"Headers: {obj.Symbol} with {obj.Children.Count(c => BamcParser.Json.Field == c.SymbolId)} fields");
+                    Console.WriteLine($"Headers: {obj.Symbol} with {obj.Children.Count(c => BamcParser.JsonEmbed.Field == c.SymbolId)} fields");
                 }
             }
             else
