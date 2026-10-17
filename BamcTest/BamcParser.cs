@@ -3,8 +3,11 @@
 // add members in another part of this partial class instead.
 // </auto-generated>
 #nullable enable
+using System;
 using System.Collections.Generic;
 using Parsley.Runtime;
+
+namespace BamcTest;
 
 /// <summary>
 /// Parses Script with one token of lookahead (LL(1)). Synthesized from bamc.xbnf.
@@ -18,65 +21,77 @@ public partial class BamcParser : LL1ParserBase
 	public const int BrowserNames = 3;
 	public const int Browser = 4;
 	public const int Feature = 5;
-	public const int Visit = 6;
-	public const int OpenNewTab = 7;
-	public const int CloseCurrentTab = 8;
-	public const int Click = 9;
-	public const int ClickExp = 10;
-	public const int ClickAtPosition = 11;
-	public const int FillText = 12;
-	public const int FillTextExp = 13;
-	public const int GetText = 14;
-	public const int SelectElement = 15;
-	public const int SelectOption = 16;
-	public const int AddHeader = 17;
-	public const int AddHeaders = 18;
-	public const int AddCookie = 19;
-	public const int SetCustomUserAgent = 20;
-	public const int WaitForSeconds = 21;
-	public const int TakeScreenshot = 22;
-	public const int SaveAsHtml = 23;
-	public const int SaveAsHtmlExp = 24;
-	public const int JavaScript = 25;
-	public const int Brave = 26; // ""brave""
-	public const int Chrome = 27; // ""chrome""
-	public const int Chromium = 28; // ""chromium""
-	public const int Edge = 29; // ""edge""
-	public const int Firefox = 30; // ""firefox""
-	public const int Opera = 31; // ""opera""
-	public const int Safari = 32; // ""safari""
-	public const int browserKeyword = 33; // "browser"
-	public const int featureKeyword = 34; // "feature"
-	public const int visitKeyword = 35; // "visit"
-	public const int openNewTabKeyword = 36; // "open-new-tab"
-	public const int closeCurrentTabKeyword = 37; // "close-current-tab"
-	public const int clickKeyword = 38; // "click"
-	public const int clickExpKeyword = 39; // "click-exp"
-	public const int clickAtPositionKeyword = 40; // "click-at-position"
-	public const int fillTextKeyword = 41; // "fill-text"
-	public const int fillTextExpKeyword = 42; // "fill-text-exp"
-	public const int getTextKeyword = 43; // "get-text"
-	public const int selectElementKeyword = 44; // "select-element"
-	public const int selectOptionKeyword = 45; // "select-option"
-	public const int addHeaderKeyword = 46; // "add-header"
-	public const int addHeadersKeyword = 47; // "add-headers"
-	public const int addCookieKeyword = 48; // "add-cookie"
-	public const int setCustomUserAgentKeyword = 49; // "set-custom-useragent"
-	public const int waitForSecondsKeyword = 50; // "wait-for-seconds"
-	public const int takeScreenshotKeyword = 51; // "take-screenshot"
-	public const int saveAsHtmlKeyword = 52; // "save-as-html"
-	public const int saveAsHtmlExpKeyword = 53; // "save-as-html-exp"
-	public const int jsBlock = 54;
-	public const int @string = 55;
-	public const int number = 56;
-	public const int comma = 57; // ","
-	public const int newline = 58;
-	public const int comment = 59;
-	public const int whitespace = 60;
-	public const int Headers = 61;
-	public const int EndOfInput = 62;
-	public const int ErrorSymbol = 63;
-	public const int SymbolCount = 64;
+	public const int Features = 6;
+	public const int Visit = 7;
+	public const int OpenNewTab = 8;
+	public const int CloseCurrentTab = 9;
+	public const int Click = 10;
+	public const int ClickExp = 11;
+	public const int ClickAtPosition = 12;
+	public const int FillText = 13;
+	public const int FillTextExp = 14;
+	public const int GetText = 15;
+	public const int SelectElement = 16;
+	public const int SelectOption = 17;
+	public const int AddHeader = 18;
+	public const int AddHeaders = 19;
+	public const int AddCookie = 20;
+	public const int SetCustomUserAgent = 21;
+	public const int WaitForSeconds = 22;
+	public const int TakeScreenshot = 23;
+	public const int SaveAsHtml = 24;
+	public const int SaveAsHtmlExp = 25;
+	public const int JavaScript = 26;
+	public const int Brave = 27; // ""brave""
+	public const int Chrome = 28; // ""chrome""
+	public const int Chromium = 29; // ""chromium""
+	public const int Edge = 30; // ""edge""
+	public const int Firefox = 31; // ""firefox""
+	public const int Opera = 32; // ""opera""
+	public const int Safari = 33; // ""safari""
+	public const int AddExtensionFeatureKeyword = 34; // ""add-extension""
+	public const int AsyncFeatureKeyword = 35; // ""async""
+	public const int BypassCloudflareFeatureKeyword = 36; // ""bypass-cloudflare""
+	public const int DisablePycacheFeatureKeyword = 37; // ""disable-pycache""
+	public const int DisableSslFeatureKeyword = 38; // ""disable-ssl""
+	public const int RunHeadlessFeatureKeyword = 39; // ""run-headless""
+	public const int UseHttpProxyFeatureKeyword = 40; // ""use-http-proxy""
+	public const int UseHttpsProxyFeatureKeyword = 41; // ""use-https-proxy""
+	public const int UseSocks4ProxyFeatureKeyword = 42; // ""use-socks4-proxy""
+	public const int UseSocks5ProxyFeatureKeyword = 43; // ""use-socks5-proxy""
+	public const int UseMobileUserAgentFeatureKeyword = 44; // ""use-mobile-user-agent""
+	public const int browserKeyword = 45; // "browser"
+	public const int featureKeyword = 46; // "feature"
+	public const int visitKeyword = 47; // "visit"
+	public const int openNewTabKeyword = 48; // "open-new-tab"
+	public const int closeCurrentTabKeyword = 49; // "close-current-tab"
+	public const int clickKeyword = 50; // "click"
+	public const int clickExpKeyword = 51; // "click-exp"
+	public const int clickAtPositionKeyword = 52; // "click-at-position"
+	public const int fillTextKeyword = 53; // "fill-text"
+	public const int fillTextExpKeyword = 54; // "fill-text-exp"
+	public const int getTextKeyword = 55; // "get-text"
+	public const int selectElementKeyword = 56; // "select-element"
+	public const int selectOptionKeyword = 57; // "select-option"
+	public const int addHeaderKeyword = 58; // "add-header"
+	public const int addHeadersKeyword = 59; // "add-headers"
+	public const int addCookieKeyword = 60; // "add-cookie"
+	public const int setCustomUserAgentKeyword = 61; // "set-custom-useragent"
+	public const int waitForSecondsKeyword = 62; // "wait-for-seconds"
+	public const int takeScreenshotKeyword = 63; // "take-screenshot"
+	public const int saveAsHtmlKeyword = 64; // "save-as-html"
+	public const int saveAsHtmlExpKeyword = 65; // "save-as-html-exp"
+	public const int jsBlock = 66;
+	public const int @string = 67;
+	public const int number = 68;
+	public const int comma = 69; // ","
+	public const int newline = 70;
+	public const int comment = 71;
+	public const int whitespace = 72;
+	public const int Headers = 73;
+	public const int EndOfInput = 74;
+	public const int ErrorSymbol = 75;
+	public const int SymbolCount = 76;
 	#endregion
 
 	public BamcParser(IEnumerable<Token> tokens) : base(tokens, s_tables) { }
@@ -112,8 +127,8 @@ public partial class BamcParser : LL1ParserBase
 				new IslandRule(
 					terminal: Headers - Brave,
 					after: [addHeadersKeyword - Brave],
-					inner: JsonEmbedParser.CreateLexerMode(JsonEmbedLexer.Tokenize),
-					parse: JsonEmbedParser.TryParseObject,
+					inner: global::BamcTest.JsonEmbedParser.CreateLexerMode(global::BamcTest.JsonEmbedLexer.Tokenize),
+					parse: global::BamcTest.JsonEmbedParser.TryParseObject,
 					nest: 7 /* JsonEmbed.lbrace */,
 					pop: 8 /* JsonEmbed.rbrace */,
 					popOnError: true)
@@ -137,7 +152,7 @@ public partial class BamcParser : LL1ParserBase
 	/// </summary>
 	public static ParseNode Parse(string text) => Parse(Tokenize(text));
 
-	// Script<start>= Line { newline Line };
+	// Script<type="List<BamcCommand>", start>= Line { newline Line };
 	ParseNode ParseScript()
 	{
 		Enter(Script);
@@ -265,7 +280,7 @@ public partial class BamcParser : LL1ParserBase
 		Leave();
 	}
 
-	// Browser= browserKeyword BrowserNames;
+	// Browser<type="BamcBrowserCommand">= browserKeyword BrowserNames;
 	ParseNode ParseBrowser()
 	{
 		Enter(Browser);
@@ -276,13 +291,13 @@ public partial class BamcParser : LL1ParserBase
 		return node;
 	}
 
-	// Feature= featureKeyword string [ string ];
+	// Feature<type="BamcFeatureCommand">= featureKeyword Features [ string ];
 	ParseNode ParseFeature()
 	{
 		Enter(Feature);
 		var node = NewNode(Feature);
 		Expect(featureKeyword, node);
-		Expect(@string, node);
+		ParseFeatures(node);
 		// [ string ]
 		if (Current.SymbolId == @string)
 		{
@@ -292,7 +307,36 @@ public partial class BamcParser : LL1ParserBase
 		return node;
 	}
 
-	// Visit= visitKeyword string;
+	// Features<collapsed>= [ AddExtensionFeatureKeyword | AsyncFeatureKeyword | BypassCloudflareFeatureKeyword | DisablePycacheFeatureKeyword | DisableSslFeatureKeyword | RunHeadlessFeatureKeyword | UseHttpProxyFeatureKeyword | UseHttpsProxyFeatureKeyword | UseSocks4ProxyFeatureKeyword | UseSocks5ProxyFeatureKeyword | UseMobileUserAgentFeatureKeyword ];
+	void ParseFeatures(ParseNode parent)
+	{
+		Enter(Features);
+		if (Current.SymbolId is not (@string or newline or EndOfInput))
+		{
+			switch (Current.SymbolId)
+			{
+				case AddExtensionFeatureKeyword:
+				case AsyncFeatureKeyword:
+				case BypassCloudflareFeatureKeyword:
+				case DisablePycacheFeatureKeyword:
+				case DisableSslFeatureKeyword:
+				case RunHeadlessFeatureKeyword:
+				case UseHttpProxyFeatureKeyword:
+				case UseHttpsProxyFeatureKeyword:
+				case UseSocks4ProxyFeatureKeyword:
+				case UseSocks5ProxyFeatureKeyword:
+				case UseMobileUserAgentFeatureKeyword:
+					Consume(parent);
+					break;
+				default:
+					Error(parent, null, AddExtensionFeatureKeyword, AsyncFeatureKeyword, BypassCloudflareFeatureKeyword, DisablePycacheFeatureKeyword, DisableSslFeatureKeyword, RunHeadlessFeatureKeyword, UseHttpProxyFeatureKeyword, UseHttpsProxyFeatureKeyword, UseSocks4ProxyFeatureKeyword, UseSocks5ProxyFeatureKeyword, UseMobileUserAgentFeatureKeyword);
+					break;
+			}
+		}
+		Leave();
+	}
+
+	// Visit<type="BamcVisitCommand">= visitKeyword string;
 	ParseNode ParseVisit()
 	{
 		Enter(Visit);
@@ -359,7 +403,7 @@ public partial class BamcParser : LL1ParserBase
 		return node;
 	}
 
-	// FillText= fillTextKeyword string string;
+	// FillText<type="BamcFillTextCommand">= fillTextKeyword string string;
 	ParseNode ParseFillText()
 	{
 		Enter(FillText);
@@ -417,7 +461,7 @@ public partial class BamcParser : LL1ParserBase
 		return node;
 	}
 
-	// AddHeader= addHeaderKeyword string string;
+	// AddHeader<type="BamcAddHeadersCommand">= addHeaderKeyword string string;
 	ParseNode ParseAddHeader()
 	{
 		Enter(AddHeader);
@@ -429,7 +473,7 @@ public partial class BamcParser : LL1ParserBase
 		return node;
 	}
 
-	// AddHeaders= addHeadersKeyword Headers;
+	// AddHeaders<type="BamcAddHeadersCommand">= addHeadersKeyword Headers;
 	ParseNode ParseAddHeaders()
 	{
 		Enter(AddHeaders);
@@ -468,7 +512,7 @@ public partial class BamcParser : LL1ParserBase
 		return node;
 	}
 
-	// WaitForSeconds= waitForSecondsKeyword number;
+	// WaitForSeconds<type="BamcWaitForSecondsCommand">= waitForSecondsKeyword number;
 	ParseNode ParseWaitForSeconds()
 	{
 		Enter(WaitForSeconds);
@@ -479,7 +523,7 @@ public partial class BamcParser : LL1ParserBase
 		return node;
 	}
 
-	// TakeScreenshot= takeScreenshotKeyword string;
+	// TakeScreenshot<type="BamcTakeScreenshotCommand">= takeScreenshotKeyword string;
 	ParseNode ParseTakeScreenshot()
 	{
 		Enter(TakeScreenshot);
@@ -490,7 +534,7 @@ public partial class BamcParser : LL1ParserBase
 		return node;
 	}
 
-	// SaveAsHtml= saveAsHtmlKeyword string;
+	// SaveAsHtml<type="BamcSaveAsHtmlCommand">= saveAsHtmlKeyword string;
 	ParseNode ParseSaveAsHtml()
 	{
 		Enter(SaveAsHtml);
@@ -525,8 +569,8 @@ public partial class BamcParser : LL1ParserBase
 	#region Tables
 	static readonly ParserTables s_tables = new(
 		terminalStart: Brave, // lexer ids count terminals from 0; the parser adds this
-		symbolNames: ["Script", "Line", "Command", "BrowserNames", "Browser", "Feature", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "Brave", "Chrome", "Chromium", "Edge", "Firefox", "Opera", "Safari", "browserKeyword", "featureKeyword", "visitKeyword", "openNewTabKeyword", "closeCurrentTabKeyword", "clickKeyword", "clickExpKeyword", "clickAtPositionKeyword", "fillTextKeyword", "fillTextExpKeyword", "getTextKeyword", "selectElementKeyword", "selectOptionKeyword", "addHeaderKeyword", "addHeadersKeyword", "addCookieKeyword", "setCustomUserAgentKeyword", "waitForSecondsKeyword", "takeScreenshotKeyword", "saveAsHtmlKeyword", "saveAsHtmlExpKeyword", "jsBlock", "string", "number", "comma", "newline", "comment", "whitespace", "Headers", "#EOS", "#ERROR"],
-		displayNames: ["Script", "Line", "Command", "BrowserNames", "Browser", "Feature", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "\"\"brave\"\"", "\"\"chrome\"\"", "\"\"chromium\"\"", "\"\"edge\"\"", "\"\"firefox\"\"", "\"\"opera\"\"", "\"\"safari\"\"", "\"browser\"", "\"feature\"", "\"visit\"", "\"open-new-tab\"", "\"close-current-tab\"", "\"click\"", "\"click-exp\"", "\"click-at-position\"", "\"fill-text\"", "\"fill-text-exp\"", "\"get-text\"", "\"select-element\"", "\"select-option\"", "\"add-header\"", "\"add-headers\"", "\"add-cookie\"", "\"set-custom-useragent\"", "\"wait-for-seconds\"", "\"take-screenshot\"", "\"save-as-html\"", "\"save-as-html-exp\"", "jsBlock", "string", "number", "\",\"", "newline", "comment", "whitespace", "Headers", "end of input", "an unrecognized token"],
+		symbolNames: ["Script", "Line", "Command", "BrowserNames", "Browser", "Feature", "Features", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "Brave", "Chrome", "Chromium", "Edge", "Firefox", "Opera", "Safari", "AddExtensionFeatureKeyword", "AsyncFeatureKeyword", "BypassCloudflareFeatureKeyword", "DisablePycacheFeatureKeyword", "DisableSslFeatureKeyword", "RunHeadlessFeatureKeyword", "UseHttpProxyFeatureKeyword", "UseHttpsProxyFeatureKeyword", "UseSocks4ProxyFeatureKeyword", "UseSocks5ProxyFeatureKeyword", "UseMobileUserAgentFeatureKeyword", "browserKeyword", "featureKeyword", "visitKeyword", "openNewTabKeyword", "closeCurrentTabKeyword", "clickKeyword", "clickExpKeyword", "clickAtPositionKeyword", "fillTextKeyword", "fillTextExpKeyword", "getTextKeyword", "selectElementKeyword", "selectOptionKeyword", "addHeaderKeyword", "addHeadersKeyword", "addCookieKeyword", "setCustomUserAgentKeyword", "waitForSecondsKeyword", "takeScreenshotKeyword", "saveAsHtmlKeyword", "saveAsHtmlExpKeyword", "jsBlock", "string", "number", "comma", "newline", "comment", "whitespace", "Headers", "#EOS", "#ERROR"],
+		displayNames: ["Script", "Line", "Command", "BrowserNames", "Browser", "Feature", "Features", "Visit", "OpenNewTab", "CloseCurrentTab", "Click", "ClickExp", "ClickAtPosition", "FillText", "FillTextExp", "GetText", "SelectElement", "SelectOption", "AddHeader", "AddHeaders", "AddCookie", "SetCustomUserAgent", "WaitForSeconds", "TakeScreenshot", "SaveAsHtml", "SaveAsHtmlExp", "JavaScript", "\"\"brave\"\"", "\"\"chrome\"\"", "\"\"chromium\"\"", "\"\"edge\"\"", "\"\"firefox\"\"", "\"\"opera\"\"", "\"\"safari\"\"", "\"\"add-extension\"\"", "\"\"async\"\"", "\"\"bypass-cloudflare\"\"", "\"\"disable-pycache\"\"", "\"\"disable-ssl\"\"", "\"\"run-headless\"\"", "\"\"use-http-proxy\"\"", "\"\"use-https-proxy\"\"", "\"\"use-socks4-proxy\"\"", "\"\"use-socks5-proxy\"\"", "\"\"use-mobile-user-agent\"\"", "\"browser\"", "\"feature\"", "\"visit\"", "\"open-new-tab\"", "\"close-current-tab\"", "\"click\"", "\"click-exp\"", "\"click-at-position\"", "\"fill-text\"", "\"fill-text-exp\"", "\"get-text\"", "\"select-element\"", "\"select-option\"", "\"add-header\"", "\"add-headers\"", "\"add-cookie\"", "\"set-custom-useragent\"", "\"wait-for-seconds\"", "\"take-screenshot\"", "\"save-as-html\"", "\"save-as-html-exp\"", "jsBlock", "string", "number", "\",\"", "newline", "comment", "whitespace", "Headers", "end of input", "an unrecognized token"],
 		collapsedTerminals: [comma, newline],
 		// for each non-terminal, where error recovery can stop while parsing it: what can follow it, plus its sync terminals
 		recoverySets:
@@ -537,6 +581,7 @@ public partial class BamcParser : LL1ParserBase
 			[newline, EndOfInput], // BrowserNames
 			[newline, EndOfInput], // Browser
 			[newline, EndOfInput], // Feature
+			[@string, newline, EndOfInput], // Features
 			[newline, EndOfInput], // Visit
 			[newline, EndOfInput], // OpenNewTab
 			[newline, EndOfInput], // CloseCurrentTab
@@ -562,4 +607,375 @@ public partial class BamcParser : LL1ParserBase
 		endOfInput: EndOfInput,
 		error: ErrorSymbol);
 	#endregion
+}
+
+/// <summary>
+/// Evaluates Script parse trees from <see cref="BamcParser"/> with the semantic actions in bamc.xbnf.
+/// </summary>
+public partial class BamcEvaluator
+{
+	#region Symbols
+	protected const int Script = 0;
+	protected const int Line = 1;
+	protected const int Command = 2;
+	protected const int BrowserNames = 3;
+	protected const int Browser = 4;
+	protected const int Feature = 5;
+	protected const int Features = 6;
+	protected const int Visit = 7;
+	protected const int OpenNewTab = 8;
+	protected const int CloseCurrentTab = 9;
+	protected const int Click = 10;
+	protected const int ClickExp = 11;
+	protected const int ClickAtPosition = 12;
+	protected const int FillText = 13;
+	protected const int FillTextExp = 14;
+	protected const int GetText = 15;
+	protected const int SelectElement = 16;
+	protected const int SelectOption = 17;
+	protected const int AddHeader = 18;
+	protected const int AddHeaders = 19;
+	protected const int AddCookie = 20;
+	protected const int SetCustomUserAgent = 21;
+	protected const int WaitForSeconds = 22;
+	protected const int TakeScreenshot = 23;
+	protected const int SaveAsHtml = 24;
+	protected const int SaveAsHtmlExp = 25;
+	protected const int JavaScript = 26;
+	protected const int Brave = 27; // ""brave""
+	protected const int Chrome = 28; // ""chrome""
+	protected const int Chromium = 29; // ""chromium""
+	protected const int Edge = 30; // ""edge""
+	protected const int Firefox = 31; // ""firefox""
+	protected const int Opera = 32; // ""opera""
+	protected const int Safari = 33; // ""safari""
+	protected const int AddExtensionFeatureKeyword = 34; // ""add-extension""
+	protected const int AsyncFeatureKeyword = 35; // ""async""
+	protected const int BypassCloudflareFeatureKeyword = 36; // ""bypass-cloudflare""
+	protected const int DisablePycacheFeatureKeyword = 37; // ""disable-pycache""
+	protected const int DisableSslFeatureKeyword = 38; // ""disable-ssl""
+	protected const int RunHeadlessFeatureKeyword = 39; // ""run-headless""
+	protected const int UseHttpProxyFeatureKeyword = 40; // ""use-http-proxy""
+	protected const int UseHttpsProxyFeatureKeyword = 41; // ""use-https-proxy""
+	protected const int UseSocks4ProxyFeatureKeyword = 42; // ""use-socks4-proxy""
+	protected const int UseSocks5ProxyFeatureKeyword = 43; // ""use-socks5-proxy""
+	protected const int UseMobileUserAgentFeatureKeyword = 44; // ""use-mobile-user-agent""
+	protected const int browserKeyword = 45; // "browser"
+	protected const int featureKeyword = 46; // "feature"
+	protected const int visitKeyword = 47; // "visit"
+	protected const int openNewTabKeyword = 48; // "open-new-tab"
+	protected const int closeCurrentTabKeyword = 49; // "close-current-tab"
+	protected const int clickKeyword = 50; // "click"
+	protected const int clickExpKeyword = 51; // "click-exp"
+	protected const int clickAtPositionKeyword = 52; // "click-at-position"
+	protected const int fillTextKeyword = 53; // "fill-text"
+	protected const int fillTextExpKeyword = 54; // "fill-text-exp"
+	protected const int getTextKeyword = 55; // "get-text"
+	protected const int selectElementKeyword = 56; // "select-element"
+	protected const int selectOptionKeyword = 57; // "select-option"
+	protected const int addHeaderKeyword = 58; // "add-header"
+	protected const int addHeadersKeyword = 59; // "add-headers"
+	protected const int addCookieKeyword = 60; // "add-cookie"
+	protected const int setCustomUserAgentKeyword = 61; // "set-custom-useragent"
+	protected const int waitForSecondsKeyword = 62; // "wait-for-seconds"
+	protected const int takeScreenshotKeyword = 63; // "take-screenshot"
+	protected const int saveAsHtmlKeyword = 64; // "save-as-html"
+	protected const int saveAsHtmlExpKeyword = 65; // "save-as-html-exp"
+	protected const int jsBlock = 66;
+	protected const int @string = 67;
+	protected const int number = 68;
+	protected const int comma = 69; // ","
+	protected const int newline = 70;
+	protected const int comment = 71;
+	protected const int whitespace = 72;
+	protected const int Headers = 73;
+	protected const int EndOfInput = 74;
+	protected const int ErrorSymbol = 75;
+	#endregion
+
+	/// <summary>
+	/// The state passed to Evaluate, for the semantic actions to use
+	/// </summary>
+	protected object? State { get; }
+
+	protected BamcEvaluator(object? state) { State = state; }
+
+	/// <summary>
+	/// Evaluates a parse tree from <see cref="BamcParser"/>, starting at its Script root
+	/// </summary>
+	/// <param name="node">The root of the tree</param>
+	/// <param name="state">Anything the semantic actions need, available to them as State</param>
+#line 15 "bamc.xbnf"
+	public static List<BamcCommand> Evaluate(ParseNode node, object? state = null)
+#line default
+	{
+		return new BamcEvaluator(state).EvaluateScript(node);
+	}
+
+	/// <summary>
+	/// Evaluates a node of any non-terminal, for when a child can be one of several
+	/// </summary>
+	protected object Evaluate(ParseNode node)
+	{
+		switch (node.SymbolId)
+		{
+			case Script:
+				return EvaluateScript(node);
+			case Browser:
+				return EvaluateBrowser(node);
+			case Feature:
+				return EvaluateFeature(node);
+			case Visit:
+				return EvaluateVisit(node);
+			case OpenNewTab:
+				return EvaluateOpenNewTab(node);
+			case CloseCurrentTab:
+				return EvaluateCloseCurrentTab(node);
+			case Click:
+				return EvaluateClick(node);
+			case ClickExp:
+				return EvaluateClickExp(node);
+			case ClickAtPosition:
+				return EvaluateClickAtPosition(node);
+			case FillText:
+				return EvaluateFillText(node);
+			case FillTextExp:
+				return EvaluateFillTextExp(node);
+			case GetText:
+				return EvaluateGetText(node);
+			case SelectElement:
+				return EvaluateSelectElement(node);
+			case SelectOption:
+				return EvaluateSelectOption(node);
+			case AddHeader:
+				return EvaluateAddHeader(node);
+			case AddHeaders:
+				return EvaluateAddHeaders(node);
+			case AddCookie:
+				return EvaluateAddCookie(node);
+			case SetCustomUserAgent:
+				return EvaluateSetCustomUserAgent(node);
+			case WaitForSeconds:
+				return EvaluateWaitForSeconds(node);
+			case TakeScreenshot:
+				return EvaluateTakeScreenshot(node);
+			case SaveAsHtml:
+				return EvaluateSaveAsHtml(node);
+			case SaveAsHtmlExp:
+				return EvaluateSaveAsHtmlExp(node);
+			case JavaScript:
+				return EvaluateJavaScript(node);
+		}
+		throw new InvalidOperationException($"{node.Symbol} can't be evaluated");
+	}
+
+	// for a production with no semantic action: its node evaluates to its one non-terminal child, terminals aside
+	object _PassThrough(ParseNode node)
+	{
+		ParseNode? only = null;
+		foreach (var child in node.Children)
+		{
+			if (child.IsTerminal) continue;
+			if (null != only) throw new InvalidOperationException($"{node.Symbol} has no semantic action and more than one non-terminal child, so it can't be evaluated");
+			only = child;
+		}
+		if (null == only) throw new InvalidOperationException($"{node.Symbol} has no semantic action and no non-terminal child, so it can't be evaluated");
+		return Evaluate(only);
+	}
+
+	// Script<type="List<BamcCommand>", start>= Line { newline Line };
+#line 15 "bamc.xbnf"
+	protected List<BamcCommand> EvaluateScript(ParseNode node)
+#line default
+	{
+#line 16 "bamc.xbnf"
+		var result = new List<BamcCommand>(node.Children.Count);
+		foreach(var child in node.Children) {
+		    result.Add((BamcCommand)Evaluate(child));
+		}
+		return result;
+#line default
+	}
+
+	// Browser<type="BamcBrowserCommand">= browserKeyword BrowserNames;
+#line 47 "bamc.xbnf"
+	protected BamcBrowserCommand EvaluateBrowser(ParseNode node)
+#line default
+	{
+#line 48 "bamc.xbnf"
+		return new BamcBrowserCommand(node.Children[1].SymbolId-Brave);
+#line default
+	}
+
+	// Feature<type="BamcFeatureCommand">= featureKeyword Features [ string ];
+#line 50 "bamc.xbnf"
+	protected BamcFeatureCommand EvaluateFeature(ParseNode node)
+#line default
+	{
+#line 50 "bamc.xbnf"
+		// feature "use-http-proxy" "USER:PASS@IP:PORT"
+		string? arg = null;
+		if(node.Children.Count>2) {
+		    arg = node.Children[2].Value!;
+		    arg = arg.Substring(1,arg.Length-2); // remove quotes
+		}
+		return new BamcFeatureCommand(node.Children[1].SymbolId-AddExtensionFeatureKeyword,arg);
+#line default
+	}
+
+	// Visit<type="BamcVisitCommand">= visitKeyword string;
+#line 85 "bamc.xbnf"
+	protected BamcVisitCommand EvaluateVisit(ParseNode node)
+#line default
+	{
+#line 85 "bamc.xbnf"
+		// visit "https://..."
+		var url = node.Children[1].Value!;
+		url = url.Substring(1,url.Length-2);
+		return new BamcVisitCommand(new Uri(url));
+#line default
+	}
+
+	// OpenNewTab= openNewTabKeyword string string;
+	protected object EvaluateOpenNewTab(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// CloseCurrentTab= closeCurrentTabKeyword;
+	protected object EvaluateCloseCurrentTab(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// Click= clickKeyword string;
+	protected object EvaluateClick(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// ClickExp= clickExpKeyword string;
+	protected object EvaluateClickExp(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// ClickAtPosition= clickAtPositionKeyword string string;
+	protected object EvaluateClickAtPosition(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// FillText<type="BamcFillTextCommand">= fillTextKeyword string string;
+#line 97 "bamc.xbnf"
+	protected BamcFillTextCommand EvaluateFillText(ParseNode node)
+#line default
+	{
+#line 97 "bamc.xbnf"
+		// selector, value
+		return new BamcFillTextCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!));
+#line default
+	}
+
+	// FillTextExp= fillTextExpKeyword string string;
+	protected object EvaluateFillTextExp(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// GetText= getTextKeyword string;
+	protected object EvaluateGetText(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// SelectElement= selectElementKeyword string;
+	protected object EvaluateSelectElement(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// SelectOption= selectOptionKeyword string number;
+	protected object EvaluateSelectOption(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// AddHeader<type="BamcAddHeadersCommand">= addHeaderKeyword string string;
+#line 106 "bamc.xbnf"
+	protected BamcAddHeadersCommand EvaluateAddHeader(ParseNode node)
+#line default
+	{
+#line 106 "bamc.xbnf"
+		// add-header "DNT" "1"
+		return new BamcAddHeadersCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!));
+#line default
+	}
+
+	// AddHeaders<type="BamcAddHeadersCommand">= addHeadersKeyword Headers;
+#line 109 "bamc.xbnf"
+	protected BamcAddHeadersCommand EvaluateAddHeaders(ParseNode node)
+#line default
+	{
+#line 110 "bamc.xbnf"
+		var jsonNode = node.Children[1].Children[0];
+		var json = JsonEmbedEvaluator.Evaluate(jsonNode);
+		return new BamcAddHeadersCommand((Dictionary<string,object?>)json);
+#line default
+	}
+
+	// AddCookie= addCookieKeyword string [ comma ] string;
+	protected object EvaluateAddCookie(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// SetCustomUserAgent= setCustomUserAgentKeyword string;
+	protected object EvaluateSetCustomUserAgent(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// WaitForSeconds<type="BamcWaitForSecondsCommand">= waitForSecondsKeyword number;
+#line 123 "bamc.xbnf"
+	protected BamcWaitForSecondsCommand EvaluateWaitForSeconds(ParseNode node)
+#line default
+	{
+#line 123 "bamc.xbnf"
+		// 1, 1.5, .2
+		return new BamcWaitForSecondsCommand(float.Parse(node.Children[1].Value!,System.Globalization.CultureInfo.InvariantCulture));
+#line default
+	}
+
+	// TakeScreenshot<type="BamcTakeScreenshotCommand">= takeScreenshotKeyword string;
+#line 126 "bamc.xbnf"
+	protected BamcTakeScreenshotCommand EvaluateTakeScreenshot(ParseNode node)
+#line default
+	{
+#line 127 "bamc.xbnf"
+		return new BamcTakeScreenshotCommand(UnquoteString(node.Children[1].Value!));
+#line default
+	}
+
+	// SaveAsHtml<type="BamcSaveAsHtmlCommand">= saveAsHtmlKeyword string;
+#line 129 "bamc.xbnf"
+	protected BamcSaveAsHtmlCommand EvaluateSaveAsHtml(ParseNode node)
+#line default
+	{
+#line 130 "bamc.xbnf"
+		return new BamcSaveAsHtmlCommand(UnquoteString(node.Children[1].Value!));
+#line default
+	}
+
+	// SaveAsHtmlExp= saveAsHtmlExpKeyword string;
+	protected object EvaluateSaveAsHtmlExp(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
+
+	// JavaScript= jsBlock;
+	protected object EvaluateJavaScript(ParseNode node)
+	{
+		return _PassThrough(node);
+	}
 }

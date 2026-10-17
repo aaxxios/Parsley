@@ -7,6 +7,8 @@ using System;
 using System.Collections.Generic;
 using Parsley.Runtime;
 
+namespace BamcTest;
+
 /// <summary>
 /// Parses Json with one token of lookahead (LL(1)). Synthesized from json-embed.xbnf.
 /// </summary>

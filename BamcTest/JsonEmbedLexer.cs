@@ -9,7 +9,7 @@ using System.Text;
 
 // The lexer runtime: public and in Parsley.Runtime when compiled into Parsley.Runtime.dll (LUTHOR_RUNTIME_PUBLIC),
 // else internal to the project it's generated into, in Luthor.Runtime unless LexerEmitter.RuntimeSourceIn moves it
-namespace BamcTest.Json
+namespace BamcTest
 {
     // A source of code units for the matcher. Implemented by small structs so the JIT
     // specializes Match<T> for each input kind (no interface dispatch in the inner loop).
@@ -291,7 +291,7 @@ namespace BamcTest.Json
     }
 }
 
-namespace BamcTest.Json
+namespace BamcTest
 {
     static class JsonEmbedLexer
     {
@@ -327,14 +327,14 @@ namespace BamcTest.Json
             3, 48, 57, 228, 65, 70, 228, 97, 102, 228
         };
         public static global::System.Collections.Generic.IEnumerable<global::Parsley.Runtime.Token> Tokenize(global::System.IO.TextReader reader, long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
-            foreach(var tok in global::BamcTest.Json.LuthorRuntime.Tokenize(_dfa, reader, tabWidth, position, line, column))
+            foreach(var tok in global::BamcTest.LuthorRuntime.Tokenize(_dfa, reader, tabWidth, position, line, column))
             {
                 if(tok.Symbol == whitespace) continue;
                 yield return new global::Parsley.Runtime.Token(0 <= tok.Symbol && tok.Symbol < 12 ? tok.Symbol : -1, tok.Text, tok.Line, tok.Column, tok.Position);
             }
         }
         public static global::System.Collections.Generic.IEnumerable<global::Parsley.Runtime.Token> Tokenize(string text, long position = 0, int line = 1, int column = 1, int tabWidth = 4) {
-            foreach(var tok in global::BamcTest.Json.LuthorRuntime.Tokenize(_dfa, text, tabWidth, position, line, column))
+            foreach(var tok in global::BamcTest.LuthorRuntime.Tokenize(_dfa, text, tabWidth, position, line, column))
             {
                 if(tok.Symbol == whitespace) continue;
                 yield return new global::Parsley.Runtime.Token(0 <= tok.Symbol && tok.Symbol < 12 ? tok.Symbol : -1, tok.Text, tok.Line, tok.Column, tok.Position);

@@ -1,0 +1,179 @@
+// Approximate grammar for BrowserAutomationMaster .bamc scripts.
+// Reverse-engineered from the examples, sections/documentation.md and
+// Core/Parsing/Parser.cs; there's no official spec, so treat it as a sketch.
+//
+// Line-based: newlines separate lines (they don't terminate them), and a
+// line's content is optional. So blank lines are fine and the last line
+// doesn't need a trailing newline.
+
+// add-headers takes a JSON object, which bamc's lexer can't lex (its strings
+// differ, and braces nest). It's an island: json.xbnf lexes and parses it,
+// and bamc sees one Headers token.
+@external JsonEmbed "json-embed.xbnf";
+@namespace "BamcTest";
+@using "System.Collections.Generic";
+Script<type="List<BamcCommand>", start>= Line { newline Line } => {
+    var result = new List<BamcCommand>(node.Children.Count);
+    foreach(var child in node.Children) {
+        result.Add((BamcCommand)Evaluate(child));
+    }
+    return result;
+};
+Line<collapsed>= [ Command ];
+
+Command<collapsed, expected="a command">=
+      Browser | Feature
+    | Visit | OpenNewTab | CloseCurrentTab
+    | Click | ClickExp | ClickAtPosition
+    | FillText | FillTextExp | GetText
+    | SelectElement | SelectOption
+    | AddHeader | AddHeaders | AddCookie | SetCustomUserAgent
+    | WaitForSeconds | TakeScreenshot | SaveAsHtml | SaveAsHtmlExp
+    | JavaScript;
+
+// --- setup -----------------------------------------------------------------
+// The real tool also enforces ordering (browser first, features before
+// actions); that's left to a later pass rather than the grammar.
+
+BrowserNames<collapsed>= Brave | Chrome | Chromium | Edge | Firefox | Opera | Safari;
+Brave="\"brave\"";
+Chrome="\"chrome\"";
+Chromium="\"chromium\"";
+Edge="\"edge\"";
+Firefox="\"firefox\"";
+Opera="\"opera\"";
+Safari="\"safari\""; 
+
+Browser<type="BamcBrowserCommand">= browserKeyword BrowserNames => {
+    return new BamcBrowserCommand(node.Children[1].SymbolId-Brave);
+};   // browser "chrome"
+Feature<type="BamcFeatureCommand">= featureKeyword Features [ string ] => {       // feature "use-http-proxy" "USER:PASS@IP:PORT"
+    string? arg = null;
+    if(node.Children.Count>2) {
+        arg = node.Children[2].Value!;
+        arg = arg.Substring(1,arg.Length-2); // remove quotes
+    }
+    return new BamcFeatureCommand(node.Children[1].SymbolId-AddExtensionFeatureKeyword,arg);
+};
+Features<collapsed>= [ 
+  AddExtensionFeatureKeyword |
+  AsyncFeatureKeyword |  
+  BypassCloudflareFeatureKeyword | 
+  DisablePycacheFeatureKeyword | 
+  DisableSslFeatureKeyword |
+  RunHeadlessFeatureKeyword |
+  UseHttpProxyFeatureKeyword |
+  UseHttpsProxyFeatureKeyword |
+  UseSocks4ProxyFeatureKeyword |
+  UseSocks5ProxyFeatureKeyword |
+  UseMobileUserAgentFeatureKeyword
+];
+
+AddExtensionFeatureKeyword= "\"add-extension\"";
+AsyncFeatureKeyword= "\"async\"";
+BypassCloudflareFeatureKeyword= "\"bypass-cloudflare\"";
+DisablePycacheFeatureKeyword= "\"disable-pycache\"";
+DisableSslFeatureKeyword= "\"disable-ssl\"";
+RunHeadlessFeatureKeyword= "\"run-headless\"";
+UseHttpProxyFeatureKeyword= "\"use-http-proxy\"";
+UseHttpsProxyFeatureKeyword= "\"use-https-proxy\"";
+UseSocks4ProxyFeatureKeyword= "\"use-socks4-proxy\"";
+UseSocks5ProxyFeatureKeyword= "\"use-socks5-proxy\"";
+UseMobileUserAgentFeatureKeyword="\"use-mobile-user-agent\"";
+
+// --- navigation ------------------------------------------------------------
+Visit<type="BamcVisitCommand">= visitKeyword string => {                      // visit "https://..."
+    var url = node.Children[1].Value!;
+    url = url.Substring(1,url.Length-2);
+    return new BamcVisitCommand(new Uri(url));
+};
+OpenNewTab= openNewTabKeyword string string;     // open-new-tab "https://..." "3"
+CloseCurrentTab= closeCurrentTabKeyword;
+
+// --- element actions -------------------------------------------------------
+Click= clickKeyword string;
+ClickExp= clickExpKeyword string;
+ClickAtPosition= clickAtPositionKeyword string string;   // "x" "y"
+FillText<type="BamcFillTextCommand">= fillTextKeyword string string => {         // selector, value
+    return new BamcFillTextCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!));
+};
+FillTextExp= fillTextExpKeyword string string;
+GetText= getTextKeyword string;
+SelectElement= selectElementKeyword string;
+SelectOption= selectOptionKeyword string number; // selector, option index
+
+// --- request setup ---------------------------------------------------------
+AddHeader<type="BamcAddHeadersCommand">= addHeaderKeyword string string => {       // add-header "DNT" "1"
+    return new BamcAddHeadersCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!));
+};
+AddHeaders<type="BamcAddHeadersCommand">= addHeadersKeyword Headers => {
+    var jsonNode = node.Children[1].Children[0];
+    var json = JsonEmbed.Evaluator.Evaluate(jsonNode);
+    return new BamcAddHeadersCommand((Dictionary<string,object?>)json);
+};  // add-headers {"a": "b", ...}
+
+// The island starts right after add-headers and ends at the } that closes the
+// object's first {. A line break inside it is an error to JSON's lexer, which
+// also ends it, so a broken object can't swallow the lines after it.
+Headers<entry="JsonEmbed.Object", after="addHeadersKeyword", nest="JsonEmbed.lbrace", pop="JsonEmbed.rbrace">;
+AddCookie= addCookieKeyword string [ comma ] string;  // one test uses a comma
+SetCustomUserAgent= setCustomUserAgentKeyword string;
+
+// --- output and timing -----------------------------------------------------
+WaitForSeconds<type="BamcWaitForSecondsCommand">= waitForSecondsKeyword number => {    // 1, 1.5, .2
+    return new BamcWaitForSecondsCommand(float.Parse(node.Children[1].Value!,System.Globalization.CultureInfo.InvariantCulture));
+};
+TakeScreenshot<type="BamcTakeScreenshotCommand">= takeScreenshotKeyword string => {
+    return new BamcTakeScreenshotCommand(UnquoteString(node.Children[1].Value!));
+};
+SaveAsHtml<type="BamcSaveAsHtmlCommand">= saveAsHtmlKeyword string => {
+    return new BamcSaveAsHtmlCommand(UnquoteString(node.Children[1].Value!));
+};
+SaveAsHtmlExp= saveAsHtmlExpKeyword string;
+
+// --- embedded JavaScript ---------------------------------------------------
+// The whole start-javascript ... end-javascript block is one token, so the
+// JS inside is never tokenized as bamc. The body is any lines that don't
+// start with "end-javascript" (spelled out because DFA lexers usually have
+// no lazy quantifiers or lookahead).
+JavaScript= jsBlock;
+
+// ===========================================================================
+// Terminals. Keywords are declared before anything else so they win ties;
+// longest match keeps "click" from eating the front of "click-exp".
+
+browserKeyword= "browser";
+featureKeyword= "feature";
+visitKeyword= "visit";
+openNewTabKeyword= "open-new-tab";
+closeCurrentTabKeyword= "close-current-tab";
+clickKeyword= "click";
+clickExpKeyword= "click-exp";
+clickAtPositionKeyword= "click-at-position";
+fillTextKeyword= "fill-text";
+fillTextExpKeyword= "fill-text-exp";
+getTextKeyword= "get-text";
+selectElementKeyword= "select-element";
+selectOptionKeyword= "select-option";
+addHeaderKeyword= "add-header";
+addHeadersKeyword= "add-headers";
+addCookieKeyword= "add-cookie";
+setCustomUserAgentKeyword= "set-custom-useragent";
+waitForSecondsKeyword= "wait-for-seconds";
+takeScreenshotKeyword= "take-screenshot";
+saveAsHtmlKeyword= "save-as-html";
+saveAsHtmlExpKeyword= "save-as-html-exp";
+
+jsBlock= 'start\-javascript[^\n]*\n(([^e\n][^\n]*|e([^n\n][^\n]*)?|en([^d\n][^\n]*)?|end([^\-\n][^\n]*)?|end\-([^j\n][^\n]*)?|end\-j([^a\n][^\n]*)?|end\-ja([^v\n][^\n]*)?|end\-jav([^a\n][^\n]*)?|end\-java([^s\n][^\n]*)?|end\-javas([^c\n][^\n]*)?|end\-javasc([^r\n][^\n]*)?|end\-javascr([^i\n][^\n]*)?|end\-javascri([^p\n][^\n]*)?|end\-javascrip([^t\n][^\n]*)?)?\n)*end\-javascript';
+
+// Double- or single-quoted (the docs show click-exp 'selector').
+string= '"([^"\\\n]|\\.)*"|\'([^\'\\\n]|\\.)*\'';
+number= '[0-9]*\.?[0-9]+';
+comma<collapsed>= ",";
+
+newline<collapsed>= '\n';
+comment<hidden>= '//[^\n]*';
+whitespace<hidden>= '[ \t\r]+';
+
+
+

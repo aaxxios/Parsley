@@ -28,6 +28,6 @@
     <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)Bamc.lex&quot; -c BamcLexer -o &quot;$(SourceDir)BamcLexer.cs&quot;" />
   </Target>
   <Target Name="GenerateJsonLexer" BeforeTargets="BeforeBuild" DependsOnTargets="GenerateJsonParser" Inputs="$(SourceDir)Json.lex" Outputs="$(SourceDir)JsonEmbedLexer.cs">
-    <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)Json.lex&quot; -c JsonEmbedLexer -n BamcTest.Json -o &quot;$(SourceDir)JsonEmbedLexer.cs&quot;" />
+    <Exec Command="dotnet &quot;$(BinDir)parsley-luthor.dll&quot; &quot;$(SourceDir)Json.lex&quot; -c JsonEmbedLexer -n BamcTest -o &quot;$(SourceDir)JsonEmbedLexer.cs&quot;" />
   </Target>
 </Project>

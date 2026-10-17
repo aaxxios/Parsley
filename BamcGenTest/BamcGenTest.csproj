@@ -6,6 +6,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RootNamespace>BamcTest</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Parsley.Generator\Parsley.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
@@ -15,11 +16,6 @@
 
   <!-- the grammars are BamcTest's. bamc.xbnf's @external reads json.xbnf from beside it, so both are listed. -->
   <ItemGroup>
-    <AdditionalFiles Include="..\BamcTest\json-embed.xbnf" />
-    <AdditionalFiles Include="..\BamcTest\bamc.xbnf" />
     <None Include="..\BamcTest\*.bamc" CopyToOutputDirectory="PreserveNewest" LinkBase="examples" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\BamcTest\json-embed.xbnf" Link="json-embed.xbnf" />
   </ItemGroup>
 </Project>

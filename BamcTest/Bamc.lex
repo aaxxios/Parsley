@@ -5,6 +5,17 @@ Edge \"edge\"
 Firefox \"firefox\"
 Opera \"opera\"
 Safari \"safari\"
+AddExtensionFeatureKeyword \"add-extension\"
+AsyncFeatureKeyword \"async\"
+BypassCloudflareFeatureKeyword \"bypass-cloudflare\"
+DisablePycacheFeatureKeyword \"disable-pycache\"
+DisableSslFeatureKeyword \"disable-ssl\"
+RunHeadlessFeatureKeyword \"run-headless\"
+UseHttpProxyFeatureKeyword \"use-http-proxy\"
+UseHttpsProxyFeatureKeyword \"use-https-proxy\"
+UseSocks4ProxyFeatureKeyword \"use-socks4-proxy\"
+UseSocks5ProxyFeatureKeyword \"use-socks5-proxy\"
+UseMobileUserAgentFeatureKeyword \"use-mobile-user-agent\"
 browserKeyword browser
 featureKeyword feature
 visitKeyword visit

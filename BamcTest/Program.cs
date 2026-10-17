@@ -12,6 +12,8 @@ internal class Program
         {
             var tree = BamcParser.Parse(reader);
             Console.WriteLine(tree);
+            var commands = BamcEvaluator.Evaluate(tree);
+            Console.WriteLine();
         }
         catch (ParseException e)
         {
