@@ -10,6 +10,7 @@
 // differ, and braces nest). It's an island: json.xbnf lexes and parses it,
 // and bamc sees one Headers token.
 @external JsonEmbed "json-embed.xbnf";
+@external JavascriptEmbed "javascript-embed.xbnf";
 @namespace "BamcTest";
 @using "System.Collections.Generic";
 Script<type="List<BamcCommand>", start>= Line { newline Line } => {
@@ -29,7 +30,7 @@ Command<collapsed, expected="a command">=
     | SelectElement | SelectOption
     | AddHeader | AddHeaders | AddCookie | SetCustomUserAgent
     | WaitForSeconds | TakeScreenshot | SaveAsHtml | SaveAsHtmlExp
-    | JavaScript;
+    | Javascript;
 
 // --- setup -----------------------------------------------------------------
 // The real tool also enforces ordering (browser first, features before
@@ -44,16 +45,15 @@ Firefox="\"firefox\"";
 Opera="\"opera\"";
 Safari="\"safari\""; 
 
-Browser<type="BamcBrowserCommand">= browserKeyword BrowserNames => {
-    return new BamcBrowserCommand(node.Children[1].SymbolId-Brave);
+Browser= browserKeyword BrowserNames => {
+    return new BamcBrowserCommand(node.Children[1].SymbolId-Brave,LineInfo.FromNode(node));
 };   // browser "chrome"
-Feature<type="BamcFeatureCommand">= featureKeyword Features [ string ] => {       // feature "use-http-proxy" "USER:PASS@IP:PORT"
+Feature= featureKeyword Features [ string ] => {       // feature "use-http-proxy" "USER:PASS@IP:PORT"
     string? arg = null;
     if(node.Children.Count>2) {
-        arg = node.Children[2].Value!;
-        arg = arg.Substring(1,arg.Length-2); // remove quotes
+        arg = UnquoteString(node.Children[2].Value!);
     }
-    return new BamcFeatureCommand(node.Children[1].SymbolId-AddExtensionFeatureKeyword,arg);
+    return new BamcFeatureCommand(node.Children[1].SymbolId-AddExtensionFeatureKeyword,arg,LineInfo.FromNode(node));
 };
 Features<collapsed>= [ 
   AddExtensionFeatureKeyword |
@@ -82,66 +82,100 @@ UseSocks5ProxyFeatureKeyword= "\"use-socks5-proxy\"";
 UseMobileUserAgentFeatureKeyword="\"use-mobile-user-agent\"";
 
 // --- navigation ------------------------------------------------------------
-Visit<type="BamcVisitCommand">= visitKeyword string => {                      // visit "https://..."
+Visit= visitKeyword string => {                      // visit "https://..."
     var url = node.Children[1].Value!;
     url = url.Substring(1,url.Length-2);
-    return new BamcVisitCommand(new Uri(url));
+    return new BamcVisitCommand(new Uri(url),LineInfo.FromNode(node));
 };
-OpenNewTab= openNewTabKeyword string string;     // open-new-tab "https://..." "3"
-CloseCurrentTab= closeCurrentTabKeyword;
+OpenNewTab= openNewTabKeyword string string => {
+    return new BamcOpenNewTabCommand(new Uri( UnquoteString(node.Children[1].Value!)),UnquoteString(node.Children[2].Value!),LineInfo.FromNode(node));
+};     // open-new-tab "https://..." "3"
+CloseCurrentTab= closeCurrentTabKeyword => {
+    return new BamcCloseCurrentTabCommand(LineInfo.FromNode(node));
+};
 
 // --- element actions -------------------------------------------------------
-Click= clickKeyword string;
-ClickExp= clickExpKeyword string;
-ClickAtPosition= clickAtPositionKeyword string string;   // "x" "y"
-FillText<type="BamcFillTextCommand">= fillTextKeyword string string => {         // selector, value
-    return new BamcFillTextCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!));
+Click= clickKeyword string => {
+    return new BamcClickCommand(UnquoteString(node.Children[1].Value!),LineInfo.FromNode(node));
 };
-FillTextExp= fillTextExpKeyword string string;
-GetText= getTextKeyword string;
-SelectElement= selectElementKeyword string;
-SelectOption= selectOptionKeyword string number; // selector, option index
+ClickExp= clickExpKeyword string => {
+    return new BamcClickExpCommand(UnquoteString(node.Children[1].Value!),LineInfo.FromNode(node));
+};
+ClickAtPosition= clickAtPositionKeyword string string => {
+    return new BamcClickAtPositionCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!),LineInfo.FromNode(node));
+};   // "x" "y"
+FillText= fillTextKeyword string string => {         // selector, value
+    return new BamcFillTextCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!),LineInfo.FromNode(node));
+};
+FillTextExp= fillTextExpKeyword string string => {
+    return new BamcFillTextExpCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!),LineInfo.FromNode(node));
+};
+GetText= getTextKeyword string => {
+    return new BamcGetTextCommand(UnquoteString(node.Children[1].Value!),LineInfo.FromNode(node));
+};
+SelectElement= selectElementKeyword string => {
+    return new BamcSelectElementCommand(UnquoteString(node.Children[1].Value!),LineInfo.FromNode(node));
+};
+SelectOption= selectOptionKeyword string number => {
+    return new BamcSelectOptionCommand(UnquoteString(node.Children[1].Value!),int.Parse(node.Children[2].Value!,System.Globalization.CultureInfo.InvariantCulture),LineInfo.FromNode(node));
+}; // selector, option index
 
 // --- request setup ---------------------------------------------------------
-AddHeader<type="BamcAddHeadersCommand">= addHeaderKeyword string string => {       // add-header "DNT" "1"
-    return new BamcAddHeadersCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!));
+AddHeader= addHeaderKeyword string string => {       // add-header "DNT" "1"
+    return new BamcAddHeadersCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!),LineInfo.FromNode(node));
 };
-AddHeaders<type="BamcAddHeadersCommand">= addHeadersKeyword Headers => {
+AddHeaders= addHeadersKeyword Headers => {
     var jsonNode = node.Children[1].Children[0];
     var json = JsonEmbed.Evaluator.Evaluate(jsonNode);
-    return new BamcAddHeadersCommand((Dictionary<string,object?>)json);
+    return new BamcAddHeadersCommand((Dictionary<string,object?>)json,LineInfo.FromNode(node));
 };  // add-headers {"a": "b", ...}
 
 // The island starts right after add-headers and ends at the } that closes the
 // object's first {. A line break inside it is an error to JSON's lexer, which
 // also ends it, so a broken object can't swallow the lines after it.
 Headers<entry="JsonEmbed.Object", after="addHeadersKeyword", nest="JsonEmbed.lbrace", pop="JsonEmbed.rbrace">;
-AddCookie= addCookieKeyword string [ comma ] string;  // one test uses a comma
-SetCustomUserAgent= setCustomUserAgentKeyword string;
+AddCookie= addCookieKeyword string [ comma ] string => {  // one test uses a comma
+    if(node.Children.Count==4) {
+        return new BamcAddCookieCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[3].Value!),LineInfo.FromNode(node));
+    }
+    return new BamcAddCookieCommand(UnquoteString(node.Children[1].Value!),UnquoteString(node.Children[2].Value!),LineInfo.FromNode(node));
+};
+SetCustomUserAgent= setCustomUserAgentKeyword string => {
+    return new BamcSetCustomUserAgentCommand(UnquoteString(node.Children[1].Value!),LineInfo.FromNode(node));
+};
 
 // --- output and timing -----------------------------------------------------
-WaitForSeconds<type="BamcWaitForSecondsCommand">= waitForSecondsKeyword number => {    // 1, 1.5, .2
-    return new BamcWaitForSecondsCommand(float.Parse(node.Children[1].Value!,System.Globalization.CultureInfo.InvariantCulture));
+WaitForSeconds= waitForSecondsKeyword number => {    // 1, 1.5, .2
+    return new BamcWaitForSecondsCommand(float.Parse(node.Children[1].Value!,System.Globalization.CultureInfo.InvariantCulture),LineInfo.FromNode(node));
 };
-TakeScreenshot<type="BamcTakeScreenshotCommand">= takeScreenshotKeyword string => {
-    return new BamcTakeScreenshotCommand(UnquoteString(node.Children[1].Value!));
+TakeScreenshot= takeScreenshotKeyword string => {
+    return new BamcTakeScreenshotCommand(UnquoteString(node.Children[1].Value!),LineInfo.FromNode(node));
 };
-SaveAsHtml<type="BamcSaveAsHtmlCommand">= saveAsHtmlKeyword string => {
-    return new BamcSaveAsHtmlCommand(UnquoteString(node.Children[1].Value!));
+SaveAsHtml= saveAsHtmlKeyword string => {
+    return new BamcSaveAsHtmlCommand(UnquoteString(node.Children[1].Value!),LineInfo.FromNode(node));
 };
-SaveAsHtmlExp= saveAsHtmlExpKeyword string;
+SaveAsHtmlExp= saveAsHtmlExpKeyword string => {
+    return new BamcSaveAsHtmlExpCommand(UnquoteString(node.Children[1].Value!),LineInfo.FromNode(node));
+};
 
 // --- embedded JavaScript ---------------------------------------------------
 // The whole start-javascript ... end-javascript block is one token, so the
 // JS inside is never tokenized as bamc. The body is any lines that don't
 // start with "end-javascript" (spelled out because DFA lexers usually have
 // no lazy quantifiers or lookahead).
-JavaScript= jsBlock;
-
+JavascriptBlock<entry="JavascriptEmbed.Body", after="jsStart">; 
+Javascript= jsStart JavascriptBlock => {
+    // easier maintenance than hardcoding numbers
+    var endLen = "end-javascript".Length;
+    var js = node.Children[1].Children[0].Children[0].Value!;
+    js = js.Substring(0,js.Length-endLen).Trim();
+    return new BamcJavaScriptCommand(js,LineInfo.FromNode(node));
+};
 // ===========================================================================
 // Terminals. Keywords are declared before anything else so they win ties;
 // longest match keeps "click" from eating the front of "click-exp".
 
+jsStart= "start-javascript";
 browserKeyword= "browser";
 featureKeyword= "feature";
 visitKeyword= "visit";
@@ -163,8 +197,6 @@ waitForSecondsKeyword= "wait-for-seconds";
 takeScreenshotKeyword= "take-screenshot";
 saveAsHtmlKeyword= "save-as-html";
 saveAsHtmlExpKeyword= "save-as-html-exp";
-
-jsBlock= 'start\-javascript[^\n]*\n(([^e\n][^\n]*|e([^n\n][^\n]*)?|en([^d\n][^\n]*)?|end([^\-\n][^\n]*)?|end\-([^j\n][^\n]*)?|end\-j([^a\n][^\n]*)?|end\-ja([^v\n][^\n]*)?|end\-jav([^a\n][^\n]*)?|end\-java([^s\n][^\n]*)?|end\-javas([^c\n][^\n]*)?|end\-javasc([^r\n][^\n]*)?|end\-javascr([^i\n][^\n]*)?|end\-javascri([^p\n][^\n]*)?|end\-javascrip([^t\n][^\n]*)?)?\n)*end\-javascript';
 
 // Double- or single-quoted (the docs show click-exp 'selector').
 string= '"([^"\\\n]|\\.)*"|\'([^\'\\\n]|\\.)*\'';

@@ -608,7 +608,9 @@ namespace Parsley.Runtime
     /// An island: after one of <see cref="After"/>, the text is another language's, lexed by
     /// <see cref="Inner"/> and parsed by <see cref="Parse"/>, until a <see cref="Pop"/> that balances the
     /// <see cref="Nest"/>s before it, an error from the inner lexer (unless <see cref="PopOnError"/> is false),
-    /// or the end of the input. The enclosing lexer sees it as one token of <see cref="Terminal"/>.
+    /// or the end of the input. When <see cref="Nest"/> and <see cref="Pop"/> are the same terminal, as a quote
+    /// would be, the first one opens and the next one ends the island. The enclosing lexer sees it as one token
+    /// of <see cref="Terminal"/>.
     /// </summary>
     public sealed class IslandRule
     {
@@ -633,7 +635,8 @@ namespace Parsley.Runtime
         public LexerMode Inner { get; }
         public IslandParseFunc Parse { get; }
         /// <summary>
-        /// The inner lexer's terminal that opens a nested pair, or -1
+        /// The inner lexer's terminal that opens a nested pair, or -1. If it's also <see cref="Pop"/>, it opens and
+        /// closes a pair that can't nest, as a quote does.
         /// </summary>
         public int Nest { get; }
         /// <summary>
@@ -953,8 +956,13 @@ namespace Parsley.Runtime
                 _Produced(level, t, fromLexer);
                 if (null != level.Island && -1 != level.Island.Pop)
                 {
-                    if (t.SymbolId == level.Island.Nest) ++level.Depth;
-                    else if (t.SymbolId == level.Island.Pop && 0 >= --level.Depth)
+                    var rule = level.Island;
+                    var ends = false;
+                    // a delimiter that both opens and closes, like a quote, can't nest: the one after the opener ends it
+                    if (t.SymbolId == rule.Nest && rule.Nest == rule.Pop) ends = 0 < level.Depth++;
+                    else if (t.SymbolId == rule.Nest) ++level.Depth;
+                    else if (t.SymbolId == rule.Pop) ends = 0 >= --level.Depth;
+                    if (ends)
                     {
                         level.Done = true;
                         _Stop(level);

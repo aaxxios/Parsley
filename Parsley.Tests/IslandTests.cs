@@ -47,7 +47,28 @@ namespace Parsley.Tests
 			text= '""[^""\n]*""';
 			ws<hidden>= '[ \t\r\n]+';";
 
-		static readonly Dictionary<string, string> s_files = new() { ["inner.xbnf"] = Inner, ["outer.xbnf"] = Outer };
+		// a quoted island: one terminal both opens and ends it (nest and pop are the same), so the island is the
+		// whole string, quotes included, and its own grammar lexes what's between them
+		const string QuotedInner = @"
+			@class ""QuotedParser"";
+			Phrase<shared>= quote { word } quote;
+			quote= '""';
+			word= '[a-z]+';
+			ws<hidden>= '[ \t]+';";
+		const string QuotedOuter = @"
+			@class ""OuterParser"";
+			@external Q ""quoted.xbnf"";
+			@lexer ""OuterLexer"";
+			@lexer Q ""QuotedLexer"";
+			Script<start>= { Say };
+			Say= ""say"" Words text "";"";
+			Words<entry=""Q.Phrase"", after=""sayKeyword"", nest=""Q.quote"", pop=""Q.quote"">;
+			sayKeyword= ""say"";
+			semi= "";"";
+			text= '""[^""\n]*""';
+			ws<hidden>= '[ \t\r\n]+';";
+
+		static readonly Dictionary<string, string> s_files = new() { ["inner.xbnf"] = Inner, ["outer.xbnf"] = Outer, ["quoted.xbnf"] = QuotedInner, ["quoted-outer.xbnf"] = QuotedOuter };
 		static string _Read(string path) => s_files.TryGetValue(Path.GetFileName(path), out var t) ? t : throw new FileNotFoundException(path);
 		static string _Path(string name) => Path.Combine(Path.GetTempPath(), "islands", name);
 
@@ -225,6 +246,7 @@ namespace Parsley.Tests
 			// the island starts after every a, so wherever something else follows an a, that can never parse
 			T.Check(_Has(_Messages(@"@external J ""inner.xbnf""; S= a X | a b; a= ""a""; b= ""b""; X<entry=""J.Obj"", after=""a"">;"), ErrorLevel.Warning, "can follow \"a\" too"), "a trigger something else can follow");
 			T.Check(!_Messages(outer(@"X<entry=""J.Obj"", after=""a"", nest=""J.lbrace"", pop=""J.rbrace"">;")).Any(m => ErrorLevel.Message != m.Level), "a well-formed island");
+			T.Check(!_Messages(outer(@"X<entry=""J.Obj"", after=""a"", nest=""J.str"", pop=""J.str"">;")).Any(m => ErrorLevel.Message != m.Level), "nest and pop can be the same terminal");
 		}
 
 		public static void SubordinateGrammars()
@@ -258,6 +280,32 @@ namespace Parsley.Tests
 			T.Equal("2:10@23", echo.Split(' ')[1], "positions, lines and columns after an island are where the text is");
 			var island = tokens.Split('\n').First(l => l.Contains("{\"x\""));
 			T.Check(island.Contains("1:9@8") && island.EndsWith("{\"x\":\\n 1}"), "an island's token is its text, from its first token to its last");
+		}
+
+		public static void QuotedIslands()
+		{
+			var outer = GrammarAnalysis.Analyze(_Grammar("quoted-outer.xbnf"));
+			GrammarException.ThrowIfErrors(outer.Messages);
+			var inner = GrammarAnalysis.Analyze(_Grammar("quoted.xbnf"));
+			GrammarException.ThrowIfErrors(inner.Messages);
+			var p = CompiledParser.Compile(CSharpSynthesizer.Synthesize(outer), "OuterParser",
+				CSharpSynthesizer.Synthesize(inner),
+				Lexing,
+				_Lexer("OuterLexer", outer.Grammar.Terminals.Where(t => t.IsLexed)),
+				_Lexer("QuotedLexer", inner.Grammar.Terminals.Where(t => t.IsLexed)),
+				Driver);
+			// the island's lexer could read on through "x", so only the second quote can end the island there
+			var tree = _Run(p, "say \"a b c\" \"x\";\nsay \"d\" \"e\";", out var errors);
+			T.Equal(0, errors.Count, "no errors: " + string.Join("; ", errors));
+			var lines = tree.Replace("\r\n", "\n").Split('\n').Select(l => l.Trim()).ToList();
+			T.Equal(2, lines.Count(l => "Words" == l), "an island per say");
+			T.Equal(4, lines.Count(l => l.StartsWith("word ")), "each island holds just the words between its quotes");
+			T.Check(lines.Contains("text \"\"x\"\"") && lines.Contains("text \"\"e\"\""), "the outer grammar goes on after the closing quote");
+			var tokens = (string)p.Assembly.GetType("Driver")!.GetMethod("Tokens")!.Invoke(null, new object[] { "say \"a b\" \"x\";" })!;
+			T.Check(tokens.Split('\n').Any(l => l.EndsWith(" \"a b\"")), "the island's token is the whole quoted string");
+			// a missing closing quote: the island's lexer can't read the ;, so the island ends there
+			_Run(p, "say \"a b ; say \"c\" \"d\";", out errors);
+			T.Check(0 < errors.Count, "an unterminated quote is an error");
 		}
 
 		public static void IslandErrorsAreLocal()

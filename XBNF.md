@@ -173,7 +173,7 @@ Values can be:
 | `on` | string | With `lexer`: the terminals of the grammar's own lexer where the other lexer may take over. |
 | `entry` | string | Makes an island, a rule with no body: the `@external` grammar's shared rule that parses it, as `Alias.Rule`. See [Islands](#islands). |
 | `after` | string | On an island: the terminals it starts right after. |
-| `nest`, `pop` | string | On an island: the external grammar's terminals that open a nested pair and end the island once balanced. |
+| `nest`, `pop` | string | On an island: the external grammar's terminals that open a nested pair and end the island once balanced. They can be the same terminal, for a delimiter like a quote. |
 | `popOnError` | `true` / `false` | On an island: whether an error from the external grammar's lexer ends it. `true` if not given. |
 | `expected`, `blockEnd` | string | Accepted for compatibility with older grammars. They currently have no effect. |
 
@@ -459,9 +459,23 @@ whitespace<hidden>= '[\r\t ]+';
 - **`after`** names the terminals the island starts right after, by name or literal text, separated by spaces or commas. It's required. The controller starts the island after every one of those tokens, wherever it appears, so a warning says so if anything else can follow one of them in the grammar.
 - **The island ends** at the first of these:
   - a `pop` token that balances every `nest` token before it. Both name the external grammar's terminals: `Json.rbrace`, or just `rbrace`, or a literal text. Without `nest`, the first `pop` ends it. Counting tokens rather than characters is exact: a `}` inside a JSON string is part of a string token, so it doesn't count.
+  - When `nest` and `pop` name the same terminal, it's a delimiter that opens and closes, as a quote does, and can't nest: the first one opens, and the next one ends the island. Anything before the first one is part of the island, as it is with a separate `nest`.
   - a token the island's lexer can't match, unless `popOnError=false`. The island ends before it.
   - the end of the input.
 - **When it ends**, the outer grammar's lexer carries on from the end of the island's last token. So text the island's lexer skipped as whitespace after that is lexed again by the outer lexer, and a line break that ends a JSON island is still bamc's `newline`.
+
+A quoted island names one terminal for both. Here a selector island is the whole string, quotes included, so its own grammar can lex what's between them:
+
+```xbnf
+// bamc.xbnf
+Selector<entry="Sel.QuotedSelector", after="clickKeyword", nest="Sel.quote", pop="Sel.quote">;
+```
+
+```xbnf
+// selector.xbnf
+QuotedSelector<shared>= quote SelectorList quote;
+quote= '"';
+```
 
 `popOnError` is on by default because it keeps a broken island from swallowing the rest of the input. In bamc, a line break is an error to JSON's lexer, so an unterminated object ends at the end of its line: the island reports the missing `}`, and bamc goes on with the next line. Turn it off for an island whose grammar recovers well on its own and whose outer grammar has few places to recover.
 
