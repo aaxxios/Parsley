@@ -68,7 +68,24 @@ namespace Parsley.Tests
 			text= '""[^""\n]*""';
 			ws<hidden>= '[ \t\r\n]+';";
 
-		static readonly Dictionary<string, string> s_files = new() { ["inner.xbnf"] = Inner, ["outer.xbnf"] = Outer, ["quoted.xbnf"] = QuotedInner, ["quoted-outer.xbnf"] = QuotedOuter };
+		// islands that share a trigger, told apart by startsWith: an object or an array after =, or neither, and
+		// then the outer grammar's own text
+		const string DispatchOuter = @"
+			@class ""OuterParser"";
+			@external J ""inner.xbnf"";
+			@lexer ""OuterLexer"";
+			@lexer J ""InnerLexer"";
+			Script<start>= { Set };
+			Set= ""set"" name ""="" ( Data | Items | text ) "";"";
+			Data<entry=""J.Obj"", after=""eq"", startsWith=""J.lbrace"", nest=""J.lbrace"", pop=""J.rbrace"">;
+			Items<entry=""J.Arr"", after=""eq"", startsWith=""J.lbracket"">;
+			setKeyword= ""set"";
+			eq= ""="";
+			name= '[a-z]+';
+			text= '""[^""\n]*""';
+			ws<hidden>= '[ \t\r\n]+';";
+
+		static readonly Dictionary<string, string> s_files = new() { ["inner.xbnf"] = Inner, ["outer.xbnf"] = Outer, ["quoted.xbnf"] = QuotedInner, ["quoted-outer.xbnf"] = QuotedOuter, ["dispatch-outer.xbnf"] = DispatchOuter };
 		static string _Read(string path) => s_files.TryGetValue(Path.GetFileName(path), out var t) ? t : throw new FileNotFoundException(path);
 		static string _Path(string name) => Path.Combine(Path.GetTempPath(), "islands", name);
 
@@ -247,6 +264,14 @@ namespace Parsley.Tests
 			T.Check(_Has(_Messages(@"@external J ""inner.xbnf""; S= a X | a b; a= ""a""; b= ""b""; X<entry=""J.Obj"", after=""a"">;"), ErrorLevel.Warning, "can follow \"a\" too"), "a trigger something else can follow");
 			T.Check(!_Messages(outer(@"X<entry=""J.Obj"", after=""a"", nest=""J.lbrace"", pop=""J.rbrace"">;")).Any(m => ErrorLevel.Message != m.Level), "a well-formed island");
 			T.Check(!_Messages(outer(@"X<entry=""J.Obj"", after=""a"", nest=""J.str"", pop=""J.str"">;")).Any(m => ErrorLevel.Message != m.Level), "nest and pop can be the same terminal");
+			T.Check(_Has(_Messages(outer(@"X<entry=""J.Obj"", after=""a"", startsWith=""J.nope"">;")), ErrorLevel.Error, "isn't one of J's terminals"), "startsWith names the external grammar's terminals");
+			T.Check(_Has(_Messages(outer(@"X<entry=""J.Obj"", after=""a"", startsWith=""J.ws"">;")), ErrorLevel.Error, "never reports"), "startsWith can't be hidden");
+			T.Check(_Has(_Messages(@"@external J ""inner.xbnf""; a= ""a""; b= ""b""; S= a b;  X= ""x""; Y= ""y""; Z<entry=""J.Obj"", startsWith=""J.lbrace"">; "), ErrorLevel.Error, "needs after="), "startsWith still needs after");
+			string two(string first, string second) => $@"@external J ""inner.xbnf""; S= a ( X | Y ); a= ""a""; {first} {second}";
+			T.Check(!_Messages(two(@"X<entry=""J.Obj"", after=""a"", startsWith=""J.lbrace"">;", @"Y<entry=""J.Arr"", after=""a"">;")).Any(m => ErrorLevel.Message != m.Level), "islands sharing a trigger, the first with startsWith");
+			T.Check(!_Messages(two(@"X<entry=""J.Obj"", after=""a"", startsWith=""J.lbrace"">;", @"Y<entry=""J.Arr"", after=""a"", startsWith=""J.lbracket"">;")).Any(m => ErrorLevel.Message != m.Level), "islands sharing a trigger, both with startsWith");
+			T.Check(_Has(_Messages(two(@"X<entry=""J.Obj"", after=""a"">;", @"Y<entry=""J.Arr"", after=""a"">;")), ErrorLevel.Warning, "never starts after"), "an island after one without startsWith never starts");
+			T.Check(_Has(_Messages(@"@external J ""inner.xbnf""; S= a ( X | b ); a= ""a""; b= ""b""; X<entry=""J.Obj"", after=""a"", startsWith=""J.lbrace"">; Y<entry=""J.Arr"", after=""a"">; T= a Y;"), ErrorLevel.Warning, "can follow"), "the fallback island still warns about what else can follow");
 		}
 
 		public static void SubordinateGrammars()
@@ -306,6 +331,30 @@ namespace Parsley.Tests
 			// a missing closing quote: the island's lexer can't read the ;, so the island ends there
 			_Run(p, "say \"a b ; say \"c\" \"d\";", out errors);
 			T.Check(0 < errors.Count, "an unterminated quote is an error");
+		}
+
+		public static void IslandsStartWith()
+		{
+			var outer = GrammarAnalysis.Analyze(_Grammar("dispatch-outer.xbnf"));
+			GrammarException.ThrowIfErrors(outer.Messages);
+			T.Check(!outer.Messages.Any(m => ErrorLevel.Message != m.Level), "no warnings: " + string.Join("; ", outer.Messages));
+			var inner = GrammarAnalysis.Analyze(_Grammar("inner.xbnf"));
+			var code = CSharpSynthesizer.Synthesize(outer);
+			T.Check(code.Contains("startsWith: ["), "the island rule carries startsWith");
+			var p = CompiledParser.Compile(code, "OuterParser",
+				CSharpSynthesizer.Synthesize(inner),
+				Lexing,
+				_Lexer("OuterLexer", outer.Grammar.Terminals.Where(t => t.IsLexed)),
+				_Lexer("InnerLexer", inner.Grammar.Terminals.Where(t => t.IsLexed)),
+				Driver);
+			var tree = _Run(p, "set a = {\"x\": [1]};\nset b = [1, {\"y\": 2}] ;\nset c = \"plain\";", out var errors);
+			T.Equal(0, errors.Count, "no errors: " + string.Join("; ", errors));
+			var lines = tree.Replace("\r\n", "\n").Split('\n').Select(l => l.Trim()).ToList();
+			T.Check(lines.Contains("Data") && lines.Contains("Obj"), "a { starts the object island");
+			T.Check(lines.Contains("Items") && lines.Contains("Arr"), "a [ starts the array island, the second after the same =");
+			T.Check(lines.Contains("text \"\"plain\"\""), "where neither starts, the outer grammar's lexer goes on");
+			T.Equal(1, lines.Count(l => "Data" == l), "one object island");
+			T.Equal(1, lines.Count(l => "Items" == l), "one array island");
 		}
 
 		public static void IslandErrorsAreLocal()

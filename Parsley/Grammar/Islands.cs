@@ -155,7 +155,7 @@ namespace Parsley
 					_ValidateFromLexer(t, result);
 				else
 				{
-					foreach (var a in new[] { "after", "nest", "pop", "popOnError" })
+					foreach (var a in new[] { "after", "nest", "pop", "popOnError", "startsWith" })
 						if (t.Attributes.Contains(a))
 							result.Add(new GrammarMessage(ErrorLevel.Warning, $"On \"{t.Name}\": {a} only applies to an island (a rule with entry=), so it's ignored", t.Attributes.Find(a)!));
 					if (t.Attributes.Contains("on"))
@@ -241,6 +241,20 @@ namespace Parsley
 					result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": {attr} names \"{name}\", which isn't one of {x.Alias}'s terminals", at(attr)));
 				else if (!term.IsLexed || term.IsHidden)
 					result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": {attr} names {x.Alias}'s \"{term.Name}\", which {x.Alias}'s lexer never reports", at(attr)));
+			}
+			if (t.Attributes.Contains("startsWith"))
+			{
+				var names = t.GetNames("startsWith");
+				if (0 == names.Count)
+					result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": startsWith expects {x.Alias}'s terminals, separated by spaces or commas, as in startsWith=\"{x.Alias}.lbrace\"", at("startsWith")));
+				foreach (var name in names)
+				{
+					var term = ResolveExternalTerminal(x, name);
+					if (null == term)
+						result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": startsWith names \"{name}\", which isn't one of {x.Alias}'s terminals", at("startsWith")));
+					else if (!term.IsLexed || term.IsHidden)
+						result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": startsWith names {x.Alias}'s \"{term.Name}\", which {x.Alias}'s lexer never reports", at("startsWith")));
+				}
 			}
 			if (t.Attributes.Contains("nest") && !t.Attributes.Contains("pop"))
 				result.Add(new GrammarMessage(ErrorLevel.Warning, $"On \"{t.Name}\": nest does nothing without pop", at("nest")));

@@ -601,7 +601,7 @@ namespace Parsley
 							if (!(a.Value is string))
 								result.Add(new GrammarMessage(ErrorLevel.Error, $"On \"{t.Name}\": {a.Name} expects terminal names or literals, separated by spaces or commas", a));
 							break;
-						case "nest": case "pop": case "popOnError": case "shared":
+						case "nest": case "pop": case "popOnError": case "startsWith": case "shared":
 							// checked with the rest of the island and shared rules
 							break;
 						default:
@@ -670,7 +670,7 @@ namespace Parsley
 				}
 		}
 		// the attributes a terminal's declaration takes
-		static readonly HashSet<string> _terminalAttributes = new HashSet<string> { "hidden", "collapsed", "terminal", "type", "when", "matched", "lexer", "on", "after", "entry", "nest", "pop", "popOnError", "shared" };
+		static readonly HashSet<string> _terminalAttributes = new HashSet<string> { "hidden", "collapsed", "terminal", "type", "when", "matched", "lexer", "on", "after", "entry", "nest", "pop", "popOnError", "startsWith", "shared" };
 		static void _ValidateAttributes(AttributeList attrs, GrammarNode owner, bool isProduction, IList<GrammarMessage> result)
 		{
 			foreach (var a in attrs)

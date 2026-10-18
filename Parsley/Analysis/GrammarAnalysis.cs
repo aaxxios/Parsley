@@ -242,26 +242,36 @@ namespace Parsley
 		}
 
 		// the lexer controller starts an island after every token its after= names, wherever it is, so anything
-		// else that can follow that token in the grammar can never be parsed
+		// else that can follow that token in the grammar can never be parsed. Islands that share a token are tried
+		// in order: one with startsWith only starts where its lexer reads one of those first, and the first one
+		// without starts everywhere else, so islands after it never start there.
 		void _CheckIslandTriggers()
 		{
-			foreach (var island in Grammar.Terminals.Where(t => t.IsIsland))
-			{
-				var id = Symbols.GetId(island.Name);
+			var islands = Grammar.Terminals.Where(t => t.IsIsland).ToList();
+			var triggers = new List<TerminalDeclaration>();
+			foreach (var island in islands)
 				foreach (var name in island.GetNames("after"))
 				{
 					var trigger = Grammar.FindTerminal(name);
-					if (null == trigger) continue;
-					var tid = Symbols.GetId(trigger.Name);
-					var others = new SortedSet<int>();
-					foreach (var p in Grammar.Productions)
-						foreach (var sr in p.Expression.Descendants().OfType<SymbolRef>())
-							if (sr.Name == trigger.Name)
-								foreach (var x in GetFollow(sr, 1))
-									if (0 < x.Count && x[0] != id) others.Add(x[0]);
-					if (0 < others.Count)
-						_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"The island \"{island.Name}\" starts after every \"{trigger.Name}\", but {string.Join(", ", others.Select(Symbols.Display))} can follow \"{trigger.Name}\" too, and won't be lexed as this grammar where that happens", island));
+					if (null != trigger && !triggers.Contains(trigger)) triggers.Add(trigger);
 				}
+			foreach (var trigger in triggers)
+			{
+				var sharing = islands.Where(i => i.GetNames("after").Any(n => Grammar.FindTerminal(n) == trigger)).ToList();
+				var fallback = sharing.FirstOrDefault(i => 0 == i.GetNames("startsWith").Count);
+				if (null == fallback) continue;     // where none of them starts, the grammar's own lexer goes on
+				foreach (var later in sharing.Skip(sharing.IndexOf(fallback) + 1))
+					_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"The island \"{later.Name}\" never starts after \"{trigger.Name}\", since \"{fallback.Name}\" comes first and has no startsWith, so it always starts there", later));
+				var ids = new HashSet<int>(sharing.Select(i => Symbols.GetId(i.Name)));
+				var tid = Symbols.GetId(trigger.Name);
+				var others = new SortedSet<int>();
+				foreach (var p in Grammar.Productions)
+					foreach (var sr in p.Expression.Descendants().OfType<SymbolRef>())
+						if (sr.Name == trigger.Name)
+							foreach (var x in GetFollow(sr, 1))
+								if (0 < x.Count && !ids.Contains(x[0])) others.Add(x[0]);
+				if (0 < others.Count)
+					_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"The island \"{fallback.Name}\" starts after every \"{trigger.Name}\", but {string.Join(", ", others.Select(Symbols.Display))} can follow \"{trigger.Name}\" too, and won't be lexed as this grammar where that happens", fallback));
 			}
 		}
 

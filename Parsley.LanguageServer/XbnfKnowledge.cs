@@ -30,6 +30,7 @@ namespace Parsley.LanguageServer
             ["after"] = "String, on an island. The terminals the island starts right after: `after=\"addHeadersKeyword\"`.",
             ["nest"] = "String, on an island. The external grammar's terminal that opens a nested pair, counted against `pop`. It can be the same terminal as `pop`, for a delimiter like a quote: the first opens and the next ends the island.",
             ["pop"] = "String, on an island. The external grammar's terminal that ends the island once it balances every `nest`. When it's also `nest`, the second one ends the island.",
+            ["startsWith"] = "String, on an island. The external grammar's terminals the island must start with: where its lexer reads none of them first, the next island after the same token is tried. `startsWith=\"XPath.xpathOpen\"`.",
             ["popOnError"] = "`true` or `false`, on an island. Whether an error from the external grammar's lexer ends the island. Defaults to true.",
             ["lexer"] = "Name, on a terminal. Another lexer produces it instead of the grammar's own, where `on` and `when` say: `lexer=Regex`.",
             ["on"] = "String, on a terminal with `lexer`. The terminals of the grammar's own lexer where the other lexer may take over.",

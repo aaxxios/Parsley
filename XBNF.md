@@ -175,6 +175,7 @@ Values can be:
 | `after` | string | On an island: the terminals it starts right after. |
 | `nest`, `pop` | string | On an island: the external grammar's terminals that open a nested pair and end the island once balanced. They can be the same terminal, for a delimiter like a quote. |
 | `popOnError` | `true` / `false` | On an island: whether an error from the external grammar's lexer ends it. `true` if not given. |
+| `startsWith` | string | On an island: the external grammar's terminals it must start with. Where the first token its lexer reads is none of them, it doesn't start, and the next island after the same token is tried. See [Islands that share a trigger](#islands-that-share-a-trigger). |
 | `expected`, `blockEnd` | string | Accepted for compatibility with older grammars. They currently have no effect. |
 
 ### On groups and expressions
@@ -456,7 +457,7 @@ whitespace<hidden>= '[\r\t ]+';
 
 - **`@external Json "json.xbnf";`** declares the other grammar and gives it an alias. It's read on its own, as it would be synthesized by itself, and it knows nothing of being embedded: everything about the island is said in the outer grammar.
 - **An island is a rule with no body**, marked with `entry`: the external grammar's alias and one of its productions, which must be marked `shared`. It's a terminal of the outer grammar, which no lexer produces: the controller does.
-- **`after`** names the terminals the island starts right after, by name or literal text, separated by spaces or commas. It's required. The controller starts the island after every one of those tokens, wherever it appears, so a warning says so if anything else can follow one of them in the grammar.
+- **`after`** names the terminals the island starts right after, by name or literal text, separated by spaces or commas. It's required. The controller starts the island after every one of those tokens, wherever it appears, so a warning says so if anything else can follow one of them in the grammar. With `startsWith`, it only starts where the island's text begins with one of those terminals: see [Islands that share a trigger](#islands-that-share-a-trigger).
 - **The island ends** at the first of these:
   - a `pop` token that balances every `nest` token before it. Both name the external grammar's terminals: `Json.rbrace`, or just `rbrace`, or a literal text. Without `nest`, the first `pop` ends it. Counting tokens rather than characters is exact: a `}` inside a JSON string is part of a string token, so it doesn't count.
   - When `nest` and `pop` name the same terminal, it's a delimiter that opens and closes, as a quote does, and can't nest: the first one opens, and the next one ends the island. Anything before the first one is part of the island, as it is with a separate `nest`.
@@ -476,6 +477,31 @@ Selector<entry="Sel.QuotedSelector", after="clickKeyword", nest="Sel.quote", pop
 QuotedSelector<shared>= quote SelectorList quote;
 quote= '"';
 ```
+
+#### Islands that share a trigger
+
+Several islands can start after the same token, when what follows tells them apart. In bamc, a command's selector is CSS, `"div > p"`, or XPath with a prefix, `xpath "//div"` or `$"//div"`. Each island that can only start one way says so with `startsWith`, naming the external grammar's terminals its text must begin with:
+
+```xbnf
+// bamc.xbnf: tried in the order they're declared
+XPath<entry="XPathEmbed.QuotedXPath", after="clickKeyword", startsWith="XPathEmbed.xpathOpen", nest="XPathEmbed.xpathOpen", pop="XPathEmbed.quote">;
+Selector<entry="SelectorEmbed.QuotedSelector", after="clickKeyword", nest="SelectorEmbed.quote", pop="SelectorEmbed.quote">;
+```
+
+```xbnf
+// xpath-embed.xbnf
+QuotedXPath<shared>= xpathOpen Expr quote;
+xpathOpen= '(xpath[ \t]+|\$)"';
+quote= '"';
+```
+
+After a `click`, the controller tries the islands in the order they're declared:
+
+- **An island with `startsWith`** is lexed one token ahead with its own lexer. If that token is one of the terminals it names, the island starts; otherwise the next island is tried. Hidden terminals don't count, so whitespace before the prefix is fine.
+- **An island without `startsWith`** always starts. It's the fallback, so any island declared after it with the same trigger never starts there, and a warning says so.
+- **If none starts**, there's no island: the outer grammar's own lexer goes on after the trigger, as it would have without one. So islands that all have `startsWith` can share a trigger with the outer grammar's own tokens.
+
+Only the first token decides, and it's lexed by each candidate's own lexer, so the candidates' grammars needn't lex alike. Choosing never parses anything: an island that starts and then fails to parse reports its errors, and the islands after it aren't tried.
 
 `popOnError` is on by default because it keeps a broken island from swallowing the rest of the input. In bamc, a line break is an error to JSON's lexer, so an unterminated object ends at the end of its line: the island reports the missing `}`, and bamc goes on with the next line. Turn it off for an island whose grammar recovers well on its own and whose outer grammar has few places to recover.
 
@@ -645,6 +671,8 @@ Left recursion is rewritten automatically:
 | An island with no `after`, or one naming a terminal that's hidden, contextual or an island | Error |
 | `nest` or `pop` naming a terminal the external grammar's lexer never reports | Error |
 | `nest` without `pop` | Warning |
+| `startsWith` naming a terminal the external grammar's lexer never reports, or naming none | Error |
+| An island declared after one without `startsWith` that shares its trigger | Warning: it never starts there |
 | A rule with no body that isn't an island, or an island with a body | Error |
 | An island no production uses, or an `@external` no island uses | Warning |
 | A terminal `after` names that something other than the island can follow | Warning: there, the island starts anyway |

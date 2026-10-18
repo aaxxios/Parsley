@@ -793,7 +793,14 @@ namespace Parsley
 						_Line($"parse: {parser}.TryParse{_Ident(p!.Name)},");
 						_Line($"nest: {innerId("nest")},");
 						_Line($"pop: {innerId("pop")},");
-						_Line($"popOnError: {(t.PopOnError ? "true" : "false")})" + (i < islands.Count - 1 ? "," : ""));
+						var startsWith = t.GetNames("startsWith");
+						if (0 < startsWith.Count)
+						{
+							_Line($"popOnError: {(t.PopOnError ? "true" : "false")},");
+							_Line($"startsWith: [{string.Join(", ", startsWith.Select(n => { var term = Grammar.ResolveExternalTerminal(x, n)!; return $"{inner.Symbols.GetId(term.Name) - inner.Symbols.NonTerminalCount} /* {x.Alias}.{term.Name} */"; }))}])" + (i < islands.Count - 1 ? "," : ""));
+						}
+						else
+							_Line($"popOnError: {(t.PopOnError ? "true" : "false")})" + (i < islands.Count - 1 ? "," : ""));
 						--_indent;
 					}
 					--_indent;

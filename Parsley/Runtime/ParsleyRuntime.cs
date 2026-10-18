@@ -610,11 +610,12 @@ namespace Parsley.Runtime
     /// <see cref="Nest"/>s before it, an error from the inner lexer (unless <see cref="PopOnError"/> is false),
     /// or the end of the input. When <see cref="Nest"/> and <see cref="Pop"/> are the same terminal, as a quote
     /// would be, the first one opens and the next one ends the island. The enclosing lexer sees it as one token
-    /// of <see cref="Terminal"/>.
+    /// of <see cref="Terminal"/>. Where several islands start after the same token, the first one whose
+    /// <see cref="StartsWith"/> admits the inner lexer's first token starts, and one without any always does.
     /// </summary>
     public sealed class IslandRule
     {
-        public IslandRule(int terminal, int[] after, LexerMode inner, IslandParseFunc parse, int nest = -1, int pop = -1, bool popOnError = true)
+        public IslandRule(int terminal, int[] after, LexerMode inner, IslandParseFunc parse, int nest = -1, int pop = -1, bool popOnError = true, int[]? startsWith = null)
         {
             Terminal = terminal;
             After = after ?? throw new ArgumentNullException(nameof(after));
@@ -623,6 +624,7 @@ namespace Parsley.Runtime
             Nest = nest;
             Pop = pop;
             PopOnError = popOnError;
+            StartsWith = startsWith ?? Array.Empty<int>();
         }
         /// <summary>
         /// The island's terminal, in the enclosing lexer's ids
@@ -644,6 +646,12 @@ namespace Parsley.Runtime
         /// </summary>
         public int Pop { get; }
         public bool PopOnError { get; }
+        /// <summary>
+        /// The inner lexer's terminals the island must start with, or empty if it starts after every
+        /// <see cref="After"/> token. When the first token the inner lexer reads there is none of these, the
+        /// island doesn't start, and the next island after the same token is tried.
+        /// </summary>
+        public int[] StartsWith { get; }
     }
 
     /// <summary>
@@ -972,6 +980,12 @@ namespace Parsley.Runtime
                 foreach (var island in level.Mode.Islands)
                     if (0 <= Array.IndexOf(island.After, t.SymbolId))
                     {
+                        // an island with startsWith only starts where the island's lexer reads one of those first
+                        if (0 < island.StartsWith.Length)
+                        {
+                            var first = _LexOne(island.Inner.Tokenize, level.End, level.EndLine, level.EndColumn);
+                            if (null == first || 0 > Array.IndexOf(island.StartsWith, first.Value.SymbolId)) continue;
+                        }
                         level.Pending = island;
                         // the level's lexer may have read into the island; it restarts after it
                         _Stop(level);
