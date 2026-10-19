@@ -72,7 +72,9 @@ start with is reported where the decision begins.
 
 A decision that is really ambiguous, where the same input fits two branches all the way through, comes out the way the default policies say: the first alternative wins, and a loop or optional keeps matching. A `<policy>` on the decision settles it when the grammar is analyzed instead, on every engine, so a construct like the dangling `else` can stay LL(1). See [Ambiguity](XBNF.md#ambiguity).
 
-How much lookahead counts as "fixed" is up to the grammar: `@maxk 2;` caps it at 2 tokens, and the default is 4. It's a directive rather than a command line switch so that a grammar always synthesizes the same parser. The analysis only follows the inputs on which a decision's branches still overlap, so even a grammar like C99, which has around 80 keywords and operators, takes a few seconds at k=4.
+How much lookahead counts as "fixed" is up to the grammar: `@maxk 2;` caps it at 2 tokens, and the default is 4. A `maxk` on a rule or a decision sets its own limit. It's a directive rather than a command line switch so that a grammar always synthesizes the same parser. The analysis only follows the inputs on which a decision's branches still overlap, so even a grammar like C99, which has around 80 keywords and operators, takes a few seconds at k=4.
+
+Alternatives that start alike can be factored instead: with `@factor true;`, Parsley moves the tokens they share out in front, inlining the rules they're in where it has to, so a decision that needed more lookahead needs one token. The tree comes out the same, every node where it would have been. See [Left factoring](XBNF.md#left-factoring).
 
 `-e ll1`, `-e llk` and `-e allstar` force an engine. LL(1) and LL(k) then settle what they can't decide the way Parsley always did: by policy, with an error for an alternation that has none. Forcing ALL(\*) on an LL(k) grammar makes every multi-token decision adaptive.
 

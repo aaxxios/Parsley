@@ -363,10 +363,14 @@ namespace Parsley.Runtime
         /// Called with each token the parser matches, after it is added to the tree
         /// </summary>
         protected virtual void OnMatched(Token token) { }
+        // the last few tokens matched, for a node made after its first tokens were (see Adopt)
+        readonly Token[] _recent = new Token[16];
+        int _recentCount;
         protected void Advance()
         {
             if (_current.SymbolId == _tables.EndOfInput) return;
             var last = _current;
+            _recent[_recentCount++ & 15] = last;
             _previous = last;
             _current = ReadToken(out var t) ? t : EndToken(last);
             ++_index;
@@ -420,6 +424,26 @@ namespace Parsley.Runtime
         protected ParseNode NewNode(int symbolId)
         {
             var result = new ParseNode(symbolId, _tables.SymbolNames[symbolId], null, false, _current.Line, _current.Column, _current.Position);
+            _root ??= result;
+            return result;
+        }
+        /// <summary>
+        /// For a production inlined by left factoring: its new node, after the tokens it starts with have already
+        /// been parsed into parent. The node is located at the token back tokens before Current (at Current if
+        /// back is 0), and takes over the last adopt children of parent, which those tokens made.
+        /// </summary>
+        protected ParseNode Adopt(int symbolId, ParseNode parent, int back, int adopt)
+        {
+            var at = 0 < back && back <= _recentCount && back <= _recent.Length ? _recent[(_recentCount - back) & 15] : _current;
+            var result = new ParseNode(symbolId, _tables.SymbolNames[symbolId], null, false, at.Line, at.Column, at.Position);
+            var n = Math.Min(adopt, parent.Children.Count);
+            if (0 < n)
+            {
+                var first = parent.Children.Count - n;
+                for (var i = first; i < parent.Children.Count; ++i)
+                    result.Add(parent.Children[i]);
+                parent.Children.RemoveRange(first, n);
+            }
             _root ??= result;
             return result;
         }
@@ -520,6 +544,15 @@ namespace Parsley.Runtime
         /// Marks the end of the non-terminal most recently entered
         /// </summary>
         protected virtual void Leave() => _active.RemoveAt(_active.Count - 1);
+        /// <summary>
+        /// Marks the start of a production inlined by left factoring, for error recovery. It's parsed in place, not
+        /// called, so an ALL(*) parser has no return state to keep for it.
+        /// </summary>
+        protected void EnterInlined(int nonTerminal) => _active.Add(nonTerminal);
+        /// <summary>
+        /// Marks the end of the inlined production most recently entered
+        /// </summary>
+        protected void LeaveInlined() => _active.RemoveAt(_active.Count - 1);
         sealed class _Abandon : Exception { }
 
         /// <summary>

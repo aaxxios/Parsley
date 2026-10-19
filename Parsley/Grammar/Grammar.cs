@@ -410,6 +410,11 @@ namespace Parsley
 		/// or not a whole number of at least 1 (which the reader reports).
 		/// </summary>
 		public int? MaxK => Directives.TryGetValue("maxk", out var k) && int.TryParse(k, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && 0 < n ? n : null;
+		/// <summary>
+		/// The @factor directive: whether to left factor alternations whose alternatives start alike. Null if not
+		/// given; a rule's or group's <c>factor</c> attribute overrides it.
+		/// </summary>
+		public bool? Factor => Directives.TryGetValue("factor", out var f) ? ("true" == f ? true : "false" == f ? false : null) : null;
 
 		public Grammar Clone()
 		{
@@ -632,9 +637,9 @@ namespace Parsley
 					result.Add(new GrammarMessage(ErrorLevel.Warning, IsSubordinate ? $"Production \"{p.Name}\" is unreachable from the shared productions" : $"Production \"{p.Name}\" is unreachable from the start symbol", p));
 			return result;
 		}
-		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "shared", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state", "entering", "parsed", "when", "matched", "lexer", "on", "operators", "assoc" };
+		static readonly HashSet<string> _productionAttributes = new HashSet<string> { "start", "shared", "collapsed", "nowarn", "policy", "expected", "sync", "terminal", "type", "state", "entering", "parsed", "when", "matched", "lexer", "on", "operators", "assoc", "factor", "maxk" };
 		static bool _IsMethodName(string s) => 0 < s.Length && (char.IsLetter(s[0]) || '_' == s[0]) && s.All(ch => char.IsLetterOrDigit(ch) || '_' == ch);
-		static readonly HashSet<string> _expressionAttributes = new HashSet<string> { "policy", "sync", "expected", "assoc" };
+		static readonly HashSet<string> _expressionAttributes = new HashSet<string> { "policy", "sync", "expected", "assoc", "factor", "maxk" };
 		// a literal or pattern written in a rule: attributes that belong on a terminal's declaration don't apply to it.
 		// It isn't a declaration, and every use of the same text is the same terminal, so one use can't make it hidden
 		// or collapsed or anything else without making them all so. Those are errors, rather than ignored, so a
@@ -707,6 +712,10 @@ namespace Parsley
 					case "parsed":
 						if (!(a.Value is string m) || !_IsMethodName(m))
 							result.Add(new GrammarMessage(ErrorLevel.Error, $"{a.Name} expects the name of a C# method, such as {a.Name}=\"{("entering" == a.Name ? "PushScope" : "OnDeclaration")}\"", a));
+						break;
+					case "maxk":
+						if (!(a.Value is long k) || 1 > k || 1000 < k)
+							result.Add(new GrammarMessage(ErrorLevel.Error, "maxk expects a whole number of at least 1, such as maxk=1", a));
 						break;
 					case "assoc":
 						if (!(a.Value is string s3) || (s3 != "left" && s3 != "right"))

@@ -174,7 +174,7 @@ namespace Parsley
 					_w.WriteLine();
 					_w.WriteLine("  Needs ALL(*) because of:");
 					foreach (var d in unbounded)
-						_w.WriteLine($"    {d.Production.Name} #{d.Index} {_Kind(d)} {_Clip(d.Node.ToString(), ExpressionWidth)}\n      overlaps within {_a.MaxK} tokens on {_Conflicts(d)}");
+						_w.WriteLine($"    {d.Production.Name} #{d.Index} {_Kind(d)} {_Clip(d.Node.ToString(), ExpressionWidth)}\n      overlaps within {d.MaxK} tokens on {_Conflicts(d)}");
 					_w.WriteLine("  If those inputs are really ambiguous (a dangling else, say), a <policy> on the decision");
 					_w.WriteLine("  settles it at synthesis time. Otherwise only restructuring the rules so they no longer");
 					_w.WriteLine("  overlap (often by left factoring) will drop ALL(*).");
@@ -243,6 +243,7 @@ namespace Parsley
 				add(prods.Count(p => null == p.OperatorOwner && _a.IsNullable(p.Expression)), "nullable");
 				add(recursive.Count, "recursive");
 				add(prods.Count(p => p.Expression.Descendants().OfType<Repeat>().Any(r => r.LeftFold)), "left recursion rewritten");
+				add(prods.Count(p => p.Expression.OwnDescendants().OfType<Alternation>().Any(a => a.Factored)), "left factored");
 				var rules = prods.Count(p => null != p.Operators);
 				add(rules, 1 == rules ? "operator rule" : "operator rules");
 				var forms = prods.Count(p => null != p.OperatorOwner);
@@ -346,6 +347,7 @@ namespace Parsley
 					if (_a.IsNullable(p.Expression)) flags.Add("nullable");
 					if (recursive.Contains(p.Name)) flags.Add("recursive");
 					if (p.Expression.Descendants().OfType<Repeat>().Any(r => r.LeftFold)) flags.Add("left-rec rewritten");
+					if (p.Expression.OwnDescendants().OfType<Alternation>().Any(a => a.Factored)) flags.Add("factored");
 					if (null != p.Action) flags.Add("action");
 					if (!reachable.Contains(p.Name)) flags.Add("unreachable");
 					var ds = _a.Decisions.Where(d => d.Production == p).ToList();
@@ -403,7 +405,9 @@ namespace Parsley
 				_calls = new Dictionary<string, HashSet<string>>();
 				foreach (var p in _g.Productions)
 					_calls[p.Name] = new HashSet<string>(p.Expression.Descendants().OfType<SymbolRef>()
-						.Where(r => null != r.Name && _s.IsNonTerminal(_s.GetId(r.Name))).Select(r => r.Name!));
+						.Where(r => null != r.Name && _s.IsNonTerminal(_s.GetId(r.Name))).Select(r => r.Name!)
+						// a production left factoring inlined is parsed there, as if it were called
+						.Concat(p.Expression.Descendants().OfType<InlinedProduction>().Select(ip => ip.Production)));
 				return _calls;
 			}
 			HashSet<string> _From(string start)

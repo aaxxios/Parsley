@@ -75,6 +75,15 @@ namespace Parsley.Tests
 		/// </summary>
 		public (string Tree, List<string> Errors) Parse(IEnumerable<Parsley.Runtime.Token> tokens)
 		{
+			var (root, errors) = ParseRaw(tokens);
+			return (root?.ToString() ?? "", errors);
+		}
+
+		/// <summary>
+		/// Parses and returns the root, as the compiled assembly's own ParseNode, and the error messages
+		/// </summary>
+		public (object? Root, List<string> Errors) ParseRaw(IEnumerable<Parsley.Runtime.Token> tokens)
+		{
 			var list = tokens.ToList();
 			var arr = Array.CreateInstance(_tokenType, list.Count);
 			var parseNodeType = _parserType.GetMethod("Parse",BindingFlags.Static | BindingFlags.Public)!.ReturnType;
@@ -107,9 +116,31 @@ namespace Parsley.Tests
             var errors = (System.Collections.IEnumerable?)args[2];
 
             return (
-                result?.ToString() ?? "",
+                result,
                 errors?.Cast<object>().Select(e => e.ToString()!).ToList() ?? new List<string>());
         }
+
+		/// <summary>
+		/// A compiled assembly's ParseNode as text, every node with its location, so trees that differ only
+		/// in where their nodes are said to be come out different
+		/// </summary>
+		public static string Dump(object? node)
+		{
+			var sb = new System.Text.StringBuilder();
+			void write(object n, int depth)
+			{
+				var t = n.GetType();
+				string get(string name) => t.GetProperty(name)!.GetValue(n)?.ToString() ?? "";
+				sb.Append(' ', depth * 2).Append(get("Symbol")).Append('@').Append(get("Line")).Append(':').Append(get("Column")).Append(':').Append(get("Position"));
+				var v = t.GetProperty("Value")!.GetValue(n);
+				if (null != v) sb.Append(' ').Append(v);
+				sb.Append('\n');
+				foreach (var c in (System.Collections.IEnumerable)t.GetProperty("Children")!.GetValue(n)!)
+					write(c, depth + 1);
+			}
+			if (null != node) write(node, 0);
+			return sb.ToString();
+		}
 
 		/// <summary>
 		/// The synthesized evaluator class with this name

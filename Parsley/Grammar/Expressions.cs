@@ -39,6 +39,18 @@ namespace Parsley
 					yield return d;
 		}
 		/// <summary>
+		/// This node and everything under it, depth first, except the bodies of productions inlined into it,
+		/// which belong to those productions: their sync terminals, say, are theirs, not this one's
+		/// </summary>
+		public IEnumerable<Expression> OwnDescendants()
+		{
+			yield return this;
+			if (this is InlinedProduction) yield break;
+			foreach (var c in Children)
+				foreach (var d in c.OwnDescendants())
+					yield return d;
+		}
+		/// <summary>
 		/// The expression in XBNF syntax
 		/// </summary>
 		public override string ToString() => XbnfWriter.Write(this);
@@ -83,8 +95,24 @@ namespace Parsley
 		public Alternation(IEnumerable<Expression> options) { Options.AddRange(options); }
 		public Alternation(params Expression[] options) : this((IEnumerable<Expression>)options) { }
 		public List<Expression> Options { get; } = new List<Expression>();
+		/// <summary>
+		/// Set by left factoring on an alternation it rewrote. As written, it needed more than one token to decide,
+		/// so input that matches none of its alternatives was an error there, naming everything it could start
+		/// with; so it stays, rather than going down one alternative to fail inside it.
+		/// </summary>
+		public bool Factored { get; set; }
+		/// <summary>
+		/// Set by left factoring on the alternation it made of what the alternatives go on with after the tokens
+		/// they share. As written, those tokens matched them all, so on input that matches none of what follows, the
+		/// earliest went on to fail inside, even where another could match nothing; so it still does.
+		/// </summary>
+		public bool FactoredTail { get; set; }
+		/// <summary>
+		/// Which alternation as written left factoring made this from, if any: its rule and its place in it
+		/// </summary>
+		public string? FactorKey { get; set; }
 		public override IEnumerable<Expression> Children => Options;
-		public override Expression Clone() => CloneBase(new Alternation(Options.Select(o => o.Clone())));
+		public override Expression Clone() => CloneBase(new Alternation(Options.Select(o => o.Clone())) { Factored = Factored, FactoredTail = FactoredTail, FactorKey = FactorKey });
 	}
 
 	/// <summary>
@@ -118,6 +146,53 @@ namespace Parsley
 		public bool LeftFold { get; set; }
 		public override IEnumerable<Expression> Children { get { yield return Body; } }
 		public override Expression Clone() => CloneBase(new Repeat(Body.Clone(), Min) { LeftFold = LeftFold });
+	}
+
+	/// <summary>
+	/// A production's body, inlined where the production was referenced by left factoring, so that a decision
+	/// can see past the reference to the tokens the production starts with. It parses as the reference did: it
+	/// makes the production's node (unless the production is collapsed), with its hooks and its place in error
+	/// recovery, so the tree comes out the same. Not written in XBNF; analysis makes it.
+	/// </summary>
+	/// <remarks>
+	/// Factoring moves the tokens a production starts with out in front of the decision. They're parsed before
+	/// the production's node exists, so the node takes them over when it's made: the last <see cref="Adopt"/>
+	/// children of the node they went into become its first children, and it's located at the token
+	/// <see cref="Back"/> tokens before the current one.
+	/// </remarks>
+	public sealed class InlinedProduction : Expression
+	{
+		public InlinedProduction(string production, Expression body, int back = 0, int adopt = 0, bool whole = false)
+		{
+			Production = production ?? throw new ArgumentNullException(nameof(production));
+			Body = body ?? throw new ArgumentNullException(nameof(body));
+			Back = back;
+			Adopt = adopt;
+			Whole = whole;
+		}
+		/// <summary>
+		/// The name of the production inlined
+		/// </summary>
+		public string Production { get; }
+		/// <summary>
+		/// What's left of its body to parse: all of it, or what follows the tokens moved in front of the decision
+		/// </summary>
+		public Expression Body { get; set; }
+		/// <summary>
+		/// How many tokens were moved in front of the decision: the node is located at the first of them
+		/// </summary>
+		public int Back { get; }
+		/// <summary>
+		/// How many nodes those tokens made (collapsed terminals make none): the node takes them over
+		/// </summary>
+		public int Adopt { get; }
+		/// <summary>
+		/// True when <see cref="Body"/> is the production's whole body, so its first decision is the production's
+		/// own, and names it in error messages as the production's <c>expected</c> says
+		/// </summary>
+		public bool Whole { get; }
+		public override IEnumerable<Expression> Children { get { yield return Body; } }
+		public override Expression Clone() => CloneBase(new InlinedProduction(Production, Body.Clone(), Back, Adopt, Whole));
 	}
 
 	/// <summary>
@@ -192,6 +267,12 @@ namespace Parsley
 					_Write(r.Body, sb, 0);
 					sb.Append(" }");
 					if (1 == r.Min) sb.Append('+');
+					break;
+				case InlinedProduction ip:
+					// written as the group it parses as; it isn't XBNF, so there's nothing else to write it as
+					sb.Append("( ");
+					_Write(ip.Body, sb, 0);
+					sb.Append(" )");
 					break;
 				default:
 					var prec = e switch { Alternation => 0, Sequence => 1, _ => 2 };

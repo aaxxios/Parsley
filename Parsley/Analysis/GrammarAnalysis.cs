@@ -41,6 +41,11 @@ namespace Parsley
 		/// </summary>
 		public int Index { get; }
 		/// <summary>
+		/// The most tokens it may look at: the analysis's <see cref="GrammarAnalysis.MaxK"/>, unless a <c>maxk</c>
+		/// attribute on the decision or its production says otherwise
+		/// </summary>
+		public int MaxK { get; internal set; }
+		/// <summary>
 		/// How many tokens it needs to look at, or 0 when no fixed number of tokens settles it
 		/// </summary>
 		public int Depth { get; internal set; }
@@ -108,6 +113,7 @@ namespace Parsley
 		readonly Dictionary<Expression, OperatorForm> _forms = new(ReferenceEqualityComparer.Instance);
 		readonly HashSet<Expression> _operatorLoops = new(ReferenceEqualityComparer.Instance);
 		HashSet<string> _nullable = new();
+		ISet<string>? _exclude;
 		GrammarAtn? _atn;
 		Runtime.Atn? _runtimeAtn;
 
@@ -187,6 +193,25 @@ namespace Parsley
 			var k = maxK ?? grammar.MaxK ?? DefaultMaxK;
 			if (1 > k) throw new ArgumentOutOfRangeException(nameof(maxK));
 			if (ParserEngine.LL1 == engine) k = 1;
+			// left factoring is kept only where it makes its decisions one token deep: an alternation it can't do
+			// that for is left as written, and the grammar analyzed again. Each pass leaves out at least one more
+			var exclude = new HashSet<string>();
+			while (true)
+			{
+				var a = _Analyze(grammar, engine, k, exclude);
+				if (a.HasErrors) return a;
+				var failed = a.Decisions
+					.Where(d => d.Node is Alternation alt && null != alt.FactorKey && (alt.Factored || alt.FactoredTail) && (d.IsAdaptive || 1 < d.Depth))
+					.Select(d => ((Alternation)d.Node).FactorKey!)
+					.Where(key => !exclude.Contains(key))
+					.ToList();
+				if (0 == failed.Count) return a;
+				exclude.UnionWith(failed);
+			}
+		}
+
+		static GrammarAnalysis _Analyze(Grammar grammar, ParserEngine engine, int k, ISet<string> exclude)
+		{
 			var g = grammar.Clone();
 			g.ResolveLiterals();
 			// the terminals the grammar's own lexer produces come first, so its ids match the parser's. Then
@@ -200,7 +225,7 @@ namespace Parsley
 				.ToList();
 			g.Terminals.Clear();
 			g.Terminals.AddRange(ordered);
-			var a = new GrammarAnalysis(g, k, engine);
+			var a = new GrammarAnalysis(g, k, engine) { _exclude = exclude };
 			a._Run();
 			return a;
 		}
@@ -212,6 +237,8 @@ namespace Parsley
 			OperatorRules.Rewrite(Grammar, _messages);
 			if (HasErrors) return;
 			LeftRecursion.Eliminate(Grammar, _messages);
+			if (HasErrors) return;
+			LeftFactoring.Factor(Grammar, _messages, _exclude);
 			if (HasErrors) return;
 			Symbols = new SymbolTable(Grammar);
 			_nullable = LeftRecursion.ComputeNullable(Grammar);
@@ -308,6 +335,7 @@ namespace Parsley
 				Alternation alt => alt.Options.Any(derives),
 				OptionalExpression => true,
 				Repeat r => 0 == r.Min || derives(r.Body),
+				InlinedProduction ip => derives(ip.Body),
 				_ => true
 			};
 			for (var changed = true; changed;)
@@ -434,6 +462,9 @@ namespace Parsley
 						result = 1 == r.Min ? alg.Concat(body, star) : star;
 						break;
 					}
+				case InlinedProduction ip:
+					result = _First(ip.Body, s, alg, memo);
+					break;
 				default:
 					throw new NotSupportedException(e.GetType().Name);
 			}
@@ -477,6 +508,13 @@ namespace Parsley
 						if (_WalkFollow(r.Body, again, s, alg)) changed = true;
 						break;
 					}
+				case InlinedProduction ip:
+					// what follows the production where it was referenced still follows it, for error recovery
+					if (s.ProductionFollow.TryGetValue(ip.Production, out var ipf))
+						foreach (var x in follow)
+							if (ipf.Add(x)) changed = true;
+					if (_WalkFollow(ip.Body, follow, s, alg)) changed = true;
+					break;
 			}
 			return changed;
 		}
@@ -543,6 +581,9 @@ namespace Parsley
 				return;
 			}
 			_explorer ??= new LookaheadExplorer(this, Decisions);
+			// a maxk on the decision, or on its production, sets its own limit; LL(1) forced is one token everywhere
+			var own = d.Node.Attributes.Get("maxk") as long? ?? d.Production.Attributes.Get("maxk") as long?;
+			d.MaxK = ParserEngine.LL1 == RequestedEngine ? 1 : null != own ? (int)own.Value : MaxK;
 			var branchCount = d.Node is Alternation alt ? alt.Options.Count : 2;
 			var policy = _Policy(d);
 			var explicitPolicy = null != policy;
@@ -557,7 +598,7 @@ namespace Parsley
 					var w = "lazy" == applied ? 1 : 0;
 					return alts.Contains(w) ? w : alts.Min();
 				};
-			var r = _explorer.Explore(d, branchCount, MaxK, winner);
+			var r = _explorer.Explore(d, branchCount, d.MaxK, winner);
 			if (r.Resolved)
 			{
 				d.Depth = r.Depth;
@@ -576,11 +617,11 @@ namespace Parsley
 				d.Depth = 0;
 				d.Branches = _BranchSets(d, 1);
 				_ChooseDefault(d);
-				_messages.Add(new GrammarMessage(ErrorLevel.Message, $"In \"{d.Production.Name}\", {d.Node} can't be decided within {MaxK} tokens on {conflictText}, so it's predicted adaptively (ALL(*)) at parse time. If that input really is ambiguous, a <policy> settles it at synthesis time instead.", d.Node));
+				_messages.Add(new GrammarMessage(ErrorLevel.Message, $"In \"{d.Production.Name}\", {d.Node} can't be decided within {d.MaxK} tokens on {conflictText}, so it's predicted adaptively (ALL(*)) at parse time. If that input really is ambiguous, a <policy> settles it at synthesis time instead.", d.Node));
 				return;
 			}
 			if (d.Kind == DecisionKind.Alternation && !explicitPolicy)
-				_messages.Add(new GrammarMessage(ErrorLevel.Error, $"In \"{d.Production.Name}\", the alternatives of {d.Node} can't be told apart within {MaxK} tokens on {conflictText}. Add <policy=\"first\"> if the earliest alternative should win, or use the ALL(*) engine to look further.", d.Node));
+				_messages.Add(new GrammarMessage(ErrorLevel.Error, $"In \"{d.Production.Name}\", the alternatives of {d.Node} can't be told apart within {d.MaxK} tokens on {conflictText}. Add <policy=\"first\"> if the earliest alternative should win, or use the ALL(*) engine to look further.", d.Node));
 			else if (!explicitPolicy)
 				_messages.Add(new GrammarMessage(ErrorLevel.Warning, $"In \"{d.Production.Name}\", {d.Node} is ambiguous on {conflictText}; resolved greedily (it keeps matching). Add <policy=\"greedy\"> or <policy=\"lazy\"> to choose explicitly.", d.Node));
 			else if (d.Kind == DecisionKind.Alternation && "first" != policy)
@@ -602,6 +643,7 @@ namespace Parsley
 			var tokens = new HashSet<int>(go.Select(x => x[0]));
 			var stop = new HashSet<LookaheadString>(sets[1].Where(x => 0 < x.Count && !tokens.Contains(x[0])));
 			d.Depth = 1;
+			d.MaxK = 1;
 			d.Branches = new[] { go, stop };
 			if (stop.Count != sets[1].Count(x => 0 < x.Count))
 				d.AppliedPolicy = "greedy";
@@ -619,9 +661,13 @@ namespace Parsley
 					{
 						var a = (Alternation)d.Node;
 						var nullable = Enumerable.Range(0, a.Options.Count).Where(i => IsNullable(a.Options[i])).ToList();
-						if (1 == nullable.Count)
+						// what left factoring made of what alternatives go on with: the earliest, as the decision
+						// it was part of took on input that matched none of them
+						if (a.FactoredTail)
+							d.DefaultBranch = 0;
+						else if (1 == nullable.Count)
 							d.DefaultBranch = nullable[0];
-						else if (2 == a.Options.Count && 1 == d.Depth)
+						else if (2 == a.Options.Count && 1 == d.Depth && !a.Factored)
 						{
 							// if/else: test the branch with fewer tokens, the other is the else
 							d.DefaultBranch = d.TokensOf(0).Count <= d.TokensOf(1).Count ? 1 : 0;

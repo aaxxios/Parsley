@@ -158,6 +158,8 @@ Values can be:
 | `operators` | flag | The rule's alternatives are operators, listed tightest first, and it's parsed by precedence climbing. See [Operator rules](#operator-rules). |
 | `assoc` | `left`, `right` | On a production that is an operator form of an operator rule: how the form associates. See [Operator rules](#operator-rules). |
 | `shared` | flag | Other grammars can parse islands with this rule: the parser gets a `TryParseXxx` entry point for it. A shared rule is never made a terminal automatically, and can't be collapsed. See [Islands and other lexers](#islands-and-other-lexers). |
+| `factor` | `true` / `false` | Whether to [left factor](#left-factoring) this rule's alternations, whatever `@factor` says. `factor=false` also keeps the rule from being inlined to factor others. |
+| `maxk` | number | The most tokens this rule's decisions may look at, instead of the `@maxk` limit. A group's own `maxk` takes precedence. |
 
 ### On terminal rules
 
@@ -188,6 +190,8 @@ Any primary expression can take attributes, which apply to that one occurrence o
 | `expected` | string | Names this alternation in error messages. |
 | `sync` | string | Like the rule attribute: adds terminals where recovery may stop, for the enclosing rule. |
 | `assoc` | `left`, `right` | On any element of an infix form in an operator rule: how the form associates. See [Operator rules](#operator-rules). |
+| `factor` | `true` / `false` | Whether to [left factor](#left-factoring) this alternation, and the ones inside it. |
+| `maxk` | number | The most tokens this decision may look at, instead of the rule's or the grammar's limit. With a `policy`, `maxk=1` settles it on one token where the rest of the grammar may look further. |
 
 ```xbnf
 S= ( A | B )<policy=first>;
@@ -202,7 +206,8 @@ Block= "{" { Stmt }<sync="semi"> "}";
 | `@import "file.xbnf";` | Reads another file's rules in at this point, with the path relative to the importing file. A file is imported only once, so import cycles are harmless. Imported rules keep their own file name in messages. An imported file's directives don't override the importer's. |
 | `@namespace "My.Parsers";` | The namespace of the synthesized parser. Without it, the parser has no namespace. |
 | `@class "MyParser";` | The class name of the synthesized parser. By default it's the file name in PascalCase plus `Parser`, so `json.xbnf` gives `JsonParser`. |
-| `@maxk 2;` | The most tokens a decision with fixed lookahead looks at; 4 if not given. A decision that needs more is predicted by ALL(\*) at parse time, or settled by its `policy`. A lower limit gives smaller predictors at the cost of more ALL(\*); a higher one, the reverse. It's part of the grammar so the same grammar always synthesizes the same parser. |
+| `@maxk 2;` | The most tokens a decision with fixed lookahead looks at; 4 if not given. A decision that needs more is predicted by ALL(\*) at parse time, or settled by its `policy`. A lower limit gives smaller predictors at the cost of more ALL(\*); a higher one, the reverse. It's part of the grammar so the same grammar always synthesizes the same parser. A `maxk` attribute on a rule or a decision sets its own limit. |
+| `@factor true;` | [Left factors](#left-factoring) every alternation whose alternatives can start with the same token. `false`, or not given, leaves the grammar as written. A rule's or group's `factor` attribute overrides it. |
 | `@evaluator "MyEvaluator";` | The class name of the synthesized evaluator, used as written, with `@` added in front of a C# keyword. By default it's the file name in PascalCase plus `Evaluator`, so `json.xbnf` gives `JsonEvaluator`. Only matters when the grammar has [semantic actions](#semantic-actions); without any, it's ignored with a warning. |
 | `@using "System.Text";` | Adds `using System.Text;` to the top of the synthesized file, so [semantic actions](#semantic-actions) can use the namespace's types without qualifying them. Give it once per namespace; it can appear any number of times. The argument must be a namespace name, such as `System.Text` or `My.@class`: not `static` or an alias. A namespace the file already imports, or one given twice, is written once, without a message. Usings from an `@import`ed file are added to the importer's. Only matters when the grammar has semantic actions; without any, it's ignored with a warning and the file is unchanged. |
 | `@external Json "json.xbnf";` | Another grammar, known here by an alias, whose shared rules parse [islands](#islands) in this one. The path is relative to this file. The grammar is read on its own, as if it were being synthesized by itself: none of its rules or directives are merged into this one, and only its errors are reported here. A grammar can't embed itself, directly or through others. |
@@ -608,11 +613,11 @@ None of this needs to be written in the grammar, but it explains the messages Pa
 
 ### Lookahead
 
-Each decision point (each `|`, `[ ]` and `{ }`) uses the fewest tokens of lookahead that tell its branches apart, up to 4 by default. Most decisions need one token. Ones that need more are noted in the synthesized code.
+Each decision point (each `|`, `[ ]` and `{ }`) uses the fewest tokens of lookahead that tell its branches apart, up to 4 by default, or a `maxk` on the decision or its rule. Most decisions need one token. Ones that need more are noted in the synthesized code.
 
 ### Ambiguity
 
-A decision whose branches still overlap after 4 tokens (or the `@maxk` limit) either needs more lookahead or is really ambiguous. With the engine chosen automatically (the default), Parsley leaves it to ALL(\*), which looks as far ahead as it takes at parse time, with a message saying so. If the input really is ambiguous there, ALL(\*) settles it the way the defaults below do: the first alternative wins, and a loop or optional keeps matching.
+A decision whose branches still overlap after 4 tokens (or the `@maxk` limit, or its own `maxk`) either needs more lookahead or is really ambiguous. With the engine chosen automatically (the default), Parsley leaves it to ALL(\*), which looks as far ahead as it takes at parse time, with a message saying so. If the input really is ambiguous there, ALL(\*) settles it the way the defaults below do: the first alternative wins, and a loop or optional keeps matching.
 
 A `policy` settles the decision when the grammar is analyzed instead, on every engine, which keeps a grammar like the dangling `else` LL(1):
 
@@ -623,6 +628,50 @@ A `policy` settles the decision when the grammar is analyzed instead, on every e
 With the LL(1) or LL(k) engine forced (`-e ll1`, `-e llk`), a loop or optional with no `policy` is settled greedily with a warning, and an alternation with no `policy` is an error.
 
 A rule that can't match any finite input (every way through it leads back into itself, as in `A= a A;`) gets a warning, since parsing it can never succeed.
+
+A policy settles what's still ambiguous after looking as far as the decision may. To settle it on one token where the rest of the grammar looks further, give the decision `maxk=1` too: in XPath, a `*` right after a lone `/` is a name test, not a multiplication, which is
+
+```xbnf
+AbsoluteLocationPath= slash [ RelativeLocationPath ]<policy=greedy, maxk=1> | dslash RelativeLocationPath;
+```
+
+### Left factoring
+
+Alternatives that start with the same tokens need more than one token of lookahead to tell apart. Asked to, with `@factor true;` or `<factor>` on a rule or a group, Parsley factors those tokens out in front, so one token is enough: `A= x B | x C;` is parsed as `A= x ( B | C );`. It does this to every alternation it's asked to, and says which, and on what tokens, in a message.
+
+The shared tokens are often inside the rules the alternatives start with, a rule or two down. In XPath, a step and a function call both start with a name:
+
+```xbnf
+@factor true;
+PathExpr= LocationPath | FilterExpr [ ( slash | dslash ) RelativeLocationPath ];
+LocationPath<collapsed>= RelativeLocationPath | AbsoluteLocationPath;
+RelativeLocationPath= Step { ( slash | dslash ) Step };
+Step= [ axis | at ] NodeTest { Predicate } | dot | dotdot;
+FilterExpr= PrimaryExpr { Predicate };
+PrimaryExpr= variable | lparen Expr rparen | Literal | number | FunctionCall;
+FunctionCall= ident lparen [ Expr { comma Expr } ] rparen;
+```
+
+To bring the name out, Parsley inlines the rules along the way, and splits their alternations, optionals and loops into alternatives where it has to, until each alternative starts with a token. Then it factors the tokens they share, and does the same again with what each goes on with. `PathExpr` above takes two tokens without factoring, and one with it.
+
+**It's all or nothing, one alternation at a time.** Factoring is kept only where it works: where the alternation, and every alternation factoring made of what its alternatives go on with, is decided on one token. Where it isn't, which is usual in a grammar that's ambiguous there, factoring would only have inlined rules and left more decisions for ALL(\*), so the alternation is left as written, with a message saying so, and decided by lookahead or ALL(\*) as it would have been.
+
+**The tree doesn't change.** No rule or node is added: what factoring writes are groups, which have no nodes. An inlined rule still makes its own node, where a call to it would have. The node takes over the tokens factoring moved in front of the decision, and is located where the rule started. A collapsed rule still makes none. So `id('x')/a` gives the same tree, every node at the same line and column, factored or not, and so does all input in the language. A rule's `parsed` hook still runs, with its node, and the rule still has its place in error recovery.
+
+**What's ambiguous stays settled the same way.** Where input can be parsed more than one way, the earliest alternative wins, factored or not: factoring never moves one alternative past another that could start the same way.
+
+**Input that isn't in the language** is still an error, and the error is usually the same one, at the same token: a factored alternation still reports everything its alternatives can start with. Usually, not always: where an LL parser notices an error depends on where it commits to an alternative, which factoring moves, so on some input the first error comes a token or two later or earlier, or names different tokens. Recovery after it can differ too, since tokens moved in front of a decision were read before the rules they belong to were entered.
+
+Factoring leaves an alternation as written, and lookahead or ALL(\*) decides it, where the shared tokens can only be brought out:
+- through a rule with an `entering` hook, which would run after the tokens moved in front of it instead of before,
+- through a rule marked `factor=false`,
+- through an operator rule or one of its forms, which are parsed by precedence climbing,
+- through a left-recursive loop, or a start that can match nothing in a way it can't split,
+- or by growing the rule by more than 600 expression nodes, which it says in a message.
+
+An alternation where an alternative can match nothing isn't factored either, since what follows the alternation decides that one.
+
+It's off by default because it inlines: the synthesized parser has the inlined rules' code in more places, and a rule's `entering` hook keeps it from being inlined.
 
 ### Left recursion
 
@@ -652,6 +701,11 @@ Left recursion is rewritten automatically:
 | A symbol whose [constant](#symbol-constants) can't have its name, because the synthesized code already uses it | Warning when synthesizing: the constant gets a number after it |
 | A non-terminal unreachable from the start symbol | Warning, unless `nowarn` |
 | `lexer` or `on` on a rule that isn't a terminal | Error |
+| `@factor` that isn't `true` or `false` | Error |
+| `factor` that isn't `true` or `false` | Warning |
+| `maxk` that isn't a whole number of at least 1 | Error |
+| An alternation left factored | Message: which, and on what tokens |
+| An alternation factoring would grow too much, or couldn't make decidable on one token | Message: it's left as written |
 | [Operator rules](#operator-rules): | |
 | An operator rule that's collapsed | Error |
 | An operator rule with no atom | Error |

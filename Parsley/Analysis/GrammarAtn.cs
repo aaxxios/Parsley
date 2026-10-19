@@ -165,6 +165,9 @@ namespace Parsley
 					foreach (var item in seq.Items)
 						from = _Build(item, from);
 					return from;
+				case InlinedProduction ip:
+					// parsed in place, with no call: its network is part of the production it's inlined into
+					return _Build(ip.Body, from);
 				case Alternation alt:
 					{
 						var d = _Decision(e, from);

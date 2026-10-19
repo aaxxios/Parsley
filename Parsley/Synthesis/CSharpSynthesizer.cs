@@ -361,6 +361,7 @@ namespace Parsley
 					"Parse", "Current", "Errors", "Peek", "Advance", "Consume", "Expect", "Error", "NewNode", "Fold",
 					"Enter", "Leave", "ExpectEnd", "Run", "Tables", "SymbolCount", "Start", "ReadToken", "FromLexer", "EndToken",
 					"AdaptivePredict", "Atn", "Classify", "Classified", "OnMatched", "CurrentUnclassified", "Previous", "Wrap",
+					"Adopt", "EnterInlined", "LeaveInlined",
 					"CreateLexerMode", "Tokenize", "TryParse", "s_tables", "s_atn",
 					"GetHashCode", "ToString", "Equals", "GetType", "MemberwiseClone", "ReferenceEquals", "Finalize"
 				});
@@ -1184,6 +1185,9 @@ namespace Parsley
 							}
 							break;
 						}
+					case InlinedProduction ip:
+						_Inlined(ip, node, known);
+						break;
 					case Sequence seq:
 						// tokens the decision already verified carry on to the terminals that start the sequence
 						for (var i = 0; i < seq.Items.Count; ++i)
@@ -1201,6 +1205,34 @@ namespace Parsley
 				}
 			}
 
+			// a production inlined by left factoring, parsed in place as its method would parse it: its node (which
+			// takes over the tokens factoring moved in front of the decision), its hooks, and its place in recovery
+			void _Inlined(InlinedProduction ip, string node, IReadOnlyList<int>? known)
+			{
+				var q = _a.Grammar.GetProduction(ip.Production)!;
+				var id = _const[_s.GetId(q.Name)];
+				_Line($"// {q.Name}, inlined" + (0 < ip.Back ? $" after its first {(1 == ip.Back ? "token" : ip.Back.ToString() + " tokens")}" : ""));
+				if (q.IsCollapsed)
+				{
+					_Line($"EnterInlined({id});");
+					_Expr(ip.Body, node, known, q, ip.Whole);
+					if (null != q.Parsed) _Line($"{q.Parsed}({node});");
+					_Line("LeaveInlined();");
+					return;
+				}
+				var inner = $"__inlined{++_inlinedCount}";
+				_Line("{");
+				++_indent;
+				_Line($"var {inner} = Adopt({id}, {node}, {ip.Back}, {ip.Adopt});");
+				_Line($"EnterInlined({id});");
+				_Expr(ip.Body, inner, known, q, ip.Whole);
+				if (null != q.Parsed) _Line($"{q.Parsed}({inner});");
+				_Line("LeaveInlined();");
+				_Line($"{node}.Add({inner});");
+				_Close();
+			}
+			int _inlinedCount;
+
 			static IReadOnlyList<int>? _Single(IReadOnlyList<int> tokens) => 1 == tokens.Count ? tokens : null;
 
 			void _Decision(Decision d, string node, Production p, bool isRoot)
@@ -1213,7 +1245,7 @@ namespace Parsley
 				else if (!isRoot && !(parent is Repeat || parent is OptionalExpression) && !(null != _a.GetOperatorForm(d.Node)))
 					_Line($"// {_Comment(d.Node.ToString())}");
 				if (null != d.AppliedPolicy && !operatorLoop)
-					_Line($"// ambiguous within {_a.MaxK} tokens; resolved {(d.Kind == DecisionKind.Alternation ? "by taking the first alternative" : "greedy" == d.AppliedPolicy ? "greedily" : "lazily")}");
+					_Line($"// ambiguous within {d.MaxK} tokens; resolved {(d.Kind == DecisionKind.Alternation ? "by taking the first alternative" : "greedy" == d.AppliedPolicy ? "greedily" : "lazily")}");
 				if (d.IsAdaptive)
 				{
 					if (0 == d.Depth)
@@ -1639,7 +1671,7 @@ namespace Parsley
 					}
 				}
 				addSync(p.Attributes.Get("sync"));
-				foreach (var e in p.Expression.Descendants())
+				foreach (var e in p.Expression.OwnDescendants())
 					addSync(e.Attributes.Get("sync"));
 				return result;
 			}

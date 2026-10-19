@@ -56,6 +56,7 @@ namespace Parsley
 			Alternation a => a.Options.Any(o => IsNullable(o, nullable)),
 			Sequence s => s.Items.All(i => IsNullable(i, nullable)),
 			SymbolRef sr => null != sr.Name && nullable.Contains(sr.Name),
+			InlinedProduction ip => IsNullable(ip.Body, nullable),
 			_ => false
 		};
 		static void _LeftCorners(Expression e, HashSet<string> nullable, HashSet<string> productions, HashSet<string> result)
@@ -80,6 +81,9 @@ namespace Parsley
 					break;
 				case Repeat r:
 					_LeftCorners(r.Body, nullable, productions, result);
+					break;
+				case InlinedProduction ip:
+					_LeftCorners(ip.Body, nullable, productions, result);
 					break;
 			}
 		}

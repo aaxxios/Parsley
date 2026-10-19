@@ -106,7 +106,7 @@ namespace Parsley
 					}
 				}
 				addSync(p.Attributes.Get("sync"));
-				foreach (var e in p.Expression.Descendants())
+				foreach (var e in p.Expression.OwnDescendants())
 					addSync(e.Attributes.Get("sync"));
 				recovery[i] = set.ToArray();
 			}
@@ -241,6 +241,27 @@ namespace Parsley
 					foreach (var item in seq.Items)
 						_Expr(item, ref node, p, false);
 					return;
+				case InlinedProduction ip:
+					{
+						// as the synthesized code does it: the production's node takes over the tokens factoring moved in front
+						var q = _a.Grammar.GetProduction(ip.Production)!;
+						var qid = _s.GetId(q.Name);
+						if (q.IsCollapsed)
+						{
+							EnterInlined(qid);
+							_Expr(ip.Body, ref node, q, ip.Whole);
+							if (null != q.Parsed) _hooks?.Parsed?.Invoke(q.Parsed, node);
+							LeaveInlined();
+							return;
+						}
+						var inner = Adopt(qid, node, ip.Back, ip.Adopt);
+						EnterInlined(qid);
+						_Expr(ip.Body, ref inner, q, ip.Whole);
+						if (null != q.Parsed) _hooks?.Parsed?.Invoke(q.Parsed, inner);
+						LeaveInlined();
+						node.Add(inner);
+						return;
+					}
 			}
 			var d = _a.GetDecision(e)!;
 			switch (e)

@@ -32,6 +32,8 @@ namespace Parsley.LanguageServer
             ["pop"] = "String, on an island. The external grammar's terminal that ends the island once it balances every `nest`. When it's also `nest`, the second one ends the island.",
             ["startsWith"] = "String, on an island. The external grammar's terminals the island must start with: where its lexer reads none of them first, the next island after the same token is tried. `startsWith=\"XPath.xpathOpen\"`.",
             ["popOnError"] = "`true` or `false`, on an island. Whether an error from the external grammar's lexer ends the island. Defaults to true.",
+            ["factor"] = "`true` or `false`, on a rule or a group. Whether to left factor its alternations, whatever `@factor` says. `factor=false` also keeps a rule from being inlined to factor others.",
+            ["maxk"] = "Number, on a rule or a group. The most tokens its decisions may look at, instead of the `@maxk` limit: `maxk=1`.",
             ["lexer"] = "Name, on a terminal. Another lexer produces it instead of the grammar's own, where `on` and `when` say: `lexer=Regex`.",
             ["on"] = "String, on a terminal with `lexer`. The terminals of the grammar's own lexer where the other lexer may take over.",
         };
@@ -48,6 +50,7 @@ namespace Parsley.LanguageServer
             ["operators"] = new[] { "true", "false" },
             ["shared"] = new[] { "true", "false" },
             ["popOnError"] = new[] { "true", "false" },
+            ["factor"] = new[] { "true", "false" },
         };
 
         public static readonly Dictionary<string, string> Directives = new Dictionary<string, string>
@@ -58,6 +61,7 @@ namespace Parsley.LanguageServer
             ["evaluator"] = "`@evaluator \"MyEvaluator\";` The synthesized evaluator's class name. Ignored by Parsley.Generator.",
             ["using"] = "`@using \"System.Text\";` A namespace for semantic actions to use.",
             ["maxk"] = "`@maxk 2;` The most tokens a fixed-lookahead decision looks at; 4 if not given.",
+            ["factor"] = "`@factor true;` Left factors alternations whose alternatives start alike, so one token decides. The tree doesn't change.",
             ["external"] = "`@external Json \"json.xbnf\";` Another grammar, by an alias, whose shared rules parse islands in this one.",
             ["lexer"] = "`@lexer \"MyLexer\";` or `@lexer Json \"My.JsonLexer\";` The type whose static Tokenize lexes this grammar, or an alias's.",
         };

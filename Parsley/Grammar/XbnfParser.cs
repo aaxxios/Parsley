@@ -10,7 +10,7 @@ namespace Parsley
 	/// <summary>
 	/// Reads XBNF. A rule whose right side is a lone "literal" or 'pattern' declares a terminal, as does one marked
 	/// &lt;terminal&gt;, an island (a rule with entry= and no body) or a contextual terminal; anything else declares a
-	/// non-terminal. Supports @import, @namespace, @class, @evaluator, @using, @maxk, @external and @lexer directives,
+	/// non-terminal. Supports @import, @namespace, @class, @evaluator, @using, @maxk, @factor, @external and @lexer directives,
 	/// attributed groups: <c>( … )&lt;attrs&gt;</c>, <c>[ … ]&lt;attrs&gt;</c>, <c>{ … }&lt;attrs&gt;</c>, and semantic actions:
 	/// <c>Name= expression =&gt; { C# };</c>
 	/// </summary>
@@ -527,7 +527,7 @@ namespace Parsley
 					alias = _ReadIdentifier();
 					_SkipWs();
 				}
-				// a number can be written bare, as in @maxk 2;
+				// a number or a word can be written bare, as in @maxk 2; or @factor true;
 				string arg;
 				if (-1 != Cur && char.IsDigit((char)Cur))
 				{
@@ -539,6 +539,8 @@ namespace Parsley
 					}
 					arg = sb.ToString();
 				}
+				else if (_IsIdStart(Cur))
+					arg = _ReadIdentifier();
 				else
 					arg = _ReadString();
 				_SkipWs();
@@ -574,6 +576,15 @@ namespace Parsley
 						var u = new UsingDirective(arg);
 						u.SetLocation(line, col, pos, _filename);
 						_grammar.Usings.Add(u);
+						break;
+					case "factor":
+						if ("true" != arg && "false" != arg)
+							_messages.Add(new GrammarMessage(ErrorLevel.Error, $"@factor expects true or false, not \"{arg}\"", at));
+						else
+						{
+							_grammar.Directives[name] = arg;
+							_grammar.DirectiveLocations[name] = at;
+						}
 						break;
 					case "maxk":
 						if (!int.TryParse(arg, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var k) || 1 > k)

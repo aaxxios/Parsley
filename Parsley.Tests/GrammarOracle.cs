@@ -59,6 +59,8 @@ namespace Parsley.Tests
 					}
 				case Sequence seq:
 					return seq.Items.SelectMany(_Symbols).ToList();
+				case InlinedProduction ip:
+					return _Symbols(ip.Body);
 				case Alternation alt:
 					{
 						var h = _Helper();
