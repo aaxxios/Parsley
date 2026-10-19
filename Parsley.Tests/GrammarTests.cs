@@ -39,12 +39,11 @@ namespace Parsley.Tests
 		public static void AttributedGroupsAndDirectives()
 		{
 			var g = Grammar.Parse(@"
-				@namespace ""My.Parsers"";
-				@class ""Thing"";
+				@class ""My.Parsers.Thing"";
 				// a comment
 				S<start, expected=""a thing"">= ( a b )<policy=first> | { c }+<sync=""semi""> | [ a ]<policy=lazy>; /* block */
 				a= ""a""; b= ""b""; c= ""c""; semi<sync>= "";"";");
-			T.Equal("My.Parsers", g.Namespace, "namespace directive");
+			T.Equal("My.Parsers", g.Namespace, "namespace from the class directive");
 			T.Equal("Thing", g.ClassName, "class directive");
 			var alt = (Alternation)g.GetProduction("S")!.Expression;
 			T.Equal("first", alt.Options[0].Attributes.GetString("policy"), "group attribute");
@@ -54,6 +53,32 @@ namespace Parsley.Tests
 			T.Equal("a thing", g.GetProduction("S")!.Attributes.GetString("expected"), "production attribute");
 			T.Check(g.GetTerminal("semi")!.IsSync, "sync terminal");
 			T.Equal("S<start, expected=\"a thing\">= ( a b )<policy=\"first\"> | { c }+<sync=\"semi\"> | [ a ]<policy=\"lazy\">;", g.GetProduction("S")!.ToString(), "round trip");
+		}
+		public static void ClassDirectiveGivesTheNamespace()
+		{
+			var g = Grammar.Parse(@"@class ""Thing""; S= ""a"";");
+			T.Equal("Thing", g.ClassName, "a class without a namespace");
+			T.Equal<string?>(null, g.Namespace, "is in the global namespace");
+			g = Grammar.Parse(@"@class ""A.B.C.Thing""; S= ""a"";");
+			T.Equal("Thing", g.ClassName, "the last part is the class");
+			T.Equal("A.B.C", g.Namespace, "the rest is the namespace");
+			var src = CSharpSynthesizer.Synthesize(g);
+			T.Check(src.Contains("namespace A.B.C;") && src.Contains("partial class Thing"), "synthesized in that namespace");
+			var bad = Grammar.Parse(@"@class ""A..Thing""; S= ""a"";");
+			T.Check(bad.Validate().Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("@class expects")), "a malformed @class is an error");
+			var ev = Grammar.Parse(@"@class ""A.P""; @evaluator ""B.E""; S<type=""int"">= ""a"" => { return 1; };");
+			T.Check(ev.Validate().Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("@evaluator expects")), "@evaluator can't give a namespace");
+		}
+		public static void NamespaceDirectiveIsAnError()
+		{
+			var msgs = XbnfParser.TryParse(@"@namespace ""My.Parsers""; S= ""a"";", null, out var g);
+			T.Check(msgs.Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("@namespace is no longer supported") && m.Message.Contains("My.Parsers.MyParser")), "@namespace is an error that says what to write instead");
+			T.Equal<string?>(null, g?.Namespace, "and gives no namespace");
+			var b = new Grammar();
+			b.Production("S", new SymbolRef("a"));
+			b.Terminal("a", "a");
+			b.Directives["namespace"] = "X";
+			T.Check(b.Validate().Any(m => m.Level == ErrorLevel.Error && m.Message.Contains("@namespace")), "a builder grammar's namespace directive is too");
 		}
 		public static void FalseIsFalse()
 		{

@@ -6,7 +6,10 @@ Highlighting and language support for `.xbnf` grammars in Visual Studio 2022 (17
   regex patterns (with their classes, quantifiers and escapes), directives (with an `@external` or `@lexer` alias), comments, and the C# in semantic
   actions.
 - **Go to definition** (F12) and **find all references** (Shift+F12) for rule names, across `@import`ed files.
-  References also cover any open grammar that imports this one.
+  References also cover any open grammar that imports this one. They work wherever a rule is named: in rules,
+  in the terminal lists of `on`, `after` and `sync`, and in semantic actions, where a symbol constant (`add`) and
+  an `EvaluateXxx` call lead to their rule.
+- **Rename** (Ctrl+R, Ctrl+R) a rule everywhere it's named, actions included, or a local an action declares.
 - **Completion**: rule names in expressions, attribute names and their values (`policy=`, `assoc=` and so on)
   inside `< >`, and directives after `@`.
 - **Hover**: a rule as written, with its action shortened to `=> { … }`, the `//` comments right above it, and
@@ -52,7 +55,8 @@ Studio reports that the server didn't start, installing the .NET 8 runtime is th
 
 ## Not done yet
 
-- In semantic actions: signature help, go to definition, and C# errors as you type. Roslyn's signature help
+- In semantic actions: signature help, go to definition of C# names declared outside the grammar, and C# errors
+  as you type. Roslyn's signature help
   isn't public; the others could follow the same path as completion. Compile errors already point into the
   grammar through the `#line` directives.
 - A VS Code extension. The grammar, language configuration and server are ready for one; it needs a small

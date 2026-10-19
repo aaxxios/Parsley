@@ -56,14 +56,13 @@ namespace Parsley.LanguageServer
         public static readonly Dictionary<string, string> Directives = new Dictionary<string, string>
         {
             ["import"] = "`@import \"file.xbnf\";` Reads another file's rules in, relative to this file.",
-            ["namespace"] = "`@namespace \"My.Parsers\";` The synthesized parser's namespace. Ignored by Parsley.Generator.",
-            ["class"] = "`@class \"MyParser\";` The synthesized parser's class name. Ignored by Parsley.Generator.",
-            ["evaluator"] = "`@evaluator \"MyEvaluator\";` The synthesized evaluator's class name. Ignored by Parsley.Generator.",
+            ["class"] = "`@class \"MyParser\";` or `@class \"My.Parsers.MyParser\";` The synthesized parser's class name, and its namespace before the last dot. Ignored, with a warning, by Parsley.Generator.",
+            ["evaluator"] = "`@evaluator \"MyEvaluator\";` The synthesized evaluator's class name, in the parser's namespace. Ignored, with a warning, by Parsley.Generator.",
             ["using"] = "`@using \"System.Text\";` A namespace for semantic actions to use.",
             ["maxk"] = "`@maxk 2;` The most tokens a fixed-lookahead decision looks at; 4 if not given.",
             ["factor"] = "`@factor true;` Left factors alternations whose alternatives start alike, so one token decides. The tree doesn't change.",
             ["external"] = "`@external Json \"json.xbnf\";` Another grammar, by an alias, whose shared rules parse islands in this one.",
-            ["lexer"] = "`@lexer \"MyLexer\";` or `@lexer Json \"My.JsonLexer\";` The type whose static Tokenize lexes this grammar, or an alias's.",
+            ["lexer"] = "`@lexer \"My.Lexers.MyLexer\";` or `@lexer Json \"My.JsonLexer\";` The type whose static Tokenize lexes this grammar, or an alias's, with its namespace before the last dot. Ignored, with a warning, by Parsley.Generator, which generates its lexers.",
         };
     }
 }

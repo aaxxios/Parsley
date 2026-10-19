@@ -69,6 +69,10 @@
     <Compile Include="..\Parsley.LanguageServer\XbnfScanner.cs">
       <Link>XbnfScanner.cs</Link>
     </Compile>
+    <!-- and the scan of the C# in actions that it uses -->
+    <Compile Include="..\Parsley.LanguageServer\CSharpScan.cs">
+      <Link>CSharpScan.cs</Link>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -10,7 +10,7 @@ namespace Parsley
 	/// <summary>
 	/// Reads XBNF. A rule whose right side is a lone "literal" or 'pattern' declares a terminal, as does one marked
 	/// &lt;terminal&gt;, an island (a rule with entry= and no body) or a contextual terminal; anything else declares a
-	/// non-terminal. Supports @import, @namespace, @class, @evaluator, @using, @maxk, @factor, @external and @lexer directives,
+	/// non-terminal. Supports @import, @class, @evaluator, @using, @maxk, @factor, @external and @lexer directives,
 	/// attributed groups: <c>( … )&lt;attrs&gt;</c>, <c>[ … ]&lt;attrs&gt;</c>, <c>{ … }&lt;attrs&gt;</c>, and semantic actions:
 	/// <c>Name= expression =&gt; { C# };</c>
 	/// </summary>
@@ -566,6 +566,9 @@ namespace Parsley
 							break;
 						}
 					case "namespace":
+						// the namespace is given with the class now: @class "My.Parsers.MyParser";
+						_messages.Add(new GrammarMessage(ErrorLevel.Error, $"@namespace is no longer supported: give the namespace in @class, as in @class \"{arg}.MyParser\"", at));
+						break;
 					case "class":
 					case "evaluator":
 						_grammar.Directives[name] = arg;

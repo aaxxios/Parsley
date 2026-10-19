@@ -16,13 +16,14 @@ Console.WriteLine(ExprCalc.Evaluate(tree)); // 49
 
 ## The attribute
 
-`[Parsley(grammarFile, Unicode = ..., Lexer = ..., Engine = ...)]`
+`[Parsley(grammarFile, UseUnicode = ..., HasLexer = ..., HasLinePragmas = ..., Engine = ...)]`
 
 | Argument | |
 |---|---|
 | `grammarFile` | The `.xbnf` grammar, relative to the source file the attribute is in. If no file is there, the one AdditionalFile whose path ends with it is used. |
-| `Unicode` | Use Unicode character classes in the lexer (`parsley-luthor -u`). Default `false`. |
-| `Lexer` | Generate the lexer. Default `true`. When `false`, no lexer, `Tokenize`, or text `Parse` overloads are generated: feed `Parse`/`TryParse` tokens from a lexer of your own. |
+| `UseUnicode` | Use Unicode character classes in the lexer (`parsley-luthor -u`). Default `false`. |
+| `HasLexer` | Generate the lexer. Default `true`. When `false`, no lexer, `Tokenize`, or text `Parse` overloads are generated: feed `Parse`/`TryParse` tokens from a lexer of your own. It doesn't apply to a grammar with islands or terminals from other lexers, which always gets all its lexers, its own included: `false` is ignored there, with a warning (PARSLEY009). |
+| `HasLinePragmas` | Write `#line` directives that map the code copied from the grammar (semantic actions, `type` and `state`, `@using`) back to it, so compiler errors and the debugger go to the grammar (`parsley -n` turns them off). Default `true`. |
 | `Engine` | `ParserEngine.Auto` (the lightest the grammar allows), `LL1`, `LLk` or `AllStar` (`parsley -e`). Default `Auto`. |
 
 The attribute and `ParserEngine` are generated into the project (namespace `Parsley`, internal, and not kept in
@@ -35,14 +36,24 @@ Into the partial class:
 - The parser's symbol constants, public, named as the symbols are written (`Expr`, `number`, `add`, ..., `EndOfInput`,
   `ErrorSymbol`, `SymbolCount`). See XBNF.md's [Symbol constants](../XBNF.md#symbol-constants).
 - Public static entry points:
-  - `Tokenize(string)` / `Tokenize(TextReader)`, with the lexer's optional position, line, column and tab width (unless `Lexer = false`)
-  - `Parse(IEnumerable<Token>)`, `Parse(string)`, `Parse(TextReader)` (the last two unless `Lexer = false`), and `TryParse(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)`
+  - `Tokenize(string)` / `Tokenize(TextReader)`, with the lexer's optional position, line, column and tab width (unless `HasLexer = false`)
+  - `Parse(IEnumerable<Token>)`, `Parse(string)`, `Parse(TextReader)` (the last two unless `HasLexer = false`), and `TryParse(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)`
   - `Evaluate(ParseNode, state)`, when the grammar has semantic actions, returning the start production's type
   - `TryParseXxx(IEnumerable<Token>, out ParseNode, out IReadOnlyList<ParseError>)` for each `shared` production, and
     `CreateLexerMode(TokenizeFunc)`, for other grammars to embed this one as islands. A grammar with shared
     productions and no `start` gets no `Parse` or `TryParse` of its own.
-- Private nested classes: `Parser`, `Evaluator` (with semantic actions) and `Lexer` (unless `Lexer = false`).
-- For a grammar with islands, for each `@external` grammar: an internal nested class named after its alias, holding
+- Nested classes: `Parser`, `Evaluator` (with semantic actions) and `Lexer` (unless `HasLexer = false`), and a
+  lexer for each `lexer=` alias. They're partial, with no access of their own, so they're private unless you give
+  one an access in a part of your own, inside your part of the class:
+  ```csharp
+  public partial class ExprParser
+  {
+      public partial class Parser { }
+      public static partial class Lexer { }
+  }
+  ```
+- For a grammar with islands, for each `@external` grammar: an internal nested static class named after its
+  alias, so the rest of the project can read its symbol constants, holding
   that grammar's `Parser`, `Lexer` and `Evaluator`, its symbol constants, and its own `@external` grammars' classes
   in turn. So `[Parser("bamc.xbnf")]` also gets json.xbnf's parser and lexer, as `BamcParser.Json`, and
   `BamcParser.Json.Object` is the id of json.xbnf's `Object`, for looking at an island's tree. `Tokenize` lexes
@@ -51,10 +62,9 @@ Into the partial class:
 - A lexer for each `lexer=` alias, named after it (`RegexLexer`). A `when` on such a terminal is a static partial
   method on the nested parser, as a contextual terminal's is an instance one.
 
-A lexer `@lexer` names, for the grammar, an `@external` alias or a `lexer=` alias, is used instead of generating one.
-
-The grammar's `@class`, `@namespace` and `@evaluator` directives are ignored: the class decides the names and the
-namespace. `@using` still applies to semantic actions. A constant that would clash with a member of the class, with
+The grammar's `@class`, `@evaluator` and `@lexer` directives are ignored, with a warning (PARSLEY005) on each, in the
+grammar and in its `@external` grammars alike: the class decides the names and the namespace, and every lexer is
+generated nested in it. `@using` still applies to semantic actions. A constant that would clash with a member of the class, with
 the generated members, or with the class an `@external` grammar's constants are in, gets a number after it and a
 warning, as the tools do with clashes inside the parser: json.xbnf's `Json` rule is `BamcParser.Json.Json2`, since
 the class is named `Json` after its alias. See XBNF.md's [Symbol constants](../XBNF.md#symbol-constants).
@@ -102,7 +112,7 @@ targets:
 ```
 
 The lexer is always built from the grammar's terminals, as `parsley -l` writes it. A grammar that pairs with a
-hand-written `.lex`, like the ES5 test's, gets the grammar-derived lexer instead, unless `Lexer = false`, which
+hand-written `.lex`, like the ES5 test's, gets the grammar-derived lexer instead, unless `HasLexer = false`, which
 leaves you to supply the tokens.
 
 The generated code needs C# 12, as the tools' output does.
@@ -119,3 +129,4 @@ The generated code needs C# 12, as the tools' output does.
 | PARSLEY006 | A message about the grammar (info), such as left recursion that was rewritten |
 | PARSLEY007 | Generation failed for another reason |
 | PARSLEY008 | The attribute has no grammar file |
+| PARSLEY009 | `HasLexer = false` was ignored, because the grammar has islands or terminals from other lexers |

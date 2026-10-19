@@ -451,13 +451,23 @@ namespace Parsley.Tests
 			// without @lexer: the external grammar's own @lexer, else the alias plus Lexer, in its namespace
 			var files = new Dictionary<string, string>
 			{
-				["a.xbnf"] = @"@namespace ""My.A""; A<shared>= ""a"";",
-				["b.xbnf"] = @"@namespace ""My.B""; @lexer ""BLex""; B<shared>= ""b"";",
+				["a.xbnf"] = @"@class ""My.A.AParser""; A<shared>= ""a"";",
+				["b.xbnf"] = @"@class ""My.B.BParser""; @lexer ""BLex""; B<shared>= ""b"";",
+				["c.xbnf"] = @"@class ""My.C.CParser""; @lexer ""Other.Lexers.CLex""; C<shared>= ""c"";",
+				["d.xbnf"] = @"@class ""DParser""; D<shared>= ""d"";",
 			};
-			var msgs = XbnfParser.TryParse(@"@external Aa ""a.xbnf""; @external Bb ""b.xbnf""; S= ""x"";", _Path("names.xbnf"), p => files[Path.GetFileName(p)], out var n);
+			var msgs = XbnfParser.TryParse(@"@external Aa ""a.xbnf""; @external Bb ""b.xbnf""; @external Cc ""c.xbnf""; @external Dd ""d.xbnf""; S= ""x"";", _Path("names.xbnf"), p => files[Path.GetFileName(p)], out var n);
+			T.Equal(0, msgs.Count(m => m.Level == ErrorLevel.Error), "the grammars read");
 			T.Equal("global::My.A.AaLexer", CSharpSynthesizer.DefaultLexerType(n!, "Aa"), "the alias plus Lexer, in the external grammar's namespace");
 			T.Equal("global::My.B.BLex", CSharpSynthesizer.DefaultLexerType(n!, "Bb"), "the external grammar's own @lexer, in its namespace");
-			T.Equal("global::My.A.AParser", CSharpSynthesizer.DefaultExternalParser(n!, "Aa"), "its parser, from its file name");
+			T.Equal("global::My.A.AParser", CSharpSynthesizer.DefaultExternalParser(n!, "Aa"), "its parser, from its @class");
+			T.Equal("global::Other.Lexers.CLex", CSharpSynthesizer.DefaultLexerType(n!, "Cc"), "the external grammar's @lexer, in the namespace it gives");
+			T.Equal("global::My.C.CParser", CSharpSynthesizer.DefaultExternalParser(n!, "Cc"), "its parser, in the namespace its @class gives");
+			T.Equal("DParser", CSharpSynthesizer.DefaultExternalParser(n!, "Dd"), "a parser in the global namespace");
+			T.Equal("DdLexer", CSharpSynthesizer.DefaultLexerType(n!, "Dd"), "and its lexer");
+			var own = Grammar.Parse(@"@class ""My.P.Parser""; @lexer ""My.L.Lexer""; @lexer Rx ""Rx.RxLexer""; S= a r; a= ""a""; r<lexer=Rx, on=""a"">= 'r';");
+			T.Equal("global::My.L.Lexer", CSharpSynthesizer.DefaultLexerType(own, null), "the grammar's @lexer, in the namespace it gives");
+			T.Equal("global::Rx.RxLexer", CSharpSynthesizer.DefaultLexerType(own, "Rx"), "a lexer= alias's @lexer, in the namespace it gives");
 			T.Equal("NamesLexer", CSharpSynthesizer.DefaultLexerType(n!, null), "the grammar's own: its file name plus Lexer");
 		}
 	}

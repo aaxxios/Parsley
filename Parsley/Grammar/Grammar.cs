@@ -379,9 +379,22 @@ namespace Parsley
 		/// </summary>
 		public IEnumerable<Production> SharedProductions => Productions.Where(p => p.Attributes.IsSet("shared"));
 		/// <summary>
-		/// The class name to synthesize: the @class directive, else the file name + "Parser"
+		/// The @class directive as written, such as <c>My.Parsers.MyParser</c>, or null if it isn't given
 		/// </summary>
-		public string? ClassName => Directives.TryGetValue("class", out var c) ? c : _NameFromFile("Parser");
+		public string? ClassDirective => Directives.TryGetValue("class", out var c) ? c : null;
+		/// <summary>
+		/// The class name to synthesize: the last part of the @class directive, else the file name + "Parser"
+		/// </summary>
+		public string? ClassName
+		{
+			get
+			{
+				var c = ClassDirective;
+				if (null == c) return _NameFromFile("Parser");
+				var dot = c.LastIndexOf('.');
+				return 0 > dot ? c : c.Substring(dot + 1);
+			}
+		}
 		/// <summary>
 		/// The evaluator class name to synthesize: the @evaluator directive, else the file name + "Evaluator"
 		/// </summary>
@@ -404,7 +417,19 @@ namespace Parsley
 			}
 			return sb.Append(suffix).ToString();
 		}
-		public string? Namespace => Directives.TryGetValue("namespace", out var n) ? n : null;
+		/// <summary>
+		/// The namespace to synthesize the parser in: what comes before the last dot of the @class directive, as in
+		/// <c>@class "My.Parsers.MyParser";</c>, or null for the global namespace
+		/// </summary>
+		public string? Namespace
+		{
+			get
+			{
+				var c = ClassDirective;
+				var dot = c?.LastIndexOf('.') ?? -1;
+				return 0 < dot ? c!.Substring(0, dot) : null;
+			}
+		}
 		/// <summary>
 		/// The @maxk directive: the most tokens a decision with fixed lookahead looks at. Null if not given
 		/// or not a whole number of at least 1 (which the reader reports).
@@ -522,6 +547,13 @@ namespace Parsley
 				if (null != first)
 					result.Add(new GrammarMessage(ErrorLevel.Error, $"\"{first.Name}\" has a semantic action, but the start production \"{start.Name}\" does not. Semantic actions require one on the start production", first.Action));
 			}
+			// the parser's name and namespace come from @class; the evaluator goes beside it
+			if (Directives.TryGetValue("class", out var cls) && !_IsTypeName(cls))
+				result.Add(_DirectiveMessage(ErrorLevel.Error, $"@class expects a C# class name, with its namespace if it has one, such as \"MyParser\" or \"My.Parsers.MyParser\", not \"{cls}\"", "class"));
+			if (Directives.TryGetValue("evaluator", out var ev) && (!_IsTypeName(ev) || ev.Contains('.')))
+				result.Add(_DirectiveMessage(ErrorLevel.Error, $"@evaluator expects a C# class name without a namespace, as the evaluator goes in the parser's namespace, not \"{ev}\"", "evaluator"));
+			if (Directives.TryGetValue("namespace", out var ns))
+				result.Add(_DirectiveMessage(ErrorLevel.Error, $"@namespace is no longer supported: give the namespace in @class, as in @class \"{ns}.{ClassName ?? "MyParser"}\"", "namespace"));
 			foreach (var u in Usings)
 				if (!u.IsValid)
 					result.Add(new GrammarMessage(ErrorLevel.Error, $"@using expects a namespace, such as \"System.Text\", not \"{u.Namespace}\"", u));

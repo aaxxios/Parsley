@@ -27,6 +27,10 @@ namespace LexGen
         /// </summary>
         public string? Access { get; set; }
         /// <summary>
+        /// Declare the class partial, so another part of it can add members or give it an access
+        /// </summary>
+        public bool Partial { get; set; }
+        /// <summary>
         /// Use Unicode character classes
         /// </summary>
         public bool Unicode { get; set; }
@@ -200,7 +204,7 @@ namespace LexGen
                 writer.WriteLine($"{ind}        }}");
                 writer.WriteLine($"{ind}    }}");
             }
-            writer.WriteLine($"{ind}{(options.Access != null ? options.Access + " " : "")}static class {options.ClassName}");
+            writer.WriteLine($"{ind}{(!string.IsNullOrEmpty(options.Access) ? options.Access + " " : "")}static {(options.Partial ? "partial " : "")}class {options.ClassName}");
             writer.WriteLine($"{ind}{{");
             writer.WriteLine($"{ind}    private static int[] _dfa = {{");
             _DumpArray(array, ind + "        ", writer);

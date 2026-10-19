@@ -27,6 +27,11 @@ namespace Parsley.LanguageServer
         Reference,      // a rule used in an expression
         AttributeName,  // <name ...>
         AttributeValue, // <... = name>
+        AttributeSymbol,// a terminal's name in on=, after= or sync=, alone or in a "list"
+        CodeName,       // a name in a semantic action that isn't a local or a member: maybe a symbol constant
+        CodeEvaluate,   // EvaluateXxx in a semantic action, for the rule Xxx
+        CodeMember,     // a name after a dot in a semantic action
+        CodeLocal,      // a local a semantic action declares, or a use of one
     }
 
     sealed class Token
@@ -46,6 +51,27 @@ namespace Parsley.LanguageServer
         /// For a definition: where the rule's "=" is, or -1
         /// </summary>
         public int EqualsAt { get; set; } = -1;
+        /// <summary>
+        /// For a name inside an action or an attribute's value: the name it stands for, such as Expr for EvaluateExpr,
+        /// or x for @x. Null for the tokens of the grammar itself, whose name is their text.
+        /// </summary>
+        public string? Name { get; set; }
+        /// <summary>
+        /// Where <see cref="Name"/> starts: after the Evaluate of EvaluateExpr, or the @ of @x
+        /// </summary>
+        public int NameStart { get; set; }
+        /// <summary>
+        /// For a <see cref="IdentifierRole.CodeLocal"/>: the token that declares it, which is itself for the declaration
+        /// </summary>
+        public Token? Declaration { get; set; }
+        /// <summary>
+        /// For a name inside an action or an attribute's value: the action or literal token it's in
+        /// </summary>
+        public Token? Container { get; set; }
+        /// <summary>
+        /// For an action or an attribute's literal: the names inside it, in order. Null if it has none.
+        /// </summary>
+        public List<Token>? Inner { get; set; }
         public override string ToString() => $"{Kind} {Role} \"{Text}\" @{Start}";
     }
 
@@ -70,6 +96,24 @@ namespace Parsley.LanguageServer
         {
             get { foreach (var t in Tokens) if (t.Role == IdentifierRole.Definition) yield return t; }
         }
+
+        /// <summary>
+        /// The tokens, with the names inside actions and attribute values after the token they're in
+        /// </summary>
+        public IEnumerable<Token> AllTokens
+        {
+            get
+            {
+                foreach (var t in Tokens)
+                {
+                    yield return t;
+                    if (null != t.Inner) foreach (var i in t.Inner) yield return i;
+                }
+            }
+        }
+
+        // the attributes whose values name this grammar's terminals
+        static readonly HashSet<string> s_symbolAttributes = new HashSet<string> { "on", "after", "sync" };
 
         public static XbnfScan Scan(string text)
         {
@@ -118,8 +162,16 @@ namespace Parsley.LanguageServer
                     // a semantic action: the arrow and the C# block up to its matching brace
                     i += 2;
                     while (i < n && char.IsWhiteSpace(s[i])) ++i;
+                    var code = i;
                     if (i < n && s[i] == '{') i = _SkipCSharpBlock(s, i);
-                    Tokens.Add(new Token(TokenKind.Action, start, i - start, s.Substring(start, i - start)));
+                    var action = new Token(TokenKind.Action, start, i - start, s.Substring(start, i - start));
+                    // the names in the C#, for navigation in it
+                    if (i > code)
+                    {
+                        var names = CSharpScan.Scan(s, code, i, action);
+                        if (0 < names.Count) action.Inner = names;
+                    }
+                    Tokens.Add(action);
                     Opaque.Add((start + 2, i));
                     continue;
                 }
@@ -198,6 +250,7 @@ namespace Parsley.LanguageServer
             Token? currentRule = null;
             var inAttributes = false;
             var expectAttributeName = false;
+            string? attributeName = null; // the attribute whose value is next, if any
             Token? directive = null;
             for (var k = 0; k < Tokens.Count; ++k)
             {
@@ -218,11 +271,15 @@ namespace Parsley.LanguageServer
                     case TokenKind.Literal:
                         if (null != directive && directive.Text == "@import" && t.Length >= 2)
                             Imports.Add((t.Text.Substring(1, t.Text.Length - (t.Text.EndsWith("\"") && t.Length > 1 ? 2 : 1)), t));
+                        // on="lbrace", sync="semi rbrace": the names in it
+                        if (inAttributes && null != attributeName && s_symbolAttributes.Contains(attributeName))
+                            _AttributeNames(t);
+                        attributeName = null;
                         continue;
                     case TokenKind.Punctuation:
                         if (inAttributes)
                         {
-                            if (t.Text == ",") expectAttributeName = true;
+                            if (t.Text == ",") { expectAttributeName = true; attributeName = null; }
                             else if (t.Text == "=") expectAttributeName = false;
                             continue;
                         }
@@ -239,7 +296,18 @@ namespace Parsley.LanguageServer
                     case TokenKind.Identifier:
                         if (inAttributes)
                         {
-                            t.Role = expectAttributeName ? IdentifierRole.AttributeName : IdentifierRole.AttributeValue;
+                            if (expectAttributeName)
+                            {
+                                t.Role = IdentifierRole.AttributeName;
+                                attributeName = t.Text;
+                            }
+                            else
+                            {
+                                // on=lbrace names a terminal, as on="lbrace" does
+                                t.Role = null != attributeName && s_symbolAttributes.Contains(attributeName) ? IdentifierRole.AttributeSymbol : IdentifierRole.AttributeValue;
+                                if (t.Role == IdentifierRole.AttributeSymbol) { t.Name = t.Text; t.NameStart = t.Start; }
+                                attributeName = null;
+                            }
                             expectAttributeName = false;
                             continue;
                         }
@@ -273,6 +341,32 @@ namespace Parsley.LanguageServer
             if (null != currentRule && currentRule.RuleEnd < 0) currentRule.RuleEnd = Tokens.Count > 0 ? Tokens[Tokens.Count - 1].End : currentRule.End;
         }
 
+        // the names in an attribute's quoted value, separated by spaces or commas. Literal text, such as ";", isn't one.
+        static void _AttributeNames(Token literal)
+        {
+            var s = literal.Text;
+            var end = s.Length > 1 && s[s.Length - 1] == '"' ? s.Length - 1 : s.Length;
+            var i = 1;
+            while (i < end)
+            {
+                if (s[i] == ' ' || s[i] == ',' || s[i] == '\t') { ++i; continue; }
+                var start = i;
+                while (i < end && s[i] != ' ' && s[i] != ',' && s[i] != '\t') ++i;
+                var word = s.Substring(start, i - start);
+                if (!_IdStart(word[0])) continue;
+                var ok = true;
+                foreach (var c in word) if (!_IdPart(c)) { ok = false; break; }
+                if (!ok) continue;
+                (literal.Inner ??= new List<Token>()).Add(new Token(TokenKind.Identifier, literal.Start + start, word.Length, word)
+                {
+                    Role = IdentifierRole.AttributeSymbol,
+                    Name = word,
+                    NameStart = literal.Start + start,
+                    Container = literal,
+                });
+            }
+        }
+
         bool _NextIs(int k, params string[] texts)
         {
             if (k + 1 >= Tokens.Count) return false;
@@ -282,13 +376,23 @@ namespace Parsley.LanguageServer
         }
 
         /// <summary>
-        /// The token whose span holds the offset, or ends at it
+        /// The token whose span holds the offset, or ends at it. In an action or an attribute's value, the name there
+        /// if there is one.
         /// </summary>
         public Token? TokenAt(int offset)
         {
             foreach (var t in Tokens)
             {
-                if (t.Start <= offset && offset <= t.End) return t;
+                if (t.Start <= offset && offset <= t.End)
+                {
+                    if (null != t.Inner)
+                        foreach (var i in t.Inner)
+                        {
+                            if (i.Start <= offset && offset <= i.End) return i;
+                            if (i.Start > offset) break;
+                        }
+                    return t;
+                }
                 if (t.Start > offset) break;
             }
             return null;

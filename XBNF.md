@@ -204,14 +204,13 @@ Block= "{" { Stmt }<sync="semi"> "}";
 | Directive | Effect |
 | --- | --- |
 | `@import "file.xbnf";` | Reads another file's rules in at this point, with the path relative to the importing file. A file is imported only once, so import cycles are harmless. Imported rules keep their own file name in messages. An imported file's directives don't override the importer's. |
-| `@namespace "My.Parsers";` | The namespace of the synthesized parser. Without it, the parser has no namespace. |
-| `@class "MyParser";` | The class name of the synthesized parser. By default it's the file name in PascalCase plus `Parser`, so `json.xbnf` gives `JsonParser`. |
+| `@class "MyParser";`<br>`@class "My.Parsers.MyParser";` | The class name of the synthesized parser, with its namespace before the last dot. By default it's the file name in PascalCase plus `Parser`, so `json.xbnf` gives `JsonParser`, in no namespace. `@namespace`, which gave the namespace on its own, is no longer supported: it's an error that says what to write instead. |
 | `@maxk 2;` | The most tokens a decision with fixed lookahead looks at; 4 if not given. A decision that needs more is predicted by ALL(\*) at parse time, or settled by its `policy`. A lower limit gives smaller predictors at the cost of more ALL(\*); a higher one, the reverse. It's part of the grammar so the same grammar always synthesizes the same parser. A `maxk` attribute on a rule or a decision sets its own limit. |
 | `@factor true;` | [Left factors](#left-factoring) every alternation whose alternatives can start with the same token. `false`, or not given, leaves the grammar as written. A rule's or group's `factor` attribute overrides it. |
-| `@evaluator "MyEvaluator";` | The class name of the synthesized evaluator, used as written, with `@` added in front of a C# keyword. By default it's the file name in PascalCase plus `Evaluator`, so `json.xbnf` gives `JsonEvaluator`. Only matters when the grammar has [semantic actions](#semantic-actions); without any, it's ignored with a warning. |
+| `@evaluator "MyEvaluator";` | The class name of the synthesized evaluator, in the parser's namespace, so it can't give one of its own. It's used as written, with `@` added in front of a C# keyword. By default it's the file name in PascalCase plus `Evaluator`, so `json.xbnf` gives `JsonEvaluator`. Only matters when the grammar has [semantic actions](#semantic-actions); without any, it's ignored with a warning. |
 | `@using "System.Text";` | Adds `using System.Text;` to the top of the synthesized file, so [semantic actions](#semantic-actions) can use the namespace's types without qualifying them. Give it once per namespace; it can appear any number of times. The argument must be a namespace name, such as `System.Text` or `My.@class`: not `static` or an alias. A namespace the file already imports, or one given twice, is written once, without a message. Usings from an `@import`ed file are added to the importer's. Only matters when the grammar has semantic actions; without any, it's ignored with a warning and the file is unchanged. |
 | `@external Json "json.xbnf";` | Another grammar, known here by an alias, whose shared rules parse [islands](#islands) in this one. The path is relative to this file. The grammar is read on its own, as if it were being synthesized by itself: none of its rules or directives are merged into this one, and only its errors are reported here. A grammar can't embed itself, directly or through others. |
-| `@lexer "BamcLexer";`<br>`@lexer Json "Foo.JsonLexer";` | The C# type whose static `Tokenize` lexes this grammar, or one of its aliases: an `@external` grammar, or a lexer that terminals name with `lexer=`. See [Naming the lexers](#naming-the-lexers). |
+| `@lexer "BamcLexer";`<br>`@lexer Json "Foo.JsonLexer";` | The C# type whose static `Tokenize` lexes this grammar, or one of its aliases: an `@external` grammar, or a lexer that terminals name with `lexer=`, with its namespace before the last dot. See [Naming the lexers](#naming-the-lexers). |
 
 Other directives are kept, with a warning that they're unknown. Every directive except `@using`, `@external` and `@lexer` takes one value, and if one is given more than once, the last wins. `@external` and `@lexer` take an alias first (optional for `@lexer`), and an `@import`ed file's are added unless the importer has one for that alias.
 
@@ -562,15 +561,17 @@ public static IEnumerable<Token> Tokenize(TextReader reader, long position, int 
 
 It reports each token's id counting the grammar's terminals from 0 in the order the parser numbers them, leaves out hidden terminals, and reports text it can't match as a token with id -1. A lexer from another generator needs only a small adapter with this shape.
 
-`@lexer` names the type whose `Tokenize` lexes for the grammar itself, or for an alias. A type it names is used as written. Without one:
+`@lexer` names the type whose `Tokenize` lexes for the grammar itself, or for an alias, with its namespace before the last dot: `@lexer "My.Lexers.BamcLexer";`. A name with a namespace is used from the global namespace, so it means the same wherever the parser is; one without is used as written. Without one:
 
 | Lexer for | Type used |
 | --- | --- |
 | the grammar itself | the file name plus `Lexer`: `bamc.xbnf` gives `BamcLexer` |
-| an `@external` alias | the external grammar's own `@lexer`, else the alias plus `Lexer`, either in the external grammar's `@namespace` |
+| an `@external` alias | the external grammar's own `@lexer`, else the alias plus `Lexer`, in the namespace the external grammar's `@class` gives unless the `@lexer` gives its own |
 | a `lexer=` alias | the alias plus `Lexer` |
 
-When the outer grammar and the external grammar both name a lexer for it, the outer grammar's wins: the external grammar stays unaware of being embedded. The external grammar's parser is its `@class`, or its file name plus `Parser`, in its `@namespace`.
+When the outer grammar and the external grammar both name a lexer for it, the outer grammar's wins: the external grammar stays unaware of being embedded. The external grammar's parser is its `@class`, or its file name plus `Parser`, in the namespace its `@class` gives.
+
+The command line tool writes the lexers' `.lex` files, not their code, so the names it expects have to be given to `parsley-luthor` too: `@lexer "My.Lexers.BamcLexer";` goes with `parsley-luthor bamc.lex -c BamcLexer -n My.Lexers`.
 
 The source generator works differently: see [With the source generator](#with-the-source-generator).
 
@@ -592,7 +593,7 @@ With the command line tool, synthesize each external grammar too, as you would b
 
 ### With the source generator
 
-One `[Parser("bamc.xbnf")]` class gets everything: bamc's parser and lexer, and for each `@external` grammar, a class nested in it named after the alias, holding that grammar's parser and lexer (and evaluator, if it has semantic actions), with its symbol constants. So `BamcParser.Json.Object` is json.xbnf's `Object` id, for looking at an island's tree. A lexer `@lexer` names is used instead of generating one; a `lexer=` alias gets a lexer generated from its terminals, named after it (`RegexLexer`), unless `@lexer` names one. As always with the generator, `@class`, `@namespace` and `@evaluator` are ignored. `Tokenize`, `Parse` and `TryParse` lex through the controller, and a grammar with shared productions has `TryParseXxx` and `CreateLexerMode` too. `BamcGenTest` is an example.
+One `[Parser("bamc.xbnf")]` class gets everything: bamc's parser and lexer, and for each `@external` grammar, a class nested in it named after the alias, holding that grammar's parser and lexer (and evaluator, if it has semantic actions), with its symbol constants. So `BamcParser.Json.Object` is json.xbnf's `Object` id, for looking at an island's tree. Every lexer is generated: a `lexer=` alias gets one from its terminals, named after it (`RegexLexer`). As always with the generator, `@class`, `@evaluator` and `@lexer` are ignored, the outer grammar's and the external grammars' alike, each with a warning where it's written. `Tokenize`, `Parse` and `TryParse` lex through the controller, and a grammar with shared productions has `TryParseXxx` and `CreateLexerMode` too. `BamcGenTest` is an example.
 
 ### The lexer controller
 

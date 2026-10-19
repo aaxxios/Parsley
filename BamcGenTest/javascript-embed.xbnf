@@ -1,5 +1,4 @@
-﻿@namespace "BamcTest";
-Body<start,shared,terminal=false,type="string">= jsGlob =>  {
+﻿Body<start,shared,terminal=false,type="string">= jsGlob =>  {
     return node.Children[0].Value!;
 };
 jsGlob='(.|\n)*?end-javascript';

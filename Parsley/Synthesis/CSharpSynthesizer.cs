@@ -9,11 +9,12 @@ namespace Parsley
 	public sealed class SynthesisOptions
 	{
 		/// <summary>
-		/// The namespace, overriding the grammar's @namespace. Null leaves the class in the global namespace.
+		/// The namespace, overriding the one the grammar's @class gives, as in <c>@class "My.Parsers.MyParser";</c>.
+		/// Null uses the grammar's, or leaves the class in the global namespace if it gives none.
 		/// </summary>
 		public string? Namespace { get; set; }
 		/// <summary>
-		/// The class name, overriding the grammar's @class and the default (file name + "Parser")
+		/// The class name, overriding the grammar's @class (its last part) and the default (file name + "Parser")
 		/// </summary>
 		public string? ClassName { get; set; }
 		/// <summary>
@@ -39,7 +40,8 @@ namespace Parsley
 		public ICollection<string>? ReservedNames { get; set; }
 		/// <summary>
 		/// The access of the classes when <see cref="Nested"/>: "private" unless set, or "internal" for classes
-		/// another nested class has to reach
+		/// another nested class has to reach. "" writes none, so the classes are private unless another part of them,
+		/// as they're partial, gives an access of its own.
 		/// </summary>
 		public string? NestedAccess { get; set; }
 		/// <summary>
@@ -179,23 +181,24 @@ namespace Parsley
 		public static string BaseSource(ParserEngine engine) => _Resource(BaseFileName(engine));
 
 		/// <summary>
-		/// The type a grammar uses for a lexer when nothing else is said: what @lexer names for it; for an
-		/// @external grammar, what that grammar's own @lexer names, else the alias plus "Lexer", in that grammar's
-		/// namespace; for the grammar's own lexer, its file name plus "Lexer"; for one terminals name with
-		/// lexer=, the name plus "Lexer".
+		/// The type a grammar uses for a lexer when nothing else is said: what @lexer names for it, in the namespace
+		/// it gives (<c>@lexer "My.Lexers.MyLexer";</c>); for an @external grammar, what that grammar's own @lexer
+		/// names, else the alias plus "Lexer", in that grammar's namespace unless the name gives one; for the
+		/// grammar's own lexer, its file name plus "Lexer"; for one terminals name with lexer=, the name plus "Lexer".
 		/// </summary>
 		/// <param name="alias">An @external alias, a lexer=, or null for the grammar's own lexer</param>
 		public static string DefaultLexerType(Grammar g, string? alias)
 		{
 			var named = g.GetLexerType(alias);
-			if (null != named) return named;
+			if (null != named) return _Qualify(named, null);
 			if (null == alias) return g.NameFromFile("Lexer") ?? (g.StartSymbol + "Lexer");
 			var x = g.GetExternal(alias);
 			if (null == x?.Grammar) return alias + "Lexer";
 			return _Qualify(x.Grammar.GetLexerType(null) ?? alias + "Lexer", x.Grammar.Namespace);
 		}
 		/// <summary>
-		/// The parser class of an @external grammar: its @class, else its file name plus "Parser", in its namespace
+		/// The parser class of an @external grammar: its @class, else its file name plus "Parser", in the namespace its
+		/// @class gives
 		/// </summary>
 		public static string DefaultExternalParser(Grammar g, string alias)
 		{
@@ -203,8 +206,14 @@ namespace Parsley
 			if (null == x) return alias + "Parser";
 			return _Qualify(x.ClassName ?? (x.StartSymbol + "Parser"), x.Namespace);
 		}
-		// a name in another grammar's namespace, unless it's qualified already
-		static string _Qualify(string name, string? ns) => null == ns || name.Contains(".") || name.StartsWith("global::", StringComparison.Ordinal) ? name : $"global::{ns}.{name}";
+		// a name in another grammar's namespace, unless it gives its own. A name with a namespace is from the global
+		// namespace, so it means the same wherever the parser is.
+		static string _Qualify(string name, string? ns)
+		{
+			if (name.StartsWith("global::", StringComparison.Ordinal)) return name;
+			if (name.Contains(".")) return "global::" + name;
+			return null == ns ? name : $"global::{ns}.{name}";
+		}
 		static string _Resource(string name)
 		{
 			using var s = typeof(CSharpSynthesizer).Assembly.GetManifestResourceStream("Parsley.Runtime." + name)
@@ -562,13 +571,15 @@ namespace Parsley
 				_Line("/// <summary>");
 				_Line($"/// Parses {g.StartSymbol} with {_EngineDescription()}. Synthesized from {source}.");
 				_Line("/// </summary>");
-				_Open($"{_Access} partial class {_className} : {_engine.BaseClassName()}");
+				_Open($"{_AccessPrefix}partial class {_className} : {_engine.BaseClassName()}");
 				_ParserBody(source);
 				return _sb.ToString();
 			}
 
 			// a nested class is private; the outer type exposes what it needs to
 			string _Access => _o.Nested ? _o.NestedAccess ?? "private" : _o.Public ? "public" : "internal";
+			// the access and a space, or nothing when the classes leave it to another part
+			string _AccessPrefix => 0 == _Access.Length ? "" : _Access + " ";
 			// the grammar's tokens come from a lexer controller, which needs to know about its islands and other lexers
 			bool _HasLexerMode => _a.Grammar.IsCompound || _a.Grammar.SharedProductions.Any();
 
@@ -886,7 +897,7 @@ namespace Parsley
 				_Line("/// <summary>");
 				_Line($"/// Evaluates {g.StartSymbol} parse trees from <see cref=\"{_className}\"/> with the semantic actions in {source}.");
 				_Line("/// </summary>");
-				_Open($"{_Access} partial class {_evaluatorName}");
+				_Open($"{_AccessPrefix}partial class {_evaluatorName}");
 				_Line("#region Symbols");
 				for (var i = 0; i < _s.Count; ++i)
 				{

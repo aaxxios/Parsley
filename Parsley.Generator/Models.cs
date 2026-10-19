@@ -69,8 +69,9 @@ namespace Parsley.Generator
         EquatableArray<TypeDeclarationInfo> Types, // outermost first; the last is the class itself
         string SourceFilePath,
         string? GrammarFile,
-        bool Unicode,
-        bool Lexer,
+        bool UseUnicode,
+        bool HasLexer,
+        bool HasLinePragmas,
         int Engine,
         EquatableArray<string> MemberNames,
         LocationInfo? AttributeLocation,

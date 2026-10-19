@@ -10,7 +10,7 @@
 // differ, and braces nest). It's an island: json.xbnf lexes and parses it,
 // and bamc sees one Headers token.
 @external JsonEmbed "json-embed.xbnf";
-@namespace "BamcTest";
+@class "BamcTest.BamcParser";
 @using "System.Collections.Generic";
 Script<type="List<BamcCommand>", start>= Line { newline Line } => {
     var result = new List<BamcCommand>(node.Children.Count);

@@ -4,7 +4,7 @@
 // out line breaks, so a JSON object in a .bamc script stays on its line (a
 // line break is an error to this lexer, which ends the island). Its own
 // namespace keeps its lexer's copy of the Luthor runtime apart from bamc's.
-@namespace "BamcTest.Json";
+@class "BamcTest.Json.JsonEmbedParser";
 Json<start>= Object | Array;
 Object<shared>= "{" [ Field { "," Field } ] "}";
 Field= string ":" Value;

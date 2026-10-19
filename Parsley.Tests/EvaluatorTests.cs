@@ -242,7 +242,7 @@ namespace Parsley.Tests
 		public static void SynthesizesUsings()
 		{
 			const string actions = "S<type=\"string\">= a => { var sb = new StringBuilder(); sb.Append(node.Children[0].Value); return sb.ToString() + CultureInfo.InvariantCulture.Name; }; a= \"a\";";
-			var a = GrammarAnalysis.Analyze(Grammar.Parse("@class \"UParser\"; @evaluator \"UEvaluator\"; @namespace \"U.Ns\";"
+			var a = GrammarAnalysis.Analyze(Grammar.Parse("@class \"U.Ns.UParser\"; @evaluator \"UEvaluator\";"
 				+ " @using \"System.Text\"; @using \"System.Globalization\"; @using \"System.Text\"; @using \"System\"; @using \"Parsley.Runtime\"; @using \"System.Collections.Generic\"; " + actions));
 			T.Equal(0, a.Messages.Count(m => m.Level != ErrorLevel.Message), "no errors or warnings");
 			var src = CSharpSynthesizer.Synthesize(a);

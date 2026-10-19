@@ -6,8 +6,12 @@ grammars.
 - **Colors**: rule definitions and references, attributes, literals, regex patterns (classes, quantifiers and
   escapes), directives (with an `@external` or `@lexer` alias) and comments. The C# in semantic actions is colored by VS Code's own C# grammar.
 - **Go to definition** (F12), **peek** and **find all references** (Shift+F12) for rule names, across
-  `@import`ed files. References also cover any open grammar that imports this one.
-- **Highlights** of every use of the rule under the cursor.
+  `@import`ed files. References also cover any open grammar that imports this one. They work wherever a rule is
+  named: in rules, in the terminal lists of `on`, `after` and `sync`, and in semantic actions, where a symbol
+  constant (`add`) and an `EvaluateXxx` call lead to their rule.
+- **Rename** (F2) a rule everywhere it's named, actions included, or a local an action declares. Other C# names
+  in actions can't be renamed, but find all references finds them across the grammar's actions.
+- **Highlights** of every use of the rule, or the action's local, under the cursor.
 - **Completion**: rule names in expressions, attribute names and values (`policy=`, `assoc=` and so on) inside
   `< >`, and directives after `@`.
 - **Hover**: a rule as written, with its action shortened to `=> { … }`, the `//` comments right above it, and

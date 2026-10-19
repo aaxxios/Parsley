@@ -14,7 +14,9 @@ namespace Parsley.LanguageServer
     /// The XBNF language server: syntax diagnostics as you type, the full grammar analysis when a file opens and when
     /// you save, a glyph
     /// at each decision that needs more than one token of lookahead, and go to definition, find references,
-    /// completion and hover for rule names
+    /// rename, completion and hover for rule names, wherever they're written: in rules, in the attributes that name
+    /// terminals, and in semantic actions, as symbol constants and EvaluateXxx calls. In actions, the locals an
+    /// action declares and the other C# names it uses can be navigated too.
     /// </summary>
     sealed class XbnfLanguageServer
     {
@@ -34,6 +36,8 @@ namespace Parsley.LanguageServer
         // a client that draws the glyphs itself, from parsley/decisionHints, and wants parsley/decisionHintsChanged
         // when they change: the Visual Studio extension, since Visual Studio's language client doesn't show inlay hints
         bool _customHints;
+        // the client can ask whether a rename can start where the cursor is, and what it would rename
+        bool _prepareRename;
         int _requestId;
         bool _shutdown;
 
@@ -68,6 +72,11 @@ namespace Parsley.LanguageServer
                         else await _rpc.RespondErrorAsync(id, -32601, $"Method not found: {method}");
                     }
                 }
+                catch (RequestFailedException ex)
+                {
+                    // something the user asked for that can't be done, such as a rename to a name that's taken
+                    if (null != id) await _rpc.RespondErrorAsync(id, -32803, ex.Message);
+                }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"xbnf-lsp: {method} failed: {ex}");
@@ -93,6 +102,8 @@ namespace Parsley.LanguageServer
                 case "textDocument/completion": return _Completion(p!);
                 case "textDocument/hover": return _Hover(p!);
                 case "textDocument/documentHighlight": return _Highlights(p!);
+                case "textDocument/prepareRename": return _PrepareRename(p!);
+                case "textDocument/rename": return _Rename(p!);
                 case "textDocument/inlayHint": return _InlayHints(p!);
                 case "parsley/decisionHints": return _CustomHints(p!);
                 default:
@@ -108,10 +119,11 @@ namespace Parsley.LanguageServer
             _inlayHints = null != caps?["textDocument"]?["inlayHint"];
             _inlayHintRefresh = (bool?)caps?["workspace"]?["inlayHint"]?["refreshSupport"] ?? false;
             _customHints = p?["initializationOptions"] is JsonObject o && ((bool?)o["decisionHints"] ?? false);
-            return _Capabilities();
+            _prepareRename = (bool?)caps?["textDocument"]?["rename"]?["prepareSupport"] ?? false;
+            return _Capabilities(_prepareRename);
         }
 
-        static JsonObject _Capabilities() => new JsonObject
+        static JsonObject _Capabilities(bool prepareRename) => new JsonObject
         {
             ["capabilities"] = new JsonObject
             {
@@ -121,6 +133,7 @@ namespace Parsley.LanguageServer
                 ["referencesProvider"] = true,
                 ["hoverProvider"] = true,
                 ["documentHighlightProvider"] = true,
+                ["renameProvider"] = prepareRename ? new JsonObject { ["prepareProvider"] = true } : (JsonNode)true,
                 ["inlayHintProvider"] = true,
                 ["completionProvider"] = new JsonObject { ["triggerCharacters"] = new JsonArray("<", ",", "@", "=", " ", "|", "(", "[", "{") },
             },
@@ -386,21 +399,96 @@ namespace Parsley.LanguageServer
         }
 
         static bool _IsRuleName(Token? t) => null != t && t.Kind == TokenKind.Identifier && (t.Role == IdentifierRole.Definition || t.Role == IdentifierRole.Reference);
-        static bool _IsQuoted(Token? t) => null != t && (t.Kind == TokenKind.Literal || t.Kind == TokenKind.Pattern);
+        static bool _IsQuoted(Token? t) => null != t && (t.Kind == TokenKind.Literal || t.Kind == TokenKind.Pattern) && null == t.Container;
+        static bool _IsCode(Token? t) => null != t && (t.Role == IdentifierRole.CodeName || t.Role == IdentifierRole.CodeEvaluate || t.Role == IdentifierRole.CodeMember || t.Role == IdentifierRole.CodeLocal);
 
-        // the rule a token names: a rule name as written, or for a "literal" or 'pattern' in a rule, the terminal
-        // declared with the same text, which is what the reader resolves it to. Null for anything else, including a
-        // literal with no declaration, since that's an implicit terminal with nowhere to go.
-        string? _SymbolName(Document doc, Token? t)
+        // what a name refers to: a rule of the grammar, a local of one action, or a C# name from outside the
+        // grammar, such as a member of the runtime or of the parser's partial class, matched by its text
+        abstract class Target { }
+        sealed class SymbolTarget : Target { public SymbolTarget(string name) { Name = name; } public string Name { get; } }
+        sealed class LocalTarget : Target { public LocalTarget(Document doc, Token declaration) { Doc = doc; Declaration = declaration; } public Document Doc { get; } public Token Declaration { get; } }
+        sealed class CSharpTarget : Target { public CSharpTarget(string name, bool member) { Name = name; IsMember = member; } public string Name { get; } public bool IsMember { get; } }
+
+        // the names in scope in an action that aren't symbol constants: the evaluator's parameter and members, and
+        // the locals the synthesized code declares, which a constant with the same name is renamed to stay clear of
+        static readonly HashSet<string> s_actionNames = new HashSet<string>
         {
-            if (_IsRuleName(t)) return t!.Text;
+            "node", "parent", "token", "previous", "tokens", "result", "errors", "parser", "state", "evaluator", "only",
+            "child", "returnState", "minLevel", "tokenize", "reader", "text", "position", "line", "column", "tabWidth",
+            "State", "Evaluate", "SymbolCount",
+        };
+
+        // the rules each grammar defines, with what it imports, for the length of one request
+        sealed class Names
+        {
+            readonly XbnfLanguageServer _server;
+            readonly Dictionary<string, HashSet<string>> _defined = new Dictionary<string, HashSet<string>>(Documents.PathComparer);
+            public Names(XbnfLanguageServer server) { _server = server; }
+            public bool IsDefined(Document doc, string name)
+            {
+                if (!_defined.TryGetValue(doc.Path, out var set))
+                {
+                    set = new HashSet<string>();
+                    foreach (var d in _server._docs.WithImports(doc))
+                        foreach (var t in d.Scan.Definitions) set.Add(t.Text);
+                    _defined[doc.Path] = set;
+                }
+                return set.Contains(name);
+            }
+        }
+
+        // the rule a token names: a rule name as written, a terminal named in on=, after= or sync=, a symbol constant
+        // or EvaluateXxx in an action, or for a "literal" or 'pattern' in a rule, the terminal declared with the same
+        // text, which is what the reader resolves it to. Null for anything else, including a literal with no
+        // declaration, since that's an implicit terminal with nowhere to go, and a name in an action that the grammar
+        // doesn't define.
+        string? _SymbolName(Document doc, Token? t, Names names)
+        {
+            if (null == t) return null;
+            if (_IsRuleName(t)) return t.Text;
+            if (t.Role == IdentifierRole.AttributeSymbol) return t.Name;
+            if (t.Role == IdentifierRole.CodeEvaluate)
+                return names.IsDefined(doc, t.Name!) ? t.Name : null;
+            if (t.Role == IdentifierRole.CodeName)
+                return !s_actionNames.Contains(t.Name!) && names.IsDefined(doc, t.Name!) ? t.Name : null;
             if (!_IsQuoted(t)) return null;
-            return doc.LiteralTargets(_docs.ReadForImport).TryGetValue(t!.Start, out var name) ? name : null;
+            return doc.LiteralTargets(_docs.ReadForImport).TryGetValue(t.Start, out var name) ? name : null;
         }
 
         // a "literal" or 'pattern' in a rule that has no declaration of its own
         bool _IsImplicitLiteral(Document doc, Token? t) =>
             _IsQuoted(t) && doc.LiteralTargets(_docs.ReadForImport).TryGetValue(t!.Start, out var name) && null == name;
+
+        Target? _TargetOf(Document doc, Token? t, Names names)
+        {
+            var symbol = _SymbolName(doc, t, names);
+            if (null != symbol) return new SymbolTarget(symbol);
+            if (null == t) return null;
+            if (t.Role == IdentifierRole.CodeLocal && null != t.Declaration) return new LocalTarget(doc, t.Declaration);
+            if (t.Role == IdentifierRole.CodeName || t.Role == IdentifierRole.CodeEvaluate) return new CSharpTarget(t.Text.TrimStart('@'), false);
+            if (t.Role == IdentifierRole.CodeMember) return new CSharpTarget(t.Name!, true);
+            return null;
+        }
+
+        bool _Refers(Document doc, Token t, Target target, Names names)
+        {
+            switch (target)
+            {
+                case SymbolTarget st:
+                    return st.Name == _SymbolName(doc, t, names);
+                case LocalTarget lt:
+                    return t.Role == IdentifierRole.CodeLocal && t.Declaration == lt.Declaration;
+                case CSharpTarget ct:
+                    if (ct.IsMember) return t.Role == IdentifierRole.CodeMember && t.Name == ct.Name;
+                    // the same name, where it isn't a local or one of the grammar's symbols
+                    return (t.Role == IdentifierRole.CodeName || t.Role == IdentifierRole.CodeEvaluate) && t.Text.TrimStart('@') == ct.Name && null == _SymbolName(doc, t, names);
+                default:
+                    return false;
+            }
+        }
+
+        // the documents a target can be in: an action's local is only in its own
+        List<Document> _Scope(Document doc, Target target) => target is LocalTarget lt ? new List<Document> { lt.Doc } : _docs.Related(doc);
 
         // definitions of a name across the grammar and what it imports; the first wins, as in the reader
         List<(Document Doc, Token Token)> _FindDefinitions(Document doc, string name)
@@ -417,26 +505,41 @@ namespace Parsley.LanguageServer
         JsonNode? _Definition(JsonObject p)
         {
             var (doc, t) = _At(p);
-            var name = _SymbolName(doc, t);
-            if (null == name) return null;
-            var defs = _FindDefinitions(doc, name);
-            if (0 == defs.Count) return null;
-            var arr = new JsonArray();
-            foreach (var (d, def) in defs) arr.Add(_Location(d, def.Start, def.End));
-            return arr;
+            var names = new Names(this);
+            switch (_TargetOf(doc, t, names))
+            {
+                case SymbolTarget st:
+                    {
+                        var defs = _FindDefinitions(doc, st.Name);
+                        if (0 == defs.Count) return null;
+                        var arr = new JsonArray();
+                        foreach (var (d, def) in defs) arr.Add(_Location(d, def.Start, def.End));
+                        return arr;
+                    }
+                case LocalTarget lt:
+                    return new JsonArray(_Location(lt.Doc, lt.Declaration.Start, lt.Declaration.End));
+                default:
+                    // a C# name from outside the grammar is declared in C#, which the grammar's server can't see
+                    return null;
+            }
         }
+
+        // a token's declaration: a rule's definition, or the name a local is declared with
+        static bool _IsDeclaration(Token t) => t.Role == IdentifierRole.Definition || (t.Role == IdentifierRole.CodeLocal && t.Declaration == t);
 
         JsonNode? _References(JsonObject p)
         {
             var (doc, t) = _At(p);
-            var name = _SymbolName(doc, t);
-            if (null == name) return null;
+            var names = new Names(this);
+            var target = _TargetOf(doc, t, names);
+            if (null == target) return null;
             var includeDeclaration = (bool?)p["context"]?["includeDeclaration"] ?? true;
             var arr = new JsonArray();
-            // the rule's name wherever it's written, and the literals and patterns that resolve to it
-            foreach (var d in _docs.Related(doc))
-                foreach (var tok in d.Scan.Tokens)
-                    if ((includeDeclaration || tok.Role != IdentifierRole.Definition) && name == _SymbolName(d, tok))
+            // the name wherever it's written: in rules, attributes and actions, and the literals and patterns that
+            // resolve to a rule
+            foreach (var d in _Scope(doc, target))
+                foreach (var tok in d.Scan.AllTokens)
+                    if ((includeDeclaration || !_IsDeclaration(tok)) && _Refers(d, tok, target, names))
                         arr.Add(_Location(d, tok.Start, tok.End));
             return arr;
         }
@@ -444,13 +547,111 @@ namespace Parsley.LanguageServer
         JsonNode? _Highlights(JsonObject p)
         {
             var (doc, t) = _At(p);
-            var name = _SymbolName(doc, t);
-            if (null == name) return null;
+            var names = new Names(this);
+            var target = _TargetOf(doc, t, names);
+            if (null == target) return null;
             var arr = new JsonArray();
-            foreach (var tok in doc.Scan.Tokens)
-                if (name == _SymbolName(doc, tok))
-                    arr.Add(new JsonObject { ["range"] = doc.Range(tok.Start, tok.End), ["kind"] = tok.Role == IdentifierRole.Definition ? 3 : 2 });
+            foreach (var tok in doc.Scan.AllTokens)
+                if (_Refers(doc, tok, target, names))
+                    arr.Add(new JsonObject { ["range"] = doc.Range(tok.Start, tok.End), ["kind"] = _IsDeclaration(tok) ? 3 : 2 });
             return arr;
+        }
+        #endregion
+
+        #region Rename
+        /// <summary>
+        /// A request that can't be done, reported to the client as RequestFailed, with a message for the user
+        /// </summary>
+        sealed class RequestFailedException : Exception
+        {
+            public RequestFailedException(string message) : base(message) { }
+        }
+
+        static bool _IsXbnfName(string s)
+        {
+            if (string.IsNullOrEmpty(s) || !(char.IsLetter(s[0]) || s[0] == '_')) return false;
+            foreach (var c in s) if (!(char.IsLetterOrDigit(c) || c == '_')) return false;
+            return true;
+        }
+
+        // what a rename at the token would rename, and the span of the name in it, or why it can't
+        (Target Target, int Start, int End) _RenameTarget(Document doc, Token? t, Names names)
+        {
+            var target = _TargetOf(doc, t, names);
+            switch (target)
+            {
+                case null:
+                    throw new RequestFailedException("Only the names of rules, and of the locals in a semantic action, can be renamed");
+                case SymbolTarget _ when _IsQuoted(t):
+                    throw new RequestFailedException("This text stands for a terminal; rename the terminal where it's declared or used by name");
+                case SymbolTarget st when 0 == _FindDefinitions(doc, st.Name).Count:
+                    throw new RequestFailedException($"\"{st.Name}\" isn't defined, so there's nothing to rename");
+                case CSharpTarget ct:
+                    throw new RequestFailedException($"\"{ct.Name}\" is declared in C#, outside the grammar, so it can't be renamed here");
+            }
+            // the name itself: the Expr of EvaluateExpr, the x of @x
+            var start = null != t!.Name ? t.NameStart : t.Start;
+            return (target!, start, t.End);
+        }
+
+        JsonNode? _PrepareRename(JsonObject p)
+        {
+            var (doc, t) = _At(p);
+            var (_, start, end) = _RenameTarget(doc, t, new Names(this));
+            return new JsonObject { ["range"] = doc.Range(start, end), ["placeholder"] = doc.Text.Substring(start, end - start) };
+        }
+
+        JsonNode? _Rename(JsonObject p)
+        {
+            var (doc, t) = _At(p);
+            var names = new Names(this);
+            var (target, _, _) = _RenameTarget(doc, t, names);
+            var newName = ((string?)p["newName"] ?? "").Trim();
+            var changes = new JsonObject();
+            void edit(Document d, int start, int end, string text)
+            {
+                var uri = Documents.ToUri(d.Path);
+                if (changes[uri] is not JsonArray list) changes[uri] = list = new JsonArray();
+                list.Add(new JsonObject { ["range"] = d.Range(start, end), ["newText"] = text });
+            }
+            if (target is SymbolTarget st)
+            {
+                if (!_IsXbnfName(newName))
+                    throw new RequestFailedException($"\"{newName}\" isn't a rule name: it has to start with a letter or _, followed by letters, digits or _");
+                if (newName == st.Name) return new JsonObject { ["changes"] = changes };
+                foreach (var d in _Scope(doc, target))
+                    if (names.IsDefined(d, newName))
+                        throw new RequestFailedException($"\"{newName}\" is already defined{(Documents.PathComparer.Equals(d.Path, doc.Path) ? "" : " in " + Path.GetFileName(d.Path))}");
+                foreach (var d in _Scope(doc, target))
+                    foreach (var tok in d.Scan.AllTokens)
+                    {
+                        if (!_Refers(d, tok, target, names) || _IsQuoted(tok)) continue;
+                        switch (tok.Role)
+                        {
+                            case IdentifierRole.CodeName:
+                                // the symbol constant, escaped if its new name is a C# keyword, as the synthesizer writes it
+                                edit(d, tok.Start, tok.End, CSharpScan.IsKeyword(newName) ? "@" + newName : newName);
+                                break;
+                            case IdentifierRole.CodeEvaluate:
+                                edit(d, tok.NameStart, tok.End, newName);
+                                break;
+                            default:
+                                edit(d, tok.Start, tok.End, newName);
+                                break;
+                        }
+                    }
+            }
+            else if (target is LocalTarget lt)
+            {
+                var bare = newName.StartsWith("@", StringComparison.Ordinal) ? newName.Substring(1) : newName;
+                if (!_IsXbnfName(bare))
+                    throw new RequestFailedException($"\"{newName}\" isn't a C# name");
+                var text = CSharpScan.IsKeyword(bare) ? "@" + bare : newName;
+                foreach (var tok in lt.Doc.Scan.AllTokens)
+                    if (_Refers(lt.Doc, tok, target, names))
+                        edit(lt.Doc, tok.Start, tok.End, text);
+            }
+            return new JsonObject { ["changes"] = changes };
         }
         #endregion
 
@@ -460,7 +661,8 @@ namespace Parsley.LanguageServer
             var (doc, t) = _At(p);
             if (null == t) return null;
             string? markdown = null;
-            var name = _SymbolName(doc, t);
+            var names = new Names(this);
+            var name = _SymbolName(doc, t, names);
             if (null != name)
             {
                 var defs = _FindDefinitions(doc, name);
@@ -471,7 +673,11 @@ namespace Parsley.LanguageServer
                     if (null != kind) markdown += "\n\n" + kind;
                 }
                 else markdown = $"`{name}` isn't defined";
+                if (t.Role == IdentifierRole.CodeName) markdown = $"*The symbol constant of* `{name}`\n\n" + markdown;
+                else if (t.Role == IdentifierRole.CodeEvaluate) markdown = $"*Evaluates a node of* `{name}`\n\n" + markdown;
             }
+            else if (t.Role == IdentifierRole.CodeLocal && null != t.Declaration)
+                markdown = t.Declaration == t ? $"*A local of this action:* `{t.Name}`" : $"*A local of this action, declared on line {doc.ToPosition(t.Declaration.Start).Line + 1}:* `{t.Name}`";
             else if (_IsImplicitLiteral(doc, t))
                 markdown = "*An implicit terminal: nothing declares this text, so it's a terminal of its own. Declare it, as in* `name= " + t.Text + ";`*, to name it or give it attributes.*";
             else if (t.Kind == TokenKind.Identifier && t.Role == IdentifierRole.AttributeName && XbnfKnowledge.Attributes.TryGetValue(t.Text, out var attr))

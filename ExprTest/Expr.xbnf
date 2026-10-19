@@ -4,8 +4,6 @@
 //   unary -    so -2 * 3 is (-2) * 3, and 2^-1 works because a prefix form can be any operand
 //   * / %      left associative
 //   + -        left associative, so 10 - 4 - 3 is (10 - 4) - 3
-@class "ExprParser";
-@evaluator "ExprEvaluator";
 @using "System.Globalization";
 @using "System.Collections.Generic";
 // the operators by name, tightest first, then the atoms. Expr's own action only sees atoms,

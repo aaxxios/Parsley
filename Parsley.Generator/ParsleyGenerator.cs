@@ -50,9 +50,11 @@ namespace Parsley.Generator
                 }
 
                 /// <summary>
-                /// Synthesizes a parser for an XBNF grammar into this partial class: a private Parser, Lexer and, when the
+                /// Synthesizes a parser for an XBNF grammar into this partial class: a nested Parser, Lexer and, when the
                 /// grammar has semantic actions, Evaluator, with public static Parse, TryParse, Tokenize and Evaluate methods
-                /// and the parser's symbol constants on this class.
+                /// and the parser's symbol constants on this class. The grammar's @class, @evaluator and @lexer directives
+                /// are ignored, with a warning: this class decides the names and the namespace, and the lexers are
+                /// generated in it.
                 /// </summary>
                 [global::System.AttributeUsage(global::System.AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
                 [global::System.Diagnostics.Conditional("PARSLEY_GENERATOR_KEEP_ATTRIBUTES")]
@@ -66,15 +68,23 @@ namespace Parsley.Generator
                     /// </summary>
                     public string GrammarFile { get; }
                     /// <summary>
-                    /// Use Unicode character classes in the lexer
+                    /// Use Unicode character classes in the lexer. Defaults to false.
                     /// </summary>
-                    public bool Unicode { get; set; }
+                    public bool UseUnicode { get; set; }
                     /// <summary>
                     /// Generate the lexer, Tokenize, and the Parse overloads that take text. Defaults to true. When false,
                     /// only Parse and TryParse over tokens are generated, for tokens from a lexer of your own, and the
-                    /// lexer runtime isn't generated unless another parser in the project needs it.
+                    /// lexer runtime isn't generated unless another parser in the project needs it. It doesn't apply to
+                    /// a grammar with islands or terminals from other lexers, which always gets all its lexers: false is
+                    /// ignored there, with a warning.
                     /// </summary>
-                    public bool Lexer { get; set; } = true;
+                    public bool HasLexer { get; set; } = true;
+                    /// <summary>
+                    /// Write #line directives that map the code copied from the grammar (semantic actions, type and state
+                    /// attributes, @using) back to it, so compiler errors and the debugger go to the grammar. Defaults to
+                    /// true.
+                    /// </summary>
+                    public bool HasLinePragmas { get; set; } = true;
                     /// <summary>
                     /// The parsing engine. Defaults to the lightest the grammar allows.
                     /// </summary>
@@ -105,10 +115,14 @@ namespace Parsley.Generator
             "PARSLEY007", "Parser generation failed", "Parsley couldn't generate {0}: {1}", "Parsley", DiagnosticSeverity.Error, true);
         static readonly DiagnosticDescriptor s_noGrammar = new(
             "PARSLEY008", "No grammar file given", "The [Parsley] attribute needs the path to an XBNF grammar file", "Parsley", DiagnosticSeverity.Error, true);
+        static readonly DiagnosticDescriptor s_lexerNeeded = new(
+            "PARSLEY009", "HasLexer is ignored",
+            "HasLexer = false is ignored for {0}: its grammar has islands or terminals from other lexers, which are lexed through its own lexer, so all of its lexers are generated",
+            "Parsley", DiagnosticSeverity.Warning, true);
 
         static readonly Dictionary<string, DiagnosticDescriptor> s_descriptors = new[]
         {
-            s_grammarNotFound, s_grammarAmbiguous, s_notPartial, s_grammarError, s_grammarWarning, s_grammarMessage, s_failed, s_noGrammar
+            s_grammarNotFound, s_grammarAmbiguous, s_notPartial, s_grammarError, s_grammarWarning, s_grammarMessage, s_failed, s_noGrammar, s_lexerNeeded
         }.ToDictionary(d => d.Id);
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -183,15 +197,17 @@ namespace Parsley.Generator
             string? grammarFile = null;
             if (1 == attr.ConstructorArguments.Length && attr.ConstructorArguments[0].Value is string s && 0 < s.Trim().Length)
                 grammarFile = s.Trim();
-            var unicode = false;
-            var lexer = true;
+            var useUnicode = false;
+            var hasLexer = true;
+            var hasLinePragmas = true;
             var engine = 0;
             foreach (var arg in attr.NamedArguments)
             {
                 switch (arg.Key)
                 {
-                    case "Unicode": unicode = arg.Value.Value is bool b && b; break;
-                    case "Lexer": lexer = arg.Value.Value is bool bl && bl; break;
+                    case "UseUnicode": useUnicode = arg.Value.Value is bool u && u; break;
+                    case "HasLexer": hasLexer = arg.Value.Value is not bool l || l; break;
+                    case "HasLinePragmas": hasLinePragmas = arg.Value.Value is not bool lp || lp; break;
                     case "Engine": engine = arg.Value.Value is int e ? e : 0; break;
                 }
             }
@@ -223,8 +239,9 @@ namespace Parsley.Generator
                 new EquatableArray<TypeDeclarationInfo>(types),
                 node.SyntaxTree.FilePath,
                 grammarFile,
-                unicode,
-                lexer,
+                useUnicode,
+                hasLexer,
+                hasLinePragmas,
                 engine,
                 new EquatableArray<string>(symbol.MemberNames.Distinct().OrderBy(m => m, StringComparer.Ordinal)),
                 attrLocation,
@@ -276,13 +293,19 @@ namespace Parsley.Generator
                 {
                     className, ParserName, LexerName, EvaluatorName, "Parse", "TryParse", "Tokenize", "Evaluate", "SymbolCount", "CreateLexerMode"
                 };
-                var unit = _Synthesize(analysis, depth, info.Unicode, info.Lexer, reserved, "private", info, diagnostics, ct);
-                if (null == unit) return failed();
-                if (unit.Parser.IsCompound && null == unit.OwnLexer)
+                // the class decides the names and the namespace, and the lexers are generated in it
+                _WarnIgnored(grammar, null, info, diagnostics);
+                // a compound grammar is lexed through its own lexer, so it always gets all its lexers
+                var lexer = info.HasLexer;
+                if (!lexer && analysis.Grammar.IsCompound)
                 {
-                    diagnostics.Add(_Failed(className, "the grammar has islands or terminals from other lexers, so it needs a lexer of its own: leave Lexer on, or name one with @lexer", info));
-                    return failed();
+                    diagnostics.Add(new DiagnosticInfo(s_lexerNeeded.Id, s_lexerNeeded.DefaultSeverity,
+                        string.Format(s_lexerNeeded.MessageFormat.ToString(), className), info.AttributeLocation));
+                    lexer = true;
                 }
+                // no access: the nested classes are partial and private, unless another part of one gives it an access
+                var unit = _Synthesize(analysis, depth, lexer, reserved, "", info, diagnostics, ct);
+                if (null == unit) return failed();
 
                 var source = _Write(info, grammarFile, unit);
                 return new GeneratedParser(info.HintName, source, new EquatableArray<int>(unit.Engines.OrderBy(e => e)), unit.HasLexer, new EquatableArray<DiagnosticInfo>(diagnostics));
@@ -335,6 +358,7 @@ namespace Parsley.Generator
             {
                 ClassName = name,
                 Access = access,
+                Partial = true,
                 Unicode = unicode,
                 Nested = true,
                 Indent = new string('\t', depth),
@@ -343,25 +367,18 @@ namespace Parsley.Generator
             return writer.ToString();
         }
 
-        // synthesizes a grammar into nested classes at the given depth. @class, @namespace and @evaluator are ignored:
-        // the names are fixed and the containing class decides the namespace. A lexer @lexer names is used rather
-        // than generated; an @external grammar's parser, and its lexer unless one is named, go in a class named
-        // after its alias, so a grammar and the grammars it embeds come from the one [Parser] attribute.
-        static _Unit? _Synthesize(GrammarAnalysis analysis, int depth, bool unicode, bool lexer, HashSet<string> reserved, string access,
+        // synthesizes a grammar into nested classes at the given depth. @class, @evaluator and @lexer are ignored, with
+        // a warning (see _WarnIgnored): the names are fixed, the containing class decides the namespace, and every
+        // lexer is generated. An @external grammar's parser and lexer go in a class named after its alias, so a
+        // grammar and the grammars it embeds come from the one [Parser] attribute.
+        static _Unit? _Synthesize(GrammarAnalysis analysis, int depth, bool lexer, HashSet<string> reserved, string access,
             ParserClassInfo info, List<DiagnosticInfo> diagnostics, CancellationToken ct)
         {
             var g = analysis.Grammar;
-            var ownLexer = g.GetLexerType(null) ?? (lexer ? LexerName : null);
-            var groupLexers = g.LexerGroups.ToDictionary(a => a, a => g.GetLexerType(a) ?? a + LexerName);
+            var unicode = info.UseUnicode;
+            var ownLexer = lexer ? LexerName : null;
+            var groupLexers = g.LexerGroups.ToDictionary(a => a, a => a + LexerName);
             var externals = g.Externals.Where(x => null != x.Grammar).ToList();
-            var externalLexers = new Dictionary<string, (string Type, bool Generate)>();
-            foreach (var x in externals)
-            {
-                var named = g.GetLexerType(x.Alias) ?? x.Grammar!.GetLexerType(null);
-                if (null != named && null != x.Grammar!.Namespace && null == g.GetLexerType(x.Alias) && !named.Contains("."))
-                    named = $"global::{x.Grammar.Namespace}.{named}";
-                externalLexers[x.Alias] = null != named ? (named, false) : ($"{x.Alias}.{LexerName}", true);
-            }
             var names = new HashSet<string>(reserved);
             foreach (var x in externals) names.Add(x.Alias);
             foreach (var l in groupLexers.Values) names.Add(l);
@@ -374,8 +391,10 @@ namespace Parsley.Generator
                 NestedAccess = access,
                 Indent = depth,
                 ReservedNames = names,
-                LexerType = alias => null == alias ? ownLexer ?? LexerName : groupLexers.TryGetValue(alias, out var gl) ? gl : externalLexers[alias].Type,
+                LexerType = alias => null == alias ? ownLexer ?? LexerName : groupLexers.TryGetValue(alias, out var gl) ? gl : $"{alias}.{LexerName}",
                 ExternalParser = alias => $"{alias}.{ParserName}",
+                // no #line directives at all when the attribute says so
+                LinePath = info.HasLinePragmas ? null : _ => "",
             });
             // a symbol constant renamed to stay clear of a member or a name the code uses
             _AddMessages(parser.Messages, info, diagnostics);
@@ -384,15 +403,14 @@ namespace Parsley.Generator
             var engines = new HashSet<int> { (int)parser.Engine };
             var hasLexer = false;
             // the grammar's own lexer: the terminals it lexes itself, not contextual ones, islands, or those from other lexers
-            if (lexer && null == g.GetLexerType(null))
+            if (lexer)
             {
                 code.Append("\r\n").Append(_Lexer(g.Terminals.Where(t => t.IsLexed), LexerName, access, unicode, depth));
                 hasLexer = true;
             }
-            // a lexer for each lexer= that @lexer doesn't name
+            // a lexer for each lexer=
             foreach (var alias in g.LexerGroups)
             {
-                if (null != g.GetLexerType(alias)) continue;
                 code.Append("\r\n").Append(_Lexer(g.Terminals.Where(t => t.Lexer == alias && !t.IsIsland), groupLexers[alias], access, unicode, depth));
                 hasLexer = true;
             }
@@ -402,21 +420,47 @@ namespace Parsley.Generator
                 var inner = GrammarAnalysis.Analyze(x.Grammar!);
                 _AddMessages(inner.Messages.Where(m => ErrorLevel.Error == m.Level), info, diagnostics);
                 if (inner.HasErrors) return null;
+                // its @class, @evaluator and @lexer are no more honored than the grammar's own
+                _WarnIgnored(x.Grammar!, x.Alias, info, diagnostics);
                 var innerReserved = new HashSet<string> { x.Alias, ParserName, LexerName, EvaluatorName, "Evaluate", "SymbolCount" };
                 // reached from the outer parser, so internal rather than private
-                var innerUnit = _Synthesize(inner, depth + 1, unicode, externalLexers[x.Alias].Generate, innerReserved, "internal", info, diagnostics, ct);
+                const string innerAccess = "internal";
+                var innerUnit = _Synthesize(inner, depth + 1, true, innerReserved, innerAccess, info, diagnostics, ct);
                 if (null == innerUnit) return null;
                 engines.UnionWith(innerUnit.Engines);
                 hasLexer |= innerUnit.HasLexer;
-                code.Append("\r\n").Append(_Container(x, innerUnit, depth));
+                // internal, so code anywhere in the project can read the island grammar's symbol constants
+                code.Append("\r\n").Append(_Container(x, innerUnit, depth, innerAccess));
             }
             var result = new _Unit(parser, code.ToString(), ownLexer) { HasLexer = hasLexer };
             result.Engines.UnionWith(engines);
             return result;
         }
 
+        // the directives the generator doesn't honor, each with a warning where it's written: the class with the
+        // attribute decides the parser's name and namespace, the evaluator is always the nested Evaluator, and every
+        // lexer is generated nested in the class. alias is the @external grammar's, or null for the grammar itself.
+        static void _WarnIgnored(Grammar g, string? alias, ParserClassInfo info, List<DiagnosticInfo> diagnostics)
+        {
+            var messages = new List<GrammarMessage>();
+            var whose = null == alias ? "" : $" (in the @external grammar {alias})";
+            GrammarMessage at(string directive, string message) => g.DirectiveLocations.TryGetValue(directive, out var node)
+                ? new GrammarMessage(ErrorLevel.Warning, message, node)
+                : new GrammarMessage(ErrorLevel.Warning, message, 0, 0, -1, g.Filename);
+            if (g.Directives.TryGetValue("class", out var c))
+                messages.Add(at("class", $"@class \"{c}\"{whose} is ignored by the source generator: the class with the [Parser] attribute decides the parser's name and namespace"));
+            if (g.Directives.TryGetValue("evaluator", out var e))
+                messages.Add(at("evaluator", $"@evaluator \"{e}\"{whose} is ignored by the source generator: the evaluator is the nested {EvaluatorName} class"));
+            foreach (var l in g.Lexers)
+            {
+                var which = null == l.Alias ? "@lexer" : $"@lexer {l.Alias}";
+                messages.Add(new GrammarMessage(ErrorLevel.Warning, $"{which} \"{l.TypeName}\"{whose} is ignored by the source generator: its lexers are generated, nested in the class with the [Parser] attribute", l));
+            }
+            _AddMessages(messages, info, diagnostics);
+        }
+
         // the class an external grammar's nested classes go in, named after its alias, with its symbol constants
-        static string _Container(ExternalGrammar x, _Unit unit, int depth)
+        static string _Container(ExternalGrammar x, _Unit unit, int depth, string access)
         {
             var sb = new StringBuilder();
             var ind = new string('\t', depth);
@@ -424,7 +468,7 @@ namespace Parsley.Generator
             line($"/// <summary>");
             line($"/// The @external grammar {x.Alias}, from {Path.GetFileName(x.Path)}: the parser, lexer and evaluator for its islands");
             line($"/// </summary>");
-            line($"internal static partial class {x.Alias}");
+            line($"{(0 < access.Length ? access + " " : "")}static partial class {x.Alias}");
             line("{");
             ind += "\t";
             line("#region Symbols");
@@ -531,7 +575,7 @@ namespace Parsley.Generator
             return Diagnostic.Create(passthrough, d.Location?.ToLocation() ?? Location.None, d.Message);
         }
 
-        // the partial class: the parser's constants and static entry points, then the private Parser, Evaluator and,
+        // the partial class: the parser's constants and static entry points, then the nested Parser, Evaluator and,
         // unless it's null, Lexer
         static string _Write(ParserClassInfo info, GrammarFileInfo grammar, _Unit unit)
         {
@@ -581,11 +625,8 @@ namespace Parsley.Generator
             if (null != lexer)
             {
                 // a compound grammar lexes through a controller, which switches to its islands' and other lexers
-                // a lexer @lexer names only has to have the TextReader overload, as the controller calls it
                 string from(string source) => parser.IsCompound
                     ? $"new global::Parsley.Runtime.LexerController({ParserName}.CreateLexerMode({lexer}.Tokenize), {source}, {lexPass})"
-                    : LexerName != lexer && "text" == source
-                    ? $"{lexer}.Tokenize(new global::System.IO.StringReader(text), {lexPass})"
                     : $"{lexer}.Tokenize({source}, {lexPass})";
                 var what = parser.IsCompound ? "Splits text into tokens for Parse, lexing each island with its own grammar's lexer. Hidden terminals are skipped." : "Splits text into tokens for Parse. Hidden terminals are skipped.";
                 line("/// <summary>");
