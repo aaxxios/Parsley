@@ -10,6 +10,10 @@ Highlighting and language support for `.xbnf` grammars in Visual Studio 2022 (17
   in the terminal lists of `on`, `after` and `sync`, and in semantic actions, where a symbol constant (`add`) and
   an `EvaluateXxx` call lead to their rule.
 - **Rename** (Ctrl+R, Ctrl+R) a rule everywhere it's named, actions included, or a local an action declares.
+- **Go to definition in semantic actions** for C#: a method, type, property or field an action uses goes to where
+  it's declared in the solution, or to its metadata when it comes from a reference, and a local goes to its
+  declaration in the action. This comes from Visual Studio's C# workspace, like completion and quick info in
+  actions, so it needs the grammar generated once. A rule's name or symbol constant still goes to the rule.
 - **Completion**: rule names in expressions, attribute names and their values (`policy=`, `assoc=` and so on)
   inside `< >`, and directives after `@`.
 - **Hover**: a rule as written, with its action shortened to `=> { … }`, the `//` comments right above it, and
@@ -55,9 +59,8 @@ Studio reports that the server didn't start, installing the .NET 8 runtime is th
 
 ## Not done yet
 
-- In semantic actions: signature help, go to definition of C# names declared outside the grammar, and C# errors
-  as you type. Roslyn's signature help
-  isn't public; the others could follow the same path as completion. Compile errors already point into the
+- In semantic actions: signature help and C# errors as you type. Roslyn's signature help
+  isn't public; errors could follow the same path as completion. Compile errors already point into the
   grammar through the `#line` directives.
 - A VS Code extension. The grammar, language configuration and server are ready for one; it needs a small
   `package.json` and a few lines to start the server.

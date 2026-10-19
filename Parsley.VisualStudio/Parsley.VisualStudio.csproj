@@ -65,6 +65,8 @@
     <!-- C# completion and quick info in semantic actions, from Visual Studio's C# workspace -->
     <Compile Include="ActionCode.cs" />
     <Compile Include="ActionIntellisense.cs" />
+    <!-- go to definition in semantic actions, from the same C# workspace -->
+    <Compile Include="ActionNavigation.cs" />
     <!-- the language server's tokenizer, to find the actions -->
     <Compile Include="..\Parsley.LanguageServer\XbnfScanner.cs">
       <Link>XbnfScanner.cs</Link>
