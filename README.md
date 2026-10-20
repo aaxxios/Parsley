@@ -116,8 +116,6 @@ and other definitions are built from their constructs.
 
 Open `Parsley.sln` in Visual Studio, or run `dotnet build Parsley.sln`.
 
-You need dotnet 8 installed to execute the build steps due to luthor being compiled for that framework.
-
 ## Language Services
 
 The languages server for XBNF provides syntax highlighting, completion, navigation, and inline analysis for your grammars. It is available through a VS Code extension and for Visual Studio 2022 and 2026
