@@ -1,0 +1,430 @@
+// SQL-92 queries (ISO/IEC 9075:1992, Full level) for Parsley.
+//
+// This is the query language only: a query expression with UNION, EXCEPT and INTERSECT, joins,
+// subqueries, predicates and value expressions, and an ORDER BY on the outermost query. There is no
+// schema definition or manipulation (CREATE, ALTER, DROP, GRANT), no data change (INSERT, UPDATE,
+// DELETE), and no cursors, SELECT ... INTO, or session, transaction and connection statements.
+//
+// Rule names are the standard's, with - written as _. Where a rule here differs in form from the
+// standard (a list written as a loop, alternatives merged into one rule), it matches the same input,
+// except where noted below.
+//
+// What the parser expects:
+// - One query, optionally ending with ;.
+// - Keywords in any case: each keyword's pattern starts with (?i). The reserved words this grammar
+//   doesn't use are one terminal, reserved_word, so that, as in SQL-92, they can't be identifiers.
+// - Host parameters (:name, optionally followed by [INDICATOR] :name) and dynamic parameters (?).
+// - Comments: -- to the end of the line, and /* */. (The block comment is an extension: it came in
+//   SQL:1999.)
+//
+// Where this differs from the standard's BNF:
+// - Joins. The standard lets the right side of every join be any table reference, so
+//   "a CROSS JOIN b CROSS JOIN c" could group either way. As in SQL:1999, cross, natural and union
+//   joins take a table primary on the right, so they group left to right. A qualified join (one with
+//   ON or USING) still takes a table reference, so "a JOIN b JOIN c ON x ON y" nests as the standard
+//   allows.
+// - Value expressions. The standard has separate grammars for numeric, string, datetime and interval
+//   expressions, which can't be told apart without knowing types. Here they are one value_expression,
+//   with || at the same level as + and -.
+// - Row value constructors. "( x )" is a parenthesized value expression and "( SELECT ... )" a scalar
+//   subquery, so a parenthesized row here has at least two elements, and a row subquery is read as
+//   a scalar subquery.
+// - ORDER BY keys can be a qualified column reference (t.c) or a column number. SQL-92 allows only an
+//   unqualified column name or a number; qualified keys are an extension, as most databases accept.
+//
+// Several decisions can't be made on any fixed number of tokens. A "(" can start a subquery, a
+// parenthesized value expression, a row, a joined table or a search condition, and which one is often
+// clear only at the matching ")" or after it. "t.*" and "t.c" in a select list are alike for as many
+// tokens as the name has parts. So Parsley picks ALL(*) for this grammar.
+//
+// The tree is kept small: dispatch rules, lists and keyword groups are collapsed, so their children
+// land in the enclosing node; , ; ( ) and . are left out. The precedence levels of value expressions
+// and search conditions are operator rules, so each operator applied makes a node.
+
+// 20.1 Direct SQL: the query, with the ORDER BY that only the outermost query can have
+
+direct_select_statement<start>= query_expression [ order_by_clause ] [ ";" ];
+order_by_clause= ORDER BY sort_specification { "," sort_specification };
+// The sort key is a column reference or a column number. SQL-92 says a column name; t.c is an extension.
+sort_specification= ( column_reference | unsigned_integer ) [ collate_clause ] [ ASC | DESC ];
+
+// 7.10 Query expressions. The set operators stay left recursive, as in the standard; Parsley turns
+// each into a loop that still builds a left-associative tree. INTERSECT binds tighter than UNION and
+// EXCEPT. A joined table on its own is a query too ("a NATURAL JOIN b" means SELECT * FROM it).
+
+query_expression= query_expression ( UNION | EXCEPT ) [ ALL ] [ corresponding_spec ] query_term
+	| query_term;
+query_term= query_term INTERSECT [ ALL ] [ corresponding_spec ] query_primary
+	| query_primary;
+query_primary<collapsed>= simple_table | "(" query_expression ")" | joined_table;
+simple_table<collapsed>= query_specification | table_value_constructor | explicit_table;
+corresponding_spec= CORRESPONDING [ BY "(" column_name_list ")" ];
+explicit_table= TABLE qualified_name;
+table_value_constructor= VALUES row_value_constructor { "," row_value_constructor };
+
+// 7.9 Query specifications
+
+query_specification= SELECT [ set_quantifier ] select_list table_expression;
+set_quantifier<collapsed>= DISTINCT | ALL;
+select_list= "*" | select_sublist { "," select_sublist };
+select_sublist<collapsed>= derived_column | qualified_asterisk;
+derived_column= value_expression [ [ AS ] identifier ];
+qualified_asterisk= qualified_name "." "*";
+
+// 7.3 - 7.8 Table expressions
+
+table_expression<collapsed>= from_clause [ where_clause ] [ group_by_clause ] [ having_clause ];
+from_clause= FROM table_reference { "," table_reference };
+where_clause= WHERE search_condition;
+group_by_clause= GROUP BY grouping_column_reference { "," grouping_column_reference };
+grouping_column_reference= column_reference [ collate_clause ];
+having_clause= HAVING search_condition;
+
+// 6.3 Table references and 7.5 joined tables. A table reference is a table primary, then its joins,
+// left to right. Inside the right side of a qualified join, the joins that follow go with the inner
+// table reference, which is what greedy means: "a JOIN b JOIN c ON x ON y" is a JOIN (b JOIN c ON x)
+// ON y. A derived table must have a correlation name, which is what tells "( a JOIN b ) x" (a derived
+// table) from "( a JOIN b )" (a parenthesized join).
+
+table_reference= table_primary { join }<policy=greedy>;
+table_primary= qualified_name [ correlation ]
+	| subquery correlation
+	| "(" joined_table ")";
+correlation= [ AS ] identifier [ "(" column_name_list ")" ];
+joined_table= table_primary { join }+<policy=greedy>
+	| "(" joined_table ")";
+join<collapsed>= cross_join | qualified_join | natural_join | union_join;
+cross_join= CROSS JOIN table_primary;
+qualified_join= [ join_type ] JOIN table_reference join_specification;
+natural_join= NATURAL [ join_type ] JOIN table_primary;
+union_join= UNION JOIN table_primary;
+join_type<collapsed>= INNER | ( LEFT | RIGHT | FULL ) [ OUTER ];
+join_specification<collapsed>= join_condition | named_columns_join;
+join_condition= ON search_condition;
+named_columns_join= USING "(" column_name_list ")";
+column_name_list<collapsed>= identifier { "," identifier };
+
+// 7.11 Subqueries: scalar, row and table subqueries are all a query expression in parentheses
+
+subquery= "(" query_expression ")";
+
+// 8 Search conditions, tightest first: IS [NOT] TRUE, NOT, AND, OR
+
+search_condition<operators, expected="a search condition">=
+	  search_condition IS [ NOT ] truth_value
+	| NOT search_condition
+	| search_condition AND search_condition
+	| search_condition OR search_condition
+	| predicate
+	| "(" search_condition ")";
+truth_value<collapsed>= TRUE | FALSE | UNKNOWN;
+
+// 8.1 - 8.12 Predicates. Most start with a row value constructor; the rest of each (the comparison,
+// the BETWEEN ... AND ... and so on) is its own node after it.
+
+predicate= row_value_constructor ( comparison_predicate | between_predicate | in_predicate
+		| like_predicate | null_predicate | match_predicate | overlaps_predicate )
+	| exists_predicate
+	| unique_predicate;
+// 8.2 and 8.7: a comparison, or a quantified comparison with a subquery
+comparison_predicate= comp_op ( row_value_constructor | quantifier subquery );
+comp_op<collapsed>= equals_operator | not_equals_operator | less_than_operator | greater_than_operator
+	| less_than_or_equals_operator | greater_than_or_equals_operator;
+quantifier<collapsed>= ALL | SOME | ANY;
+between_predicate= [ NOT ] BETWEEN row_value_constructor AND row_value_constructor;
+in_predicate= [ NOT ] IN ( subquery | "(" value_expression { "," value_expression } ")" );
+like_predicate= [ NOT ] LIKE value_expression [ ESCAPE value_expression ];
+null_predicate= IS [ NOT ] NULL;
+match_predicate= MATCH [ UNIQUE ] [ PARTIAL | FULL ] subquery;
+overlaps_predicate= OVERLAPS row_value_constructor;
+exists_predicate= EXISTS subquery;
+unique_predicate= UNIQUE subquery;
+
+// 7.1 Row value constructors
+
+row_value_constructor= value_expression | NULL | DEFAULT
+	| "(" row_value_constructor_element "," row_value_constructor_element
+		{ "," row_value_constructor_element } ")";
+row_value_constructor_element<collapsed>= value_expression | NULL | DEFAULT;
+
+// 6.11 - 6.15 Value expressions, tightest first. A primary can take an interval qualifier
+// ("(d1 - d2) DAY TO SECOND"), a collation, or a time zone; then come signs, * and /, and + - ||.
+
+value_expression<operators, expected="a value expression">=
+	  value_expression interval_qualifier
+	| value_expression collate_clause
+	| value_expression AT LOCAL
+	| value_expression AT TIME ZONE value_expression
+	| ( "+" | "-" ) value_expression
+	| value_expression ( "*" | "/" ) value_expression
+	| value_expression ( "+" | "-" | "||" ) value_expression
+	| value_expression_primary;
+
+// 6.2 Value expression primaries, with the value functions and literals the standard puts in the
+// numeric, string and datetime primaries
+
+value_expression_primary<collapsed>= unsigned_numeric_literal
+	| general_literal
+	| general_value_specification
+	| column_reference
+	| set_function_specification
+	| subquery
+	| case_expression
+	| "(" value_expression ")"
+	| cast_specification
+	| numeric_value_function
+	| string_value_function
+	| datetime_value_function;
+
+// 6.4 Column references and other names: up to catalog.schema.table.column
+column_reference= identifier { "." identifier };
+qualified_name= identifier { "." identifier };
+identifier<collapsed>= regular_identifier | delimited_identifier;
+
+// 6.2 General value specifications: parameters and the special values
+general_value_specification<collapsed>= parameter_specification | dynamic_parameter_specification
+	| USER | CURRENT_USER | SESSION_USER | SYSTEM_USER | VALUE;
+parameter_specification= host_parameter_name [ [ INDICATOR ] host_parameter_name ];
+dynamic_parameter_specification= question_mark;
+
+// 6.5 Set functions
+set_function_specification= COUNT "(" "*" ")"
+	| ( AVG | MAX | MIN | SUM | COUNT ) "(" [ set_quantifier ] value_expression ")";
+
+// 6.9 CASE, NULLIF and COALESCE
+case_expression<collapsed>= case_abbreviation | simple_case | searched_case;
+case_abbreviation= NULLIF "(" value_expression "," value_expression ")"
+	| COALESCE "(" value_expression { "," value_expression }+ ")";
+simple_case= CASE value_expression { simple_when_clause }+ [ else_clause ] END;
+simple_when_clause= WHEN value_expression THEN case_result;
+searched_case= CASE { searched_when_clause }+ [ else_clause ] END;
+searched_when_clause= WHEN search_condition THEN case_result;
+else_clause= ELSE case_result;
+case_result<collapsed>= value_expression | NULL;
+
+// 6.10 CAST, to a data type or a domain
+cast_specification= CAST "(" ( value_expression | NULL ) AS ( data_type | qualified_name ) ")";
+
+// 6.6 Numeric value functions
+numeric_value_function= POSITION "(" value_expression IN value_expression ")"
+	| EXTRACT "(" extract_field FROM value_expression ")"
+	| ( CHAR_LENGTH | CHARACTER_LENGTH | OCTET_LENGTH | BIT_LENGTH ) "(" value_expression ")";
+extract_field<collapsed>= YEAR | MONTH | DAY | HOUR | MINUTE | SECOND | TIMEZONE_HOUR | TIMEZONE_MINUTE;
+
+// 6.7 String value functions
+string_value_function= SUBSTRING "(" value_expression FROM value_expression [ FOR value_expression ] ")"
+	| ( UPPER | LOWER ) "(" value_expression ")"
+	| ( CONVERT | TRANSLATE ) "(" value_expression USING qualified_name ")"
+	| TRIM "(" ( trim_specification [ value_expression ] FROM value_expression
+		| value_expression [ FROM value_expression ] ) ")";
+trim_specification<collapsed>= LEADING | TRAILING | BOTH;
+
+// 6.8 Datetime value functions
+datetime_value_function= CURRENT_DATE | ( CURRENT_TIME | CURRENT_TIMESTAMP ) [ "(" unsigned_integer ")" ];
+
+// 6.13 COLLATE (10.5 for the name)
+collate_clause= COLLATE qualified_name;
+
+// 10.1 Interval qualifiers
+interval_qualifier= non_second_field [ "(" unsigned_integer ")" ]
+		[ TO ( non_second_field | SECOND [ "(" unsigned_integer ")" ] ) ]
+	| SECOND [ "(" unsigned_integer [ "," unsigned_integer ] ")" ];
+non_second_field<collapsed>= YEAR | MONTH | DAY | HOUR | MINUTE;
+
+// 6.1 Data types, for CAST
+data_type= ( CHARACTER | CHAR ) ( VARYING length | [ length ] ) [ CHARACTER SET qualified_name ]
+	| VARCHAR length [ CHARACTER SET qualified_name ]
+	| NATIONAL ( CHARACTER | CHAR ) ( VARYING length | [ length ] )
+	| NCHAR ( VARYING length | [ length ] )
+	| BIT ( VARYING length | [ length ] )
+	| ( NUMERIC | DECIMAL | DEC ) [ "(" unsigned_integer [ "," unsigned_integer ] ")" ]
+	| INTEGER | INT | SMALLINT
+	| FLOAT [ length ] | REAL | DOUBLE PRECISION
+	| DATE
+	| ( TIME | TIMESTAMP ) [ length ] [ WITH TIME ZONE ]
+	| INTERVAL interval_qualifier;
+length<collapsed>= "(" unsigned_integer ")";
+
+// 5.3 Literals. Adjacent string literals are one literal, as the standard allows when they're
+// separated by a line break.
+unsigned_numeric_literal<collapsed>= unsigned_integer | exact_numeric_literal | approximate_numeric_literal;
+general_literal<collapsed>= { character_string_literal }+
+	| { national_character_string_literal }+
+	| { bit_string_literal }+
+	| { hex_string_literal }+
+	| datetime_literal
+	| interval_literal;
+datetime_literal= ( DATE | TIME | TIMESTAMP ) character_string_literal;
+interval_literal= INTERVAL [ "+" | "-" ] character_string_literal interval_qualifier;
+
+// 5.2 Keywords, in any case. Declared ahead of the identifiers so a keyword wins the tie.
+
+ALL= '(?i)all';
+AND= '(?i)and';
+ANY= '(?i)any';
+AS= '(?i)as';
+ASC= '(?i)asc';
+AT= '(?i)at';
+AVG= '(?i)avg';
+BETWEEN= '(?i)between';
+BIT= '(?i)bit';
+BIT_LENGTH= '(?i)bit_length';
+BOTH= '(?i)both';
+BY= '(?i)by';
+CASE= '(?i)case';
+CAST= '(?i)cast';
+CHAR= '(?i)char';
+CHARACTER= '(?i)character';
+CHAR_LENGTH= '(?i)char_length';
+CHARACTER_LENGTH= '(?i)character_length';
+COALESCE= '(?i)coalesce';
+COLLATE= '(?i)collate';
+CONVERT= '(?i)convert';
+CORRESPONDING= '(?i)corresponding';
+COUNT= '(?i)count';
+CROSS= '(?i)cross';
+CURRENT_DATE= '(?i)current_date';
+CURRENT_TIME= '(?i)current_time';
+CURRENT_TIMESTAMP= '(?i)current_timestamp';
+CURRENT_USER= '(?i)current_user';
+DATE= '(?i)date';
+DAY= '(?i)day';
+DEC= '(?i)dec';
+DECIMAL= '(?i)decimal';
+DEFAULT= '(?i)default';
+DESC= '(?i)desc';
+DISTINCT= '(?i)distinct';
+DOUBLE= '(?i)double';
+ELSE= '(?i)else';
+END= '(?i)end';
+ESCAPE= '(?i)escape';
+EXCEPT= '(?i)except';
+EXISTS= '(?i)exists';
+EXTRACT= '(?i)extract';
+FALSE= '(?i)false';
+FLOAT= '(?i)float';
+FOR= '(?i)for';
+FROM= '(?i)from';
+FULL= '(?i)full';
+GROUP= '(?i)group';
+HAVING= '(?i)having';
+HOUR= '(?i)hour';
+IN= '(?i)in';
+INDICATOR= '(?i)indicator';
+INNER= '(?i)inner';
+INT= '(?i)int';
+INTEGER= '(?i)integer';
+INTERSECT= '(?i)intersect';
+INTERVAL= '(?i)interval';
+IS= '(?i)is';
+JOIN= '(?i)join';
+LEADING= '(?i)leading';
+LEFT= '(?i)left';
+LIKE= '(?i)like';
+LOCAL= '(?i)local';
+LOWER= '(?i)lower';
+MATCH= '(?i)match';
+MAX= '(?i)max';
+MIN= '(?i)min';
+MINUTE= '(?i)minute';
+MONTH= '(?i)month';
+NATIONAL= '(?i)national';
+NATURAL= '(?i)natural';
+NCHAR= '(?i)nchar';
+NOT= '(?i)not';
+NULL= '(?i)null';
+NULLIF= '(?i)nullif';
+NUMERIC= '(?i)numeric';
+OCTET_LENGTH= '(?i)octet_length';
+ON= '(?i)on';
+OR= '(?i)or';
+ORDER= '(?i)order';
+OUTER= '(?i)outer';
+OVERLAPS= '(?i)overlaps';
+PARTIAL= '(?i)partial';
+POSITION= '(?i)position';
+PRECISION= '(?i)precision';
+REAL= '(?i)real';
+RIGHT= '(?i)right';
+SECOND= '(?i)second';
+SELECT= '(?i)select';
+SESSION_USER= '(?i)session_user';
+SET= '(?i)set';
+SMALLINT= '(?i)smallint';
+SOME= '(?i)some';
+SUBSTRING= '(?i)substring';
+SUM= '(?i)sum';
+SYSTEM_USER= '(?i)system_user';
+TABLE= '(?i)table';
+THEN= '(?i)then';
+TIME= '(?i)time';
+TIMESTAMP= '(?i)timestamp';
+TIMEZONE_HOUR= '(?i)timezone_hour';
+TIMEZONE_MINUTE= '(?i)timezone_minute';
+TO= '(?i)to';
+TRAILING= '(?i)trailing';
+TRANSLATE= '(?i)translate';
+TRIM= '(?i)trim';
+TRUE= '(?i)true';
+UNION= '(?i)union';
+UNIQUE= '(?i)unique';
+UNKNOWN= '(?i)unknown';
+UPPER= '(?i)upper';
+USER= '(?i)user';
+USING= '(?i)using';
+VALUE= '(?i)value';
+VALUES= '(?i)values';
+VARCHAR= '(?i)varchar';
+VARYING= '(?i)varying';
+WHEN= '(?i)when';
+WHERE= '(?i)where';
+WITH= '(?i)with';
+YEAR= '(?i)year';
+ZONE= '(?i)zone';
+// The rest of SQL-92's reserved words. No rule uses them; declaring them keeps them from being read
+// as identifiers. (END-EXEC lexes as END, -, and EXEC.)
+reserved_word= '(?i)(absolute|action|add|allocate|alter|are|assertion|authorization|begin|cascade|cascaded|catalog|check|close|collation|column|commit|connect|connection|constraint|constraints|continue|create|current|cursor|deallocate|declare|deferrable|deferred|delete|describe|descriptor|diagnostics|disconnect|domain|drop|exception|exec|execute|external|fetch|first|foreign|found|get|global|go|goto|grant|identity|immediate|initially|input|insensitive|insert|into|isolation|key|language|last|level|module|names|next|no|of|only|open|option|output|pad|prepare|preserve|primary|prior|privileges|procedure|public|read|references|relative|restrict|revoke|rollback|rows|schema|scroll|section|session|size|space|sql|sqlcode|sqlerror|sqlstate|temporary|transaction|translation|update|usage|view|whenever|work|write)';
+
+// 5.2 and 5.4 Identifiers: a letter, then letters, digits and _; or anything in double quotes, with
+// "" for a quote
+regular_identifier= '[A-Za-z][A-Za-z0-9_]*';
+delimited_identifier= '"([^"]|"")+"';
+// 6.2 Host parameters, as in embedded SQL and modules
+host_parameter_name= ':[A-Za-z][A-Za-z0-9_]*';
+
+// 5.3 Numeric literals. A plain integer is its own terminal, since ORDER BY, lengths and precisions
+// take only that.
+unsigned_integer= '[0-9]+';
+exact_numeric_literal= '[0-9]+\.[0-9]*|\.[0-9]+';
+approximate_numeric_literal= '([0-9]+(\.[0-9]*)?|\.[0-9]+)[Ee][\+\-]?[0-9]+';
+
+// 5.3 String literals: '' is a quote. A character string can name its character set with an
+// introducer, as in _latin1'abc'.
+character_string_literal= '(_[A-Za-z][A-Za-z0-9_]*)?\'([^\']|\'\')*\'';
+national_character_string_literal= '[Nn]\'([^\']|\'\')*\'';
+bit_string_literal= '[Bb]\'[01]*\'';
+hex_string_literal= '[Xx]\'[0-9A-Fa-f]*\'';
+
+// 5.1 Delimiters
+concatenation_operator= "||";
+not_equals_operator= "<>";
+less_than_or_equals_operator= "<=";
+greater_than_or_equals_operator= ">=";
+equals_operator= "=";
+less_than_operator= "<";
+greater_than_operator= ">";
+plus_sign= "+";
+minus_sign= "-";
+asterisk= "*";
+solidus= "/";
+question_mark= "?";
+lparen<collapsed>= "(";
+rparen<collapsed>= ")";
+period<collapsed>= ".";
+comma<collapsed>= ",";
+semicolon<collapsed>= ";";
+
+// Whitespace and comments. /* */ is an extension from SQL:1999; SQL-92 has only --.
+whitespace<hidden>= '[ \t\r\n\f\v]+';
+comment<hidden>= '--[^\n]*';
+block_comment<hidden>= '/\*([^*]|\*+[^*/])*\*+/';

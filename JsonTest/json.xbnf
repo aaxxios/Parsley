@@ -6,7 +6,6 @@
 //   string  -> string
 //   true/false -> bool
 //   null    -> null
-@using "System.Globalization";
 
 Json<start, type="object">= Value => {
     return Evaluate(node.Children[0]);
