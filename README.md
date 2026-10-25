@@ -120,4 +120,4 @@ Open `Parsley.sln` in Visual Studio, or run `dotnet build Parsley.sln`.
 
 The languages server for XBNF provides syntax highlighting, completion, navigation, and inline analysis for your grammars. It is available through a VS Code extension and for Visual Studio 2022 and 2026
 
-![Analyzing grammar complexity](glyphs.jpg)
+![Analyzing grammar complexity](complexity.jpg)
