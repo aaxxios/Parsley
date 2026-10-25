@@ -272,6 +272,7 @@ namespace Parsley
 			readonly string? _evaluatorName; // null when there's no evaluator to synthesize
 			readonly string[] _const;
 			readonly HashSet<string> _constNames; // without any @
+			readonly Dictionary<string, string> _stems; // each production's name in its methods' names
 			StringBuilder _sb = new();
 			int _indent;
 			readonly Dictionary<string, string> _sets = new(); // key: sorted ids
@@ -296,6 +297,14 @@ namespace Parsley
 					_evaluatorName = _VerbatimIdent(o.EvaluatorClassName ?? a.Grammar.EvaluatorClassName ?? (a.Grammar.StartSymbol + "Evaluator"));
 					if (_evaluatorName == _className)
 						throw new GrammarException($"The evaluator and the parser are both named \"{_className}\". Use @evaluator or @class to name them apart");
+				}
+				_stems = _MethodStems(a.Grammar);
+				foreach (var p in a.Grammar.Productions)
+				{
+					var baseName = _Ident(p.Name);
+					if (_stems[p.Name] != baseName)
+						Messages.Add(new GrammarMessage(ErrorLevel.Warning,
+							$"The methods for {p.Name} are named for {_stems[p.Name]}, since another production's are named for {baseName}. Rename the production to keep its name", p));
 				}
 				_const = _MakeConstantNames();
 				_constNames = new HashSet<string>(_const.Select(c => c.TrimStart('@')));
@@ -374,7 +383,7 @@ namespace Parsley
 					"CreateLexerMode", "Tokenize", "TryParse", "s_tables", "s_atn",
 					"GetHashCode", "ToString", "Equals", "GetType", "MemberwiseClone", "ReferenceEquals", "Finalize"
 				});
-				reserve("a member of the parser", _a.Grammar.SharedProductions.Select(p => "TryParse" + _Ident(p.Name)));
+				reserve("a member of the parser", _a.Grammar.SharedProductions.Select(p => _TryParseName(p.Name)));
 				reserve("a member of the parser", _a.Grammar.Productions.Select(p => _MethodName(p.Name)));
 				reserve("a member of the parser", _a.Decisions.Select(_PredictName));
 				// the methods hooks call are members too
@@ -432,7 +441,24 @@ namespace Parsley
 				}
 				return result;
 			}
-			string _MethodName(string production) => "Parse" + _Ident(production);
+			// each production's name as an identifier, for its ParseXxx, EvaluateXxx and TryParseXxx. Names that come
+			// out the same, such as foo_bar and fooBar, are numbered in the order the grammar has them, the first
+			// keeping it. It depends on the grammar alone, since a grammar with an island of this one calls its TryParseXxx
+			static Dictionary<string, string> _MethodStems(Grammar g)
+			{
+				var result = new Dictionary<string, string>();
+				var used = new HashSet<string>();
+				foreach (var p in g.Productions)
+				{
+					var baseName = _Ident(p.Name);
+					var name = baseName;
+					var n = 2;
+					while (!used.Add(name)) name = baseName + (n++).ToString();
+					result.Add(p.Name, name);
+				}
+				return result;
+			}
+			string _MethodName(string production) => "Parse" + _stems[production];
 
 			// every hook method the grammar names, with the declaration it gets: the parse-time interface the
 			// other half of the partial class implements
@@ -456,8 +482,14 @@ namespace Parsley
 				}
 				return result;
 			}
-			static string _EvaluateName(string production) => "Evaluate" + _Ident(production);
-			string _PredictName(Decision d) => "Predict" + _Ident(d.Production.Name) + d.Index.ToString();
+			string _EvaluateName(string production) => "Evaluate" + _stems[production];
+			string _TryParseName(string production) => "TryParse" + _stems[production];
+			// A's 11th decision and A1's 1st would both be A11, so a name that ends in a digit gets a _ before the index
+			string _PredictName(Decision d)
+			{
+				var stem = _stems[d.Production.Name];
+				return "Predict" + stem + (char.IsDigit(stem[stem.Length - 1]) ? "_" : "") + d.Index.ToString();
+			}
 			#endregion
 
 			#region Writing
@@ -486,7 +518,11 @@ namespace Parsley
 				_sb = saved;
 				return result;
 			}
-			static string _Comment(string text) => text.Replace("\r", "").Replace("\n", " ");
+			// C# ends a line, and so a comment, at any of these
+			static string _Comment(string text) => text.Replace("\r\n", " ").Replace('\r', ' ').Replace('\n', ' ')
+				.Replace('\u0085', ' ').Replace('\u2028', ' ').Replace('\u2029', ' ');
+			// how a symbol reads in a comment: as in an error message, but a literal escaped, so "\n" doesn't read as a space
+			string _Shown(int id) => _s.GetTerminal(id)?.Literal is string literal ? GrammarAttribute.FormatValue(literal) : _s.Display(id);
 
 			// a #line directive that maps the lines after it to a line of the grammar file node came from, so the
 			// compiler's errors and the debugger point at the grammar. Null for a grammar with no file, or a node
@@ -544,7 +580,7 @@ namespace Parsley
 				// a symbol constant can be named like one of these too, now that constants keep their symbols' names
 				while (_sets.ContainsValue(name) || "s_set" == name || _constNames.Contains(name)) name = baseName + (n++).ToString();
 				_sets.Add(key, name);
-				_setList.Add((name, sorted, string.Join(", ", sorted.Select(_s.Display))));
+				_setList.Add((name, sorted, string.Join(", ", sorted.Select(_Shown))));
 				return name;
 			}
 			string _Test(ICollection<int> ids, bool negate, string token = "Current")
@@ -615,12 +651,12 @@ namespace Parsley
 				var start = _a.Grammar.GetProduction(_a.Grammar.StartSymbol!)!;
 				var constants = new List<SynthesizedConstant>();
 				for (var i = 0; i < _s.Count; ++i)
-					constants.Add(new SynthesizedConstant(_const[i], i, _s.IsNonTerminal(i) ? null : null != _s.GetTerminal(i)?.Literal ? _s.Display(i) : null));
+					constants.Add(new SynthesizedConstant(_const[i], i, _s.IsNonTerminal(i) ? null : null != _s.GetTerminal(i)?.Literal ? _Shown(i) : null));
 				return new SynthesizedParser(code, _Usings(), _className, _evaluatorName,
 					null != _evaluatorName ? start.Type ?? "object" : null,
 					null != _evaluatorName ? (null == start.StateType ? "object? state = null" : $"{start.StateType} state") : null,
 					constants, _engine, _a.Grammar.IsSubordinate, _a.Grammar.IsCompound, _HasLexerMode,
-					_a.Grammar.SharedProductions.Select(p => "TryParse" + _Ident(p.Name)).ToList(), Messages,
+					_a.Grammar.SharedProductions.Select(p => _TryParseName(p.Name)).ToList(), Messages,
 					_UsingLines(), null != _evaluatorName ? _LineDirective(_TypeSource(start)) : null);
 			}
 
@@ -649,7 +685,7 @@ namespace Parsley
 				_Line("#region Symbols");
 				for (var i = 0; i < _s.Count; ++i)
 				{
-					var comment = _s.IsNonTerminal(i) ? "" : null != _s.GetTerminal(i)?.Literal ? $" // {_s.Display(i)}" : "";
+					var comment = _s.IsNonTerminal(i) ? "" : null != _s.GetTerminal(i)?.Literal ? $" // {_Shown(i)}" : "";
 					_Line($"public const int {_const[i]} = {i};{comment}");
 				}
 				_Line($"public const int SymbolCount = {_s.Count};");
@@ -728,7 +764,7 @@ namespace Parsley
 					_Line("/// <summary>");
 					_Line($"/// Parses a complete {p.Name}, as an island of another grammar, and returns its tree. Problems are reported in <paramref name=\"errors\"/>.");
 					_Line("/// </summary>");
-					_Open($"public static bool TryParse{_Ident(p.Name)}(IEnumerable<Token> tokens, out ParseNode result, out IReadOnlyList<ParseError> errors)");
+					_Open($"public static bool {_TryParseName(p.Name)}(IEnumerable<Token> tokens, out ParseNode result, out IReadOnlyList<ParseError> errors)");
 					_Line($"var parser = new {_className}(tokens);");
 					_Line(_allStar
 						? $"result = parser.Run(() => parser.{_MethodName(p.Name)}(-1));"
@@ -802,7 +838,7 @@ namespace Parsley
 						_Line($"terminal: {_LexerId(t.Name)},");
 						_Line($"after: [{string.Join(", ", t.GetNames("after").Select(n => _LexerId(g.FindTerminal(n)!.Name)))}],");
 						_Line($"inner: {parser}.CreateLexerMode({_LexerType(x.Alias)}.Tokenize),");
-						_Line($"parse: {parser}.TryParse{_Ident(p!.Name)},");
+						_Line($"parse: {parser}.TryParse{_MethodStems(inner.Grammar)[p!.Name]},");
 						_Line($"nest: {innerId("nest")},");
 						_Line($"pop: {innerId("pop")},");
 						var startsWith = t.GetNames("startsWith");
@@ -901,7 +937,7 @@ namespace Parsley
 				_Line("#region Symbols");
 				for (var i = 0; i < _s.Count; ++i)
 				{
-					var comment = _s.IsNonTerminal(i) ? "" : null != _s.GetTerminal(i)?.Literal ? $" // {_s.Display(i)}" : "";
+					var comment = _s.IsNonTerminal(i) ? "" : null != _s.GetTerminal(i)?.Literal ? $" // {_Shown(i)}" : "";
 					_Line($"protected const int {_const[i]} = {i};{comment}");
 				}
 				_Line("#endregion");
@@ -1181,7 +1217,7 @@ namespace Parsley
 							if (_s.IsTerminal(id))
 							{
 								if (null != known && 0 < known.Count && known[0] == id)
-									_Line(_nameConsumes ? $"Consume({node}); // {_Comment(_s.Display(id))}" : $"Consume({node});");
+									_Line(_nameConsumes ? $"Consume({node}); // {_Shown(id)}" : $"Consume({node});");
 								else
 									_Line($"Expect({_const[id]}, {node});");
 							}

@@ -130,6 +130,36 @@ namespace Parsley.Tests
 			T.Check(h.Accepts("e c += x while 5"), "accepts");
 		}
 
+		public static void LineBreaksInLiteralsStillCompile()
+		{
+			// every character C# ends a line at, named and inline, escaped and raw: none may end a comment or a string in the code
+			var h = _Build("breaks",
+				"Lines= { Line }; Line= w { sp w } ( lf | crlf | '\u2028' | ps | nel | \"\\r\" ); w='[a-z]+'; sp=\" \";" +
+				"lf=\"\\n\"; crlf=\"\\r\\n\"; ps=\"\\u2029\"; nel=\"\\u0085\";");
+			T.Check(h.Accepts("ab cd\nef\r\ngh\u2028ij\u2029kl\u0085mn\r"), "accepts each line break");
+			T.Check(!h.Accepts("ab"), "rejects a line with no break");
+		}
+
+		public static void ProductionNamesThatMeetStillCompile()
+		{
+			// foo_bar and fooBar are both FooBar as identifiers; A's 11th decision and A1's 1st are both A11
+			const string xbnf =
+				"S<start, type=\"int\">= foo_bar | fooBar | A | A1 => { return node.Children[0].Symbol == \"A\" || node.Children[0].Symbol == \"A1\" ? 0 : (int)Evaluate(node.Children[0]); };" +
+				"foo_bar<shared, type=\"int\">= a b => { return 1; };" +
+				"fooBar<shared, type=\"int\">= c d => { return 2; };" +
+				"A= y [k] [k] [k] [k] [k] [k] [k] [k] [k] [k] ( u v | u w ); A1= x ( u v | u w );" +
+				"a=\"a\"; b=\"b\"; c=\"c\"; d=\"d\"; k=\"k\"; u=\"u\"; v=\"v\"; w=\"w\"; x=\"x\"; y=\"y\";" + Ws;
+			var h = _Build("meet", xbnf, ParserEngine.LLk);
+			T.Check(h.Accepts("a b") && h.Accepts("c d") && h.Accepts("y k u w") && h.Accepts("x u v"), "accepts");
+			T.Check(h.Parse("c d").Tree.Contains("fooBar"), "fooBar parses as fooBar, not foo_bar");
+			T.Equal((object)1, h.Parser.Evaluate("MeetEvaluator", h.Lexer.Tokenize("a b")), "foo_bar evaluates with its own action");
+			T.Equal((object)2, h.Parser.Evaluate("MeetEvaluator", h.Lexer.Tokenize("c d")), "fooBar evaluates with its own action");
+			// the second keeps working under another name, so the first, which could be called from other code, keeps its own
+			var messages = CSharpSynthesizer.CheckNames(h.Analysis);
+			T.Equal(1, messages.Count, "a warning for the one production renamed: " + string.Join("; ", messages));
+			T.Check(messages.All(m => ErrorLevel.Warning == m.Level && m.Message.Contains("fooBar") && m.Message.Contains("FooBar2") && 0 < m.Line), "it's a warning, naming the production, its new name and where it is");
+		}
+
 		public static void FailedPredictionsReportWhereTheInputGoesWrong()
 		{
 			// a^n b^n or a^n b^2n: only the number of b's says which, so no fixed lookahead decides it
